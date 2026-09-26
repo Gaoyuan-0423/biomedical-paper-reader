@@ -1,0 +1,31 @@
+# Local system and editor files
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+*~
+
+# Credentials and local runtime artifacts
+.env
+.env.*
+*.pem
+*.key
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.validation/
+
+# Personal reading outputs and downloaded research materials
+reports/
+downloads/
+sources/
+assets/
+*.pdf
+*.xlsx
+*.fastq*
+*.bam
+*.h5ad
+*.rds
+*.RData
