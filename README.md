@@ -2,7 +2,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.1.1。默认中文，保留必要英文术语。面向原创生物医学研究；临床、动物、机制、组学、空间、谱系或方法论文按实际证据选择检查点。
+版本：v0.1.2。默认中文，保留必要英文术语。面向原创生物医学研究；临床、动物、机制、组学、空间、谱系或方法论文按实际证据选择检查点。
 
 A Chinese-first agent skill for reading one biomedical paper at a time: follow its figures and argument, assess evidence, and develop testable research ideas.
 
@@ -16,7 +16,9 @@ A Chinese-first agent skill for reading one biomedical paper at a time: follow i
 
 **补充材料默认使用本地已有文件。** 检查上传内容、论文同目录和用户指定的相关文件夹；确认属于该论文后按需分析。没有补充文件就以正文完成报告，说明哪些判断未核查附件。只有用户明确要求补取时才联网下载，不把附件缺失当作作者未做验证。
 
-**PDF 可先转为 Markdown。** 环境已有 [MarkItDown](https://github.com/microsoft/markitdown) 时，优先生成 `article.md` 作为阅读底稿，再生成精读报告 `report.md`。原 PDF 保留用于页码、数字和图像核查。工具不可用时使用已有 PDF 提取能力；转换不保证复杂表格、公式、双栏或扫描图像完整。命令及处理范围见[材料处理说明](references/material-handling.md)。
+**直接复用可读的 PDF 提取结果。** 使用现有工具提取文本、检查阅读顺序并保留页序，不再优先使用 MarkItDown，也不要求先生成 Markdown 底稿。原 PDF 继续用于数字和图像核查。只有具体页面的提取质量影响解读时才更换处理方式。
+
+**每张主图先概览，必要面板再放大。** 完整阅读图注，关注核心结论、必要对照、阴性结果及图文冲突；已经看清的内容直接复用，同一图组的待查面板成组准备。报告区分概览和具体核查范围。执行细节见[材料处理说明](references/material-handling.md)。
 
 默认报告顺序：
 
@@ -77,7 +79,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 - `references/report-template.md`：各部分与逐图单元的写作职责。
 - `references/evidence-rules.md`：定位、统计单位、推断范围与缺失信息规则。
 - `references/study-checks.md`：按证据类型选用的内部检查点。
-- `references/material-handling.md`：本地附件、MarkItDown、下载调度、状态同步及安全写入方式。
+- `references/material-handling.md`：本地附件、文本复用、分步看图、下载调度和状态同步。
 - `agents/openai.yaml`：可选的 Codex 界面元数据。
 - `evals/cases.md`、`evals/fixtures/`：行为验收设计和原创虚构材料。
 - `evals/RESULTS.md`：本轮真实验收记录与限制。
