@@ -1,0 +1,373 @@
+{
+  "reviewer": "independent_focused_semantic_review",
+  "overall_verdict": "通过",
+  "scope": {
+    "cases": [
+      "english-focus",
+      "bilingual-focus"
+    ],
+    "files_read_per_case": [
+      "request.txt",
+      "input/main.md",
+      "report.md",
+      "trace.json",
+      "execution.json"
+    ],
+    "target": "Figure 1B-D plus interpretation-changing Introduction, plasma/culture Results and relevant Methods",
+    "skill_basis_reused": [
+      "SKILL.md",
+      "references/evidence-rules.md",
+      "references/reading-modes.md"
+    ],
+    "approach": "核对实际问题、比较、统计与材料状态。专题不要求进一步核查与B-D解释无关的A/E/F；不按标题或关键词判分。",
+    "visual_reuse": {
+      "previously_actually_viewed_source": "run:english-fast/input/figure1.png",
+      "previous_action": "view_image detail=original, whole 1800x1490 six-panel source; B-D annotations, groups and axes actually read",
+      "verification_action": "shasum -a 256 on english-focus, bilingual-focus and previously viewed english-fast Figure 1 files",
+      "matching_sha256": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948",
+      "current_sources": [
+        "run:english-focus/input/figure1.png",
+        "run:bilingual-focus/input/figure1.png"
+      ],
+      "reused_findings": "B rho=.52, P=.08, n=12 and plasma/migration axes; C WT vehicle1.00 and WT AX-171.70; D WT vehicle1.00, WT AX-171.60, KO vehicle.98 and stimulated KO pointer to S1; visible variability bars",
+      "repeat_view_required": false,
+      "note": "三份原图内容哈希相同且均标main-v1，复用已看清图像核查；这是来源一致性检查，不是原始数据重分析。"
+    }
+  },
+  "cases": [
+    {
+      "case": "english-focus",
+      "verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "用户语言、专题对象与问题衔接",
+          "verdict": "通过",
+          "reason": "全英文解释B-D。分别重建B的参加者相关问题、C的受体磷酸化暴露问题、D的WT刺激变化及KO基线问题，说明参与者到SynE1单一培养体系的切换；未把局部面板接成完整临床机制。",
+          "report_locations": [
+            "report.md:1-9",
+            "report.md:13",
+            "report.md:21",
+            "report.md:27",
+            "report.md:42"
+          ],
+          "input_basis": [
+            "request.txt:1",
+            "input/main.md:11",
+            "input/main.md:17",
+            "input/main.md:21",
+            "input/main.md:33",
+            "input/main.md:43"
+          ]
+        },
+        {
+          "criterion": "B的P小数点、单位与相关边界",
+          "verdict": "通过",
+          "reason": "图像P=.08与正文P=.8的差异准确保留；rho=.52、n=12和每人一点正确。两P均未低于.05未被写成显著或因果。12,000细胞不扩增B独立样本数；DISC/VAL独立性及重叠因未获成员表而未知，没有凭标签确认独立。",
+          "report_locations": [
+            "report.md:13-17",
+            "report.md:35-36"
+          ],
+          "input_basis": [
+            "input/main.md:17",
+            "input/main.md:33",
+            "input/main.md:39",
+            "figure1.png:B"
+          ]
+        },
+        {
+          "criterion": "C-D数字、比较与培养统计单位",
+          "verdict": "通过",
+          "reason": "C的1.00/1.70、差.70、比1.70和D的1.00/1.60/.98、WT变化+.60、KO-WT基线-.02均符合已核图像。24h、每条件四独立制备、mean±SD和WT vehicle归一化正确；未从柱高推断显著性、直接结合或迁移中介。",
+          "report_locations": [
+            "report.md:21-23",
+            "report.md:27",
+            "report.md:37-38"
+          ],
+          "input_basis": [
+            "input/main.md:21",
+            "input/main.md:33",
+            "input/main.md:43",
+            "figure1.png:C-D"
+          ],
+          "execution_record_locations": [
+            "trace.json:69-102"
+          ]
+        },
+        {
+          "criterion": "刺激KO必要对照、配对与缺材料边界",
+          "verdict": "通过",
+          "reason": "KO vehicle不能检验RX-4对AX-17诱导迁移是否必要。报告要求KO AX-17对自身vehicle，再与WT刺激变化比较，记录S1中刺激KO、配对及删除蛋白验证未查；基线接近未称等效，未把未提供附件说成作者没做。建议包括制备配对、RX-4回补和活性。",
+          "report_locations": [
+            "report.md:29",
+            "report.md:38",
+            "report.md:42"
+          ],
+          "input_basis": [
+            "input/main.md:21",
+            "input/main.md:33",
+            "input/main.md:43",
+            "figure1.png:D"
+          ]
+        },
+        {
+          "criterion": "真实局部范围与核查动作",
+          "verdict": "通过",
+          "reason": "报告列明所读身份/Introduction、血浆段、培养首段、完整图注和Methods，未读组织/CY-2/Discussion/资源声明；整图概览与B-D特定检查清楚区分。trace文本范围1-11/17-21/29-33/37-43与声明一致，没有以未读A/E/F结果或补充数据背书。简单复算与未统计重建/未raw reanalysis区分正确。",
+          "report_locations": [
+            "report.md:46-48"
+          ],
+          "input_basis": [
+            "input/main.md:1-47"
+          ],
+          "execution_record_locations": [
+            "trace.json:10-54",
+            "trace.json:69-110"
+          ]
+        },
+        {
+          "criterion": "目标证据记录与可追溯定位",
+          "verdict": "通过",
+          "reason": "M1/F1 main-v1身份与逻辑页定义明确；E1-E4覆盖目标核心数字和主要批评，每项有来源位置、比较/单位、真实阅读/视觉/算术动作及未核查边界。无需加入无关A/E/F的证据行。",
+          "report_locations": [
+            "report.md:5",
+            "report.md:33-38"
+          ],
+          "input_basis": [
+            "input/main.md:3-5",
+            "input/main.md:17-43",
+            "figure1.png:B-D"
+          ]
+        }
+      ],
+      "applicable_visual_gold_checks": {
+        "V02_decimal_visual": "通过",
+        "V04_necessary_control": "通过",
+        "V10_scope_provenance": "通过"
+      },
+      "outside_focused_scope": [
+        "Figure1A direction/statistical-unit evaluation beyond incidental complete legend",
+        "Figure1E CY-2 complementation analysis",
+        "Figure1F low-resolution quantitative analysis",
+        "supplement update checks V07-V09"
+      ]
+    },
+    {
+      "case": "bilingual-focus",
+      "verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "双语请求与专题对象",
+          "verdict": "通过",
+          "reason": "中文与英文相邻呈现同一B-D问题和必要方法上下文。参加者观察到SynE1干预的体系切换明确，候选联系不被升级为完整通路或临床解释。",
+          "report_locations": [
+            "report.md:1-5",
+            "report.md:15-21"
+          ],
+          "input_basis": [
+            "request.txt:1",
+            "input/main.md:11",
+            "input/main.md:17",
+            "input/main.md:21",
+            "input/main.md:33",
+            "input/main.md:43"
+          ]
+        },
+        {
+          "criterion": "B的P小数点、独立单位和判断强度",
+          "verdict": "通过",
+          "reason": "两语言均保留图像rho=.52、P=.08、n=12与正文P=.8；否定显著/总体关联确认/因果方向的强度一致。12,000细胞不能扩大B独立样本数和DISC/VAL成员表未获的状态亦一致。",
+          "report_locations": [
+            "report.md:19-21",
+            "report.md:27-33",
+            "report.md:57-58"
+          ],
+          "input_basis": [
+            "input/main.md:17",
+            "input/main.md:33",
+            "input/main.md:39",
+            "figure1.png:B"
+          ]
+        },
+        {
+          "criterion": "C-D数字、方向和培养上下文",
+          "verdict": "通过",
+          "reason": "24h、四独立制备/条件、mean±SD、WTvehicle=1.00归一化双语一致。C1.00/1.70差.70比1.70；D1.00/1.60/.98、WT+.60及KO-WT基线-.02完全一致；都不把均值分离称为显著，不证明直接结合或迁移中介。",
+          "report_locations": [
+            "report.md:19-21",
+            "report.md:37-45",
+            "report.md:59-60"
+          ],
+          "input_basis": [
+            "input/main.md:21",
+            "input/main.md:33",
+            "input/main.md:43",
+            "figure1.png:C-D"
+          ],
+          "execution_record_locations": [
+            "trace.json:65-98"
+          ]
+        },
+        {
+          "criterion": "KO刺激、配对和未获补充材料",
+          "verdict": "通过",
+          "reason": "双语均要求KO刺激对自身vehicle并与WT诱导变化比较，基线接近不证明等效或诱导反应消失。刺激KO、配对和删除确认均标为S1/补充未核查，没有断言原研究未做；提议的配对、回补、活性控制也一致。",
+          "report_locations": [
+            "report.md:19-21",
+            "report.md:43-49",
+            "report.md:60",
+            "report.md:64-66"
+          ],
+          "input_basis": [
+            "input/main.md:21",
+            "input/main.md:33",
+            "input/main.md:43",
+            "figure1.png:D"
+          ]
+        },
+        {
+          "criterion": "局部读取范围与动作",
+          "verdict": "通过",
+          "reason": "两语言已读和未读声明对应trace范围，区分整图概览/B-D核查及A/E/F非额外结果分析。没有要求专题核查无关面板；未外查/未下载/未P值重算/未raw reanalysis状态相同。",
+          "report_locations": [
+            "report.md:70-76"
+          ],
+          "input_basis": [
+            "input/main.md:1-47"
+          ],
+          "execution_record_locations": [
+            "trace.json:10-52",
+            "trace.json:100-107"
+          ]
+        },
+        {
+          "criterion": "共用证据记录及双语语义一致",
+          "verdict": "通过",
+          "reason": "仅一份E1-E4共用索引，明确M1/F1 main-v1，核心数值、方向、否定、未知状态、样本单位与动作均一致。逐对比对发现未加强英文结论，也未遗漏中文关键不确定性。",
+          "report_locations": [
+            "report.md:9-11",
+            "report.md:53-60",
+            "report.md:3-5",
+            "report.md:15-21",
+            "report.md:27-49",
+            "report.md:64-76"
+          ],
+          "input_basis": [
+            "input/main.md:3-5",
+            "input/main.md:17-43"
+          ],
+          "execution_record_locations": [
+            "trace.json:99"
+          ]
+        }
+      ],
+      "bilingual_pair_audit": [
+        {
+          "topic": "核心结论/否定RX-4必要性已确立",
+          "paired_locations": [
+            "report.md:3",
+            "report.md:5"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "体系衔接/未证明人群机制",
+          "paired_locations": [
+            "report.md:15",
+            "report.md:17"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "n12/24h/n4/SD/归一化/配对未核查",
+          "paired_locations": [
+            "report.md:19",
+            "report.md:21"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "rho.52/图P.08/文P.8/非显著/非因果",
+          "paired_locations": [
+            "report.md:27",
+            "report.md:29"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "独立性与重叠未知/12000不是独立样本扩增",
+          "paired_locations": [
+            "report.md:31",
+            "report.md:33"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "C1.00/1.70/.70/1.70倍/未直接结合或中介",
+          "paired_locations": [
+            "report.md:37",
+            "report.md:39"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "D1.00/1.60/.98/+.60/-.02/非等效/必要刺激比较",
+          "paired_locations": [
+            "report.md:43",
+            "report.md:45"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "S1未提供不等于作者没做",
+          "paired_locations": [
+            "report.md:47",
+            "report.md:49"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "建议对比、配对、验证、尚未执行",
+          "paired_locations": [
+            "report.md:64",
+            "report.md:66"
+          ],
+          "verdict": "一致"
+        },
+        {
+          "topic": "已读与未读范围和动作",
+          "paired_locations": [
+            "report.md:70",
+            "report.md:72",
+            "report.md:74",
+            "report.md:76"
+          ],
+          "verdict": "一致"
+        }
+      ],
+      "applicable_visual_gold_checks": {
+        "V02_decimal_visual": "通过",
+        "V04_necessary_control": "通过",
+        "V10_scope_provenance": "通过"
+      },
+      "outside_focused_scope": [
+        "Figure1A independent outcome interpretation",
+        "Figure1E additional complementation analysis",
+        "Figure1F quantitative-readability analysis",
+        "supplement update checks V07-V09"
+      ]
+    }
+  ],
+  "issues": [],
+  "review_limitations": [
+    "提供的trace/execution属于动作记录。独立核对可确认图像转录、输入与报告及范围声明一致；未获取原读者完整逐次宿主工具日志，不将自报记录本身当作独立执行证明。"
+  ],
+  "severity_summary": {
+    "critical_scientific_errors": 0,
+    "major_scientific_errors": 0,
+    "material_scope_misstatements": 0,
+    "bilingual_meaning_mismatches": 0
+  },
+  "summary": "两例均通过B-D专题语义检查。数字/比较/统计单位、P小数点、刺激KO和配对、体系上下文及局部范围真实；双语共用索引且数字方向、否定与不确定性一致。未发现实质问题。复用经内容哈希确认相同的已核查main-v1原图，无需重复查看。"
+}

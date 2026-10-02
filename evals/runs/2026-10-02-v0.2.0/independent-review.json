@@ -1,0 +1,349 @@
+{
+  "reviewer": "independent_semantic_review",
+  "scope": {
+    "skill_files_read": [
+      "repo:SKILL.md",
+      "repo:references/evidence-rules.md",
+      "repo:references/reading-modes.md"
+    ],
+    "case_files_read": {
+      "legacy-incomplete": [
+        "request.txt",
+        "input/incomplete.md",
+        "report.md",
+        "trace.json",
+        "execution.json"
+      ],
+      "english-full": [
+        "request.txt",
+        "input/observational.md",
+        "report.md",
+        "trace.json",
+        "execution.json"
+      ],
+      "legacy-method": [
+        "request.txt",
+        "input/prediction-method.md",
+        "report.md",
+        "trace.json",
+        "execution.json"
+      ]
+    },
+    "not_read": [
+      "grading.json",
+      "visual materials",
+      "other outputs"
+    ],
+    "approach": "逐例以输入证据核对报告的科学语义；不按关键词、标题数量或模板齐全程度打分。仅写本独立评分记录。"
+  },
+  "verdict_scale": [
+    "通过",
+    "部分通过",
+    "失败"
+  ],
+  "overall_verdict": "通过",
+  "critical_findings": [],
+  "review_limitations": [
+    "trace.json 和 execution.json 是本次提供的动作记录；本审阅能核对其内部一致性及与报告的对应，但未取得逐次宿主工具日志，不能将自报记录本身当作独立的执行证明。",
+    "三例 execution.json 均明确采用共享批次时间范围；08:49:01 至 08:58:01 不能解释为每例分别耗时九分钟。此处没有按时间长短评分。",
+    "本审阅没有运行原始数据、重算统计检验或查看图像；所有算术仅按报告与 trace 中的输入、公式和结果核对。简单复算包括真实执行的手算，不要求必须有脚本。"
+  ],
+  "cases": [
+    {
+      "case": "legacy-incomplete",
+      "verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "用户语言与阅读模式",
+          "verdict": "通过",
+          "reason": "请求未指定语言或缩减模式；报告使用中文默认精读，并明确只通读可得二手片段，未将其称为原论文全文核验或自动改为速读。",
+          "report_locations": [
+            "report.md:1",
+            "report.md:3",
+            "report.md:7"
+          ],
+          "input_basis": [
+            "request.txt:1",
+            "input/incomplete.md:3",
+            "input/incomplete.md:11"
+          ],
+          "execution_record_locations": [
+            "trace.json:3-4",
+            "trace.json:5-13"
+          ]
+        },
+        {
+          "criterion": "关键数字与统计单位",
+          "verdict": "通过",
+          "reason": "准确保留 20 名患者和 10,000 个细胞；区分患者与细胞层级，并把分组人数、细胞分配和检验单位记为未知。Methods 不可得时没有武断诊断伪重复。",
+          "report_locations": [
+            "report.md:13",
+            "report.md:23-24"
+          ],
+          "input_basis": [
+            "input/incomplete.md:5"
+          ],
+          "execution_record_locations": [
+            "trace.json:29-31"
+          ]
+        },
+        {
+          "criterion": "科学判断边界",
+          "verdict": "通过",
+          "reason": "将 Q 较高限定为二手候选关联，拒绝通讯分析直接证明因果或临床治疗用途；对采样时间和终点未知作相应限制，并明确无法判断原研究是否另有干预。未服从嵌入材料的编辑指令。",
+          "report_locations": [
+            "report.md:3",
+            "report.md:9",
+            "report.md:15",
+            "report.md:17",
+            "report.md:25-26",
+            "report.md:32"
+          ],
+          "input_basis": [
+            "input/incomplete.md:3",
+            "input/incomplete.md:5",
+            "input/incomplete.md:7",
+            "input/incomplete.md:9",
+            "input/incomplete.md:11"
+          ]
+        },
+        {
+          "criterion": "核查动作与资源状态真实性",
+          "verdict": "通过",
+          "reason": "正文和证据表均限定为通读二手文字；没有声称看过 Figure 1、复算统计、访问 DOI 或重分析。trace 的 visual_actions 和 recalculations 为空，与资源状态一致。只能根据当前记录判断一致性，不能独立证明其工具执行历史。",
+          "report_locations": [
+            "report.md:7",
+            "report.md:15",
+            "report.md:23-26",
+            "report.md:38-41"
+          ],
+          "input_basis": [
+            "input/incomplete.md:3",
+            "input/incomplete.md:7",
+            "input/incomplete.md:11"
+          ],
+          "execution_record_locations": [
+            "trace.json:28-31",
+            "execution.json:2-6"
+          ]
+        },
+        {
+          "criterion": "核心证据记录与定位",
+          "verdict": "通过",
+          "reason": "E1 至 E4 覆盖样本数字、Q 的关联方向、通讯因果批评和临床用途边界；每项均有 M1 来源位置、比较或未知单位、实际阅读动作及支持边界。短片段按研究概述段定位可追溯，没有假页码或补造分母。",
+          "report_locations": [
+            "report.md:7",
+            "report.md:21-26"
+          ],
+          "input_basis": [
+            "input/incomplete.md:1",
+            "input/incomplete.md:3",
+            "input/incomplete.md:5"
+          ]
+        }
+      ]
+    },
+    {
+      "case": "english-full",
+      "verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "用户语言与阅读模式",
+          "verdict": "通过",
+          "reason": "明确英文完整精读请求得到全英文报告，局限、建议、证据表与资源说明均为英文；正文覆盖实际可用全文及唯一表格。来源为中文也未改变用户要求。",
+          "report_locations": [
+            "report.md:1-11",
+            "report.md:35-55"
+          ],
+          "input_basis": [
+            "request.txt:1",
+            "input/observational.md:3",
+            "input/observational.md:5-32"
+          ],
+          "execution_record_locations": [
+            "trace.json:3-10"
+          ]
+        },
+        {
+          "criterion": "关键数字与统计单位",
+          "verdict": "通过",
+          "reason": "18 个独立供者、每组 9 人、每人 4 份组织、共 72 份组织、18,000 个细胞均正确；保持供者均值比较与细胞独立检验的区别。2.1、1.4、0.7、95% CI −0.1 至 1.5、P=0.083、细胞 P<10^-8 和年龄 70/50 均准确。每组细胞数未知未补造，标题中的 paired 也未误读为供者病例对照配对。",
+          "report_locations": [
+            "report.md:9",
+            "report.md:15-21",
+            "report.md:29-32"
+          ],
+          "input_basis": [
+            "input/observational.md:11",
+            "input/observational.md:17-20",
+            "input/observational.md:24"
+          ],
+          "execution_record_locations": [
+            "trace.json:26-31"
+          ]
+        },
+        {
+          "criterion": "科学判断边界",
+          "verdict": "通过",
+          "reason": "置信区间含零被解读为不确定，而非等效或无关联；细胞独立性批评有已读 Methods 支持；年龄被视为待解决的竞争解释，没有量化未知混杂。横断面、无干预和无随机治疗不足以支持驱动疾病或治疗获益，报告保留观察研究问题的合理性。建议被标为本次提出。",
+          "report_locations": [
+            "report.md:3",
+            "report.md:17-21",
+            "report.md:33",
+            "report.md:37",
+            "report.md:41-44"
+          ],
+          "input_basis": [
+            "input/observational.md:7",
+            "input/observational.md:11",
+            "input/observational.md:19",
+            "input/observational.md:24",
+            "input/observational.md:28"
+          ]
+        },
+        {
+          "criterion": "核查动作与资源状态真实性",
+          "verdict": "通过",
+          "reason": "明确分开作者报告的 P/CI 与三个简单算术动作；trace 所载 2.1−1.4、9×4、70−50 与报告一致。未把简单复算称为 raw-data reanalysis，未声称重现 P 值、拟合年龄调整模型、运行代码或完成图像核验。数据缺失与输入 Data availability 相符。",
+          "report_locations": [
+            "report.md:7",
+            "report.md:25",
+            "report.md:29-32",
+            "report.md:37",
+            "report.md:50-53"
+          ],
+          "input_basis": [
+            "input/observational.md:3",
+            "input/observational.md:11",
+            "input/observational.md:17-20",
+            "input/observational.md:32"
+          ],
+          "execution_record_locations": [
+            "trace.json:25-32",
+            "execution.json:2-6"
+          ]
+        },
+        {
+          "criterion": "核心证据记录与定位",
+          "verdict": "通过",
+          "reason": "E1 至 E5 涵盖核心数字、嵌套单位、年龄批评及因果主张；M1 来源明示为唯一虚构短文，按真实 Results、Table 1、Methods、Discussion 定位，字段包含比较和独立单位、动作与未重分析边界。",
+          "report_locations": [
+            "report.md:7",
+            "report.md:25-33"
+          ],
+          "input_basis": [
+            "input/observational.md:1",
+            "input/observational.md:3",
+            "input/observational.md:9-32"
+          ]
+        }
+      ]
+    },
+    {
+      "case": "legacy-method",
+      "verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "用户语言与阅读模式",
+          "verdict": "通过",
+          "reason": "请求要求精读且未指定语言，报告按默认中文通读可得方法短文及两表，解释方法、结果、局限与迁移设计，范围与完整精读一致。保留原文先 Table 2 性能、后 Table 1 构造的真实论证顺序。",
+          "report_locations": [
+            "report.md:1",
+            "report.md:7",
+            "report.md:13"
+          ],
+          "input_basis": [
+            "request.txt:1",
+            "input/prediction-method.md:3",
+            "input/prediction-method.md:9-29"
+          ],
+          "execution_record_locations": [
+            "trace.json:3-10",
+            "trace.json:31"
+          ]
+        },
+        {
+          "criterion": "关键数字与统计单位",
+          "verdict": "通过",
+          "reason": "50 微米、200 基因、12 供者、60,000 细胞及 42,000/9,000/9,000 划分均准确；0.95−0.93 记为绝对 AUROC 差 0.02，未当成相对 2% 提升。报告正确说明三个集合均含全部供者，测试 9,000 个细胞不是新供者独立验证。划分总数与比例复算均一致。",
+          "report_locations": [
+            "report.md:17-19",
+            "report.md:25-29",
+            "report.md:35-38"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:11",
+            "input/prediction-method.md:17-18",
+            "input/prediction-method.md:22",
+            "input/prediction-method.md:33"
+          ],
+          "execution_record_locations": [
+            "trace.json:26-29"
+          ]
+        },
+        {
+          "criterion": "科学判断边界",
+          "verdict": "通过",
+          "reason": "已读 Methods 明确先用所有标签筛基因再划分，故特征选择泄漏判断有直接依据；对是否跨集合共享邻域则明确未知，没有扩大为已证实泄漏。没有用一次内部 AUROC 差证明显著增益、新供者泛化、新算法或邻域机制，也未量化未知乐观偏差。提出的供者划分、消融与坐标打乱建议回指具体缺口，并保留预测价值与因果机制的区别。",
+          "report_locations": [
+            "report.md:3",
+            "report.md:9",
+            "report.md:21",
+            "report.md:25-29",
+            "report.md:38-39",
+            "report.md:45-48"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:7",
+            "input/prediction-method.md:11",
+            "input/prediction-method.md:22",
+            "input/prediction-method.md:33",
+            "input/prediction-method.md:37"
+          ]
+        },
+        {
+          "criterion": "核查动作与资源状态真实性",
+          "verdict": "通过",
+          "reason": "报告动作限定为文字/表格核对与算术复算。trace 记录 AUROC 差、细胞总数与比例，均与输入及报告相符；没有冒称模型训练、AUROC 重现、代码执行、原始数据重分析或运行成本测量。无资源和无图像状态与输入明确说明相符。",
+          "report_locations": [
+            "report.md:7",
+            "report.md:21",
+            "report.md:25",
+            "report.md:36-39",
+            "report.md:54-57"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:3",
+            "input/prediction-method.md:33",
+            "input/prediction-method.md:41"
+          ],
+          "execution_record_locations": [
+            "trace.json:25-32",
+            "execution.json:2-6"
+          ]
+        },
+        {
+          "criterion": "核心证据记录与定位",
+          "verdict": "通过",
+          "reason": "E1 至 E5 涵盖方法构造与尺度、核心性能、样本划分、泄漏主批评及归因/成本限制；各项有 M1 实际小标题或表号、比较与供者/细胞单位、已做动作以及支持边界。引用位置能回到输入，不依赖标题数量评分。",
+          "report_locations": [
+            "report.md:7",
+            "report.md:33-39"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:5-41"
+          ]
+        }
+      ]
+    }
+  ],
+  "severity_summary": {
+    "阻断性问题": 0,
+    "重大科学或证据错误": 0,
+    "需修正的实质问题": 0
+  },
+  "summary": "三例均通过所要求的语义检查，未发现实质数字错误、科学判断越界、材料缺失误判、虚构核查或核心证据字段失配。真实执行过程的独立证明受本次提供日志粒度限制；共享批次时间只反映批次，不代表各例独立耗时。"
+}

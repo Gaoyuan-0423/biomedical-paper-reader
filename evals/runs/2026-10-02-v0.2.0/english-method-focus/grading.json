@@ -1,0 +1,106 @@
+{
+  "case": "english-method-focus",
+  "attempt": "independent fresh-reader retest after algorithm-order rule",
+  "reviewer": "primary agent; manual source/output/trace comparison",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "English-method-and-context",
+      "status": "pass",
+      "reason": "自然英文说明输入、处理、输出与用途；保留源标题，数学式明确是解释。",
+      "source_basis": "M1 Introduction, construction Results/Table 1, Methods",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 28,
+          "quote": "As a mathematical explanation of the stated averaging operation"
+        }
+      ]
+    },
+    {
+      "id": "method-accuracy",
+      "status": "pass",
+      "reason": "50 μm、200基因、均值拼接与L2逻辑回归准确；400维明确条件式，未编造邻居规则。",
+      "source_basis": "M1 construction Results/Table 1, Methods",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 18,
+          "quote": "it would be 400 if the own-expression block also contains only the same 200 genes"
+        }
+      ]
+    },
+    {
+      "id": "evaluation-boundaries",
+      "status": "pass",
+      "reason": "保留作者先全数据选基因的泄漏，说明所有12供者进入每个集合；不估计偏差或断言新供者必然失败。",
+      "source_basis": "M1 Internal discrimination/Table 2, Methods, Discussion",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 48,
+          "quote": "the confirmed leakage is the use of all labels for gene selection"
+        }
+      ]
+    },
+    {
+      "id": "numbers-and-evidence",
+      "status": "pass",
+      "reason": "证据表记录来源定位、比较、层级分母、真实复算和边界；0.02不是重跑AUROC。",
+      "source_basis": "M1 Table 2 and Methods; trace arithmetic",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 52,
+          "quote": "The **absolute AUROC difference is 0.02**"
+        }
+      ]
+    },
+    {
+      "id": "focused-scope",
+      "status": "pass",
+      "reason": "短源全部与专题相关；范围和未执行动作如实，无原始数据或模型复现宣称。",
+      "source_basis": "entire supplied M1 and trace.json",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 85,
+          "quote": "Only the reported count totals, split fractions, and AUROC difference were recalculated."
+        }
+      ]
+    },
+    {
+      "id": "execution-order",
+      "status": "pass",
+      "reason": "区分Table2→Table1叙述顺序和操作顺序；先保留全数据选特征，再划分、拟合、评估；邻域构造时点明确未说明，改进流程另标建议。",
+      "source_basis": "M1 Methods and construction Results; no implementation available",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 38,
+          "quote": "5. **Fit an L2-regularized logistic classifier and predict probabilities.**"
+        },
+        {
+          "artifact": "report.md",
+          "line": 26,
+          "quote": "2. **Randomly divide cells into three sets.**"
+        },
+        {
+          "artifact": "report.md",
+          "line": 34,
+          "quote": "It also does not specify when neighborhood construction is performed relative to splitting."
+        }
+      ]
+    }
+  ],
+  "previous_attempt": {
+    "status": "partial",
+    "grading": "grading-first.json",
+    "report": "report-first.md",
+    "failed_criterion": "execution-order"
+  },
+  "limitations": [
+    "Only the assigned short fictional method; no long-paper routing validation.",
+    "No model fitting or raw-data analysis; fitting implementation remains unverified."
+  ]
+}

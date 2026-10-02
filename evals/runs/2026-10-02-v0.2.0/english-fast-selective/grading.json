@@ -1,0 +1,90 @@
+{
+  "case": "english-fast-selective",
+  "reviewer": "primary agent; manual source/section-selection/report comparison",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "English-biological-screening",
+      "status": "pass",
+      "reason": "依据用户目标给暂缓完整精读判断，未从未读工程数据引出已验证结论。",
+      "source_basis": "input/quick-screening.md screen-v1 p1/p2 and p5 Data availability; compare trace selected ranges with skipped p3/p4/p5 engineering body",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 3,
+          "quote": "**For your interest in the donor-level biological association"
+        }
+      ]
+    },
+    {
+      "id": "real-selective-reading",
+      "status": "pass",
+      "reason": "实际sed读取p1/p2/Data availability，p3/p4与两段工程方法正文未读；不是全文分析后缩写，trace范围和报告一致。",
+      "source_basis": "input/quick-screening.md screen-v1 p1/p2 and p5 Data availability; compare trace selected ranges with skipped p3/p4/p5 engineering body",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 34,
+          "quote": "**Available but unread:**"
+        }
+      ]
+    },
+    {
+      "id": "core-units-and-numbers",
+      "status": "pass",
+      "reason": "10/组、20供者/20组织/40技术扫描、1.90/1.50/+0.40、CI[-.30,1.10]、P=.24和年龄68/54差14均准确。",
+      "source_basis": "input/quick-screening.md screen-v1 p1/p2 and p5 Data availability; compare trace selected ranges with skipped p3/p4/p5 engineering body",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 9,
+          "quote": "20 donor scores**, not 40 independent observations"
+        }
+      ]
+    },
+    {
+      "id": "uncertainty-and-critical-context",
+      "status": "pass",
+      "reason": "核心方法统计单位与未调整混杂已核查；跨零CI不当等效，未估计未知混杂。",
+      "source_basis": "input/quick-screening.md screen-v1 p1/p2 and p5 Data availability; compare trace selected ranges with skipped p3/p4/p5 engineering body",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 11,
+          "quote": "They also do not establish equivalence."
+        }
+      ]
+    },
+    {
+      "id": "evidence-action-boundaries",
+      "status": "pass",
+      "reason": "核心记录有版本逻辑页/比较分母/动作边界；作者摘要所述校准与本次未读工程验证区分。",
+      "source_basis": "input/quick-screening.md screen-v1 p1/p2 and p5 Data availability; compare trace selected ranges with skipped p3/p4/p5 engineering body",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 34,
+          "quote": "Seeing their headings is not reading or verifying their results."
+        }
+      ]
+    },
+    {
+      "id": "gap-aligned-suggestions",
+      "status": "pass",
+      "reason": "独立年龄平衡供者/调整建议对应缺口，未声称功效计算或原始数据重分析。",
+      "source_basis": "input/quick-screening.md screen-v1 p1/p2 and p5 Data availability; compare trace selected ranges with skipped p3/p4/p5 engineering body",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 26,
+          "quote": "These are proposed follow-up choices prompted by E2–E3."
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Confirms selective scope on a multi-result synthetic manuscript; does not measure speed on real long PDFs.",
+    "Reader-produced trace consistency is checked; full per-call runtime logs not exported."
+  ],
+  "independent_review": "See run-level independent review records; this file retains primary source-based scoring."
+}

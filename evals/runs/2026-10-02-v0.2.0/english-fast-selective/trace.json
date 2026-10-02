@@ -1,0 +1,115 @@
+{
+  "task": "english-fast-selective",
+  "mode": "quick_read",
+  "language": "English",
+  "user_interest": "donor-level biological association",
+  "source": {
+    "M1": "input/quick-screening.md; screen-v1; synthetic"
+  },
+  "actual_text_reads": [
+    {
+      "file": "input/quick-screening.md",
+      "line_ranges": [
+        [
+          1,
+          37
+        ],
+        [
+          76,
+          "EOF"
+        ]
+      ],
+      "locations": [
+        "Identity/version",
+        "p1 Abstract",
+        "p1 Introduction",
+        "p1 Discussion",
+        "p2 Results — Donor-level score",
+        "p2 complete Table 1 — Donor comparison",
+        "p2 Methods — Primary inference",
+        "p5 Data availability"
+      ]
+    },
+    {
+      "file": "input/quick-screening.md",
+      "action": "rg section heading scan throughout for navigation; ancillary results/table/method headings displayed without body text"
+    }
+  ],
+  "actual_image_reads": [],
+  "skill_reference_use": "Reused SKILL.md, reading-modes, evidence-rules, report-template, material-handling; nested sample/statistical unit and no-figure study checks",
+  "tool_actions": [
+    "Read request.txt",
+    "rg full heading outline",
+    "sed lines1–37 and76–EOF for deliberately selective reading",
+    "rg --files authorized input directory",
+    "Executed JavaScript arithmetic on reported summaries/counts",
+    "Wrote report/trace/execution with apply_patch",
+    "clock__curr_time UTC timing"
+  ],
+  "simple_recalculations": [
+    {
+      "inputs": [
+        1.9,
+        1.5
+      ],
+      "formula": "lesion mean - reference mean",
+      "result": 0.4
+    },
+    {
+      "inputs": [
+        68,
+        54
+      ],
+      "formula": "lesion mean age - reference mean age",
+      "result": 14
+    },
+    {
+      "inputs": [
+        10,
+        10
+      ],
+      "formula": "donor counts summed",
+      "result": 20
+    },
+    {
+      "inputs": [
+        10,
+        10
+      ],
+      "formula": "tissue counts summed",
+      "result": 20
+    },
+    {
+      "inputs": [
+        20,
+        20
+      ],
+      "formula": "technical scans summed",
+      "result": 40
+    },
+    {
+      "inputs": [
+        1.1,
+        -0.3
+      ],
+      "formula": "CI upper - CI lower",
+      "result": 1.4,
+      "note": "computed but not cited as a separate report number"
+    }
+  ],
+  "available_but_unread": [
+    "p3 Results — Colour calibration and Table 2 — Artificial-strip calibration",
+    "p4 Results — Scanner drift and Table 3 — Within-day drift summaries",
+    "p5 Methods — Colour-strip correction",
+    "p5 Methods — Drift protocol"
+  ],
+  "not_performed": [
+    "Read ancillary result/table/method bodies",
+    "View images (none supplied)",
+    "Acquire donor vectors, raw data, code or other attachments",
+    "Search other directories or other reading outputs",
+    "Network access or downloads",
+    "Reproduce Welch interval/P, age-adjust association, fit model, estimate confounding magnitude or perform power calculation"
+  ],
+  "scope_note": "Actual selective quick read of primary biological question and inference; ancillary sections remain unread despite complete input availability. Author overview statements about ancillary experiments are attributed, not treated as direct ancillary checks."
+}

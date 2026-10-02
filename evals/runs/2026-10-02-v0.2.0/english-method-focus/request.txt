@@ -1,0 +1,1 @@
+Use $biomedical-paper-reader to explain the NeighbourScore-lite construction method in English. Focus on its inputs, steps, outputs, assumptions, and the context needed to judge its reported usefulness.

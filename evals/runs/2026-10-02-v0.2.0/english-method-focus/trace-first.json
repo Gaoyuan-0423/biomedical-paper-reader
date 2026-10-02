@@ -1,0 +1,99 @@
+{
+  "task": "english-method-focus",
+  "mode": "focused_method_analysis",
+  "language": "English",
+  "target": "NeighbourScore-lite construction",
+  "source": {
+    "M1": "input/prediction-method.md; original synthetic methods fragment; no DOI/images; no separate version identifier"
+  },
+  "actual_text_reads": [
+    {
+      "file": "input/prediction-method.md",
+      "action": "cat entire supplied file",
+      "locations": [
+        "Identity note",
+        "Introduction",
+        "Results — Internal discrimination",
+        "Table 2 — Internal evaluation",
+        "Results — Construction of the score",
+        "Table 1 — Model components",
+        "Methods",
+        "Discussion",
+        "Data and code"
+      ]
+    },
+    {
+      "file": "input/prediction-method.md",
+      "action": "rg heading navigation before full read"
+    }
+  ],
+  "actual_image_reads": [],
+  "skill_reference_use": [
+    "Reused SKILL.md, reading-modes, evidence-rules, report-template and material-handling",
+    "Read study-checks lines57–72: algorithms/prediction/evaluation and no-figure organisation"
+  ],
+  "tool_actions": [
+    "Read request.txt",
+    "rg heading scan",
+    "cat complete method fragment",
+    "sed relevant study-checks",
+    "rg --files input inventory",
+    "JavaScript summary arithmetic",
+    "apply_patch report and metadata",
+    "clock__curr_time UTC timing"
+  ],
+  "simple_recalculations": [
+    {
+      "inputs": [
+        0.95,
+        0.93
+      ],
+      "formula": "NeighbourScore AUROC - expression-only AUROC",
+      "result": 0.02
+    },
+    {
+      "inputs": [
+        42000,
+        9000,
+        9000
+      ],
+      "formula": "train + validation + test",
+      "result": 60000
+    },
+    {
+      "inputs": [
+        42000,
+        60000
+      ],
+      "formula": "train / total",
+      "result": 0.7
+    },
+    {
+      "inputs": [
+        9000,
+        60000
+      ],
+      "formula": "validation / total",
+      "result": 0.15
+    },
+    {
+      "inputs": [
+        9000,
+        60000
+      ],
+      "formula": "test / total",
+      "result": 0.15
+    }
+  ],
+  "explanatory_reconstruction": "Neighbour mean and logistic-probability schematic written as interpretation of prose; not claimed to be source equations or an executed fit. No total feature width asserted because own-expression branch specification is ambiguous.",
+  "not_performed": [
+    "View an image (none supplied)",
+    "Acquire data/code or other paper materials",
+    "Search other directories or outputs",
+    "Network access",
+    "Fit or refit logistic regression",
+    "Reproduce AUROC or confidence intervals",
+    "Measure computational complexity, runtime or hardware requirements",
+    "Empirically quantify selection/spatial leakage"
+  ]
+}

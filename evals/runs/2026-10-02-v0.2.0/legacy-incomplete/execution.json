@@ -1,0 +1,7 @@
+{
+  "start_utc": "2026-10-02 08:49:01 UTC",
+  "end_utc": "2026-10-02 08:58:01 UTC",
+  "clock_source": "clock__curr_time tool",
+  "timing_scope": "shared batch: requests and skill references read together; report and trace files written together; end recorded after output-link and JSON checks",
+  "status": "completed"
+}

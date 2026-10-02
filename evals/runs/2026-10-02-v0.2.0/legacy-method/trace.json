@@ -1,0 +1,140 @@
+{
+  "task": "legacy-method",
+  "mode": "full_close_reading_of_all_supplied_text",
+  "language": "Chinese",
+  "material_read": [
+    {
+      "file": "request.txt",
+      "sections": [
+        "entire request"
+      ]
+    },
+    {
+      "file": "input/prediction-method.md",
+      "sections": [
+        "source heading and fictional-source notice",
+        "Introduction",
+        "Results — Internal discrimination",
+        "Table 2 — Internal evaluation",
+        "Results — Construction of the score",
+        "Table 1 — Model components",
+        "Methods",
+        "Discussion",
+        "Data and code"
+      ]
+    }
+  ],
+  "skill_files_read": [
+    {
+      "file": "repo:SKILL.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/reading-modes.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/evidence-rules.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/report-template.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/material-handling.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/study-checks.md",
+      "heading_inventory": "all headings scanned with rg",
+      "shared_sections_read_for_assigned_batch": [
+        "多队列、嵌套样本与统计单位",
+        "人群、分层与治疗",
+        "实验与机制",
+        "组学、空间与多模态配对",
+        "算法、预测与评测",
+        "无图、纯观察或其他组织形式"
+      ],
+      "sections_applied_to_this_task": [
+        "多队列、嵌套样本与统计单位",
+        "组学、空间与多模态配对",
+        "算法、预测与评测",
+        "无图、纯观察或其他组织形式"
+      ]
+    }
+  ],
+  "visual_actions": [],
+  "recalculations": [
+    {
+      "inputs": [
+        0.95,
+        0.93
+      ],
+      "formula": "0.95 - 0.93",
+      "result_rounded": 0.02,
+      "action": "Python arithmetic from reported AUROCs; floating-point output 0.019999999999999907"
+    },
+    {
+      "inputs": [
+        42000,
+        9000,
+        9000
+      ],
+      "formula": "42000 + 9000 + 9000",
+      "result": 60000,
+      "action": "Python arithmetic from reported split counts"
+    },
+    {
+      "inputs": [
+        42000,
+        9000,
+        9000,
+        60000
+      ],
+      "formula": "split counts / 60000",
+      "result": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "action": "Python arithmetic from reported split counts and total"
+    }
+  ],
+  "verification_actions": [
+    "Read full available method article and both tables",
+    "Preserved Table 2 before Table 1 in actual Results order",
+    "Traced coordinates and expression through neighbourhood mean, concatenation, L2 logistic regression and class probability",
+    "Checked all-label gene selection before splitting",
+    "Checked donor overlap across train, validation and test",
+    "Separated confirmed feature-selection leakage from unconfirmed cross-split neighbourhood sharing",
+    "Checked one split, missing uncertainty and external validation, unclear tuning budget and effect attribution",
+    "Checked report local input links"
+  ],
+  "not_performed": [
+    "network access",
+    "official publication lookup",
+    "image viewing",
+    "AUROC reproduction",
+    "model fitting",
+    "code execution from source materials",
+    "raw-data reanalysis",
+    "runtime or complexity measurement",
+    "data or code download",
+    "power calculation",
+    "grading",
+    "skill editing",
+    "commit"
+  ],
+  "output": "report.md"
+}

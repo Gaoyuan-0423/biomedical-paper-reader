@@ -1,0 +1,91 @@
+{
+  "case": "english-full",
+  "reviewer": "primary agent; manual source-to-output comparison, not keyword-based decisions",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "language",
+      "status": "pass",
+      "reason": "标题、解读、边界、建议及资源说明均为自然英文，原题实体准确。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 35,
+          "quote": "Limitations and research suggestions"
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/observational.md",
+        "location": "Results — A difference depends on the unit of analysis; Table 1; Methods; Discussion"
+      }
+    },
+    {
+      "id": "units",
+      "status": "pass",
+      "reason": "18/72/18000及每组9/36匹配输入；没有把细胞等同独立供者或假造配对。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 15,
+          "quote": "There are 18 independent donors, nine cases and nine controls."
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/observational.md",
+        "location": "Results — A difference depends on the unit of analysis; Table 1; Methods; Discussion"
+      }
+    },
+    {
+      "id": "uncertainty-and-criticism",
+      "status": "pass",
+      "reason": "0.7、CI[-0.1,1.5]、P=.083及年龄70/50准确；批评对应方法而非因观察设计全盘否定。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 17,
+          "quote": "A nonsignificant result does not show equivalence or absence of association."
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/observational.md",
+        "location": "Results — A difference depends on the unit of analysis; Table 1; Methods; Discussion"
+      }
+    },
+    {
+      "id": "provenance-and-actions",
+      "status": "pass",
+      "reason": "输出区分作者统计、实际简单算术与未执行P值/原始数据重分析；trace有Python算术记录。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 30,
+          "quote": "Recalculated 2.1 − 1.4 = 0.7"
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/observational.md",
+        "location": "Results — A difference depends on the unit of analysis; Table 1; Methods; Discussion"
+      }
+    },
+    {
+      "id": "gap-aligned-suggestions",
+      "status": "pass",
+      "reason": "调整/独立供者设计对应混杂缺口，未假称做过功效计算。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 41,
+          "quote": "Test whether the association persists when age is accounted for."
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/observational.md",
+        "location": "Results — A difference depends on the unit of analysis; Table 1; Methods; Discussion"
+      }
+    }
+  ],
+  "limitations": [
+    "Reader used one shared batch for the three legacy inputs; case times are not independent duration measures."
+  ],
+  "independent_review": "See run-level independent review records; this file retains primary source-based scoring."
+}

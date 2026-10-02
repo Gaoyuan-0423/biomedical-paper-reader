@@ -1,0 +1,511 @@
+{
+  "reviewer": "independent_semantic_and_visual_review",
+  "scope": {
+    "skill_references": [
+      "repo:SKILL.md",
+      "repo:references/evidence-rules.md",
+      "repo:references/reading-modes.md"
+    ],
+    "gold_read_for_grading_only": "repo:evals/fixtures/visual/gold.json",
+    "visual_update_main_files_read": [
+      "request.txt",
+      "input/main.md",
+      "input/figure1.png",
+      "report-before.md",
+      "trace-main.json",
+      "execution-main.json"
+    ],
+    "english_fast_files_read": [
+      "request.txt",
+      "input/main.md",
+      "input/figure1.png",
+      "report.md",
+      "trace.json",
+      "execution.json"
+    ],
+    "excluded": [
+      "visual-update/report.md",
+      "visual-update/input/supplement.md",
+      "visual-update/input/figure-s1.png",
+      "grading-main.json",
+      "other grading or reader outputs"
+    ],
+    "stage_rule": "visual-update 只评价 report-before.md 的 main-only 阶段；现已存在的补充材料不计入其当时的可得或已读材料。gold 中 with-supplement 的 V07、V08、V09 本次不适用。",
+    "approach": "逐项联读实际请求、主文、完整图注、报告与动作记录，并实际查看两个任务目录中的原图。不得按报告长度、关键词或标题完整度推定模式或科学质量。"
+  },
+  "reviewer_actual_visual_actions": [
+    {
+      "source": "run:visual-update/input/figure1.png",
+      "tool": "view_image",
+      "detail": "original",
+      "extent": "whole original six-panel image; A-E labels and annotations read; F examined for readability"
+    },
+    {
+      "source": "run:english-fast/input/figure1.png",
+      "tool": "view_image",
+      "detail": "original",
+      "extent": "whole original six-panel image; A-E labels and annotations read; F examined for readability"
+    }
+  ],
+  "independent_visual_observations": {
+    "A": "Reference 1.80; Lesion 1.20; AX-17 intensity in relative units; footer 12 participants / 24 tissues / 48 sections / 12,000 cells; variability-bar type not stated on panel.",
+    "B": "Plasma AX-17 versus migration index; 12 visible participant points; annotation Spearman rho = 0.52, P = 0.08; n = 12. The image says 0.08, not 0.8 or 0.008.",
+    "C": "p-RX-4/total RX-4: WT Vehicle 1.00, WT AX-17 1.70; four independent culture preparations per condition.",
+    "D": "WT Vehicle 1.00, WT AX-17 1.60, RX-4 KO Vehicle 0.98; stimulated KO explicitly referred to Figure S1, not plotted here.",
+    "E": "Vehicle 1.00, AX-17 1.60, AX-17+Inh-R 1.10, AX-17+Inh-R+CY-2 1.55; CY-2 supplied by expression vector; four preparations per condition.",
+    "F": "Caption explicitly identifies a 96x64 source raster without numeric table. Orange curve outline rises, but individual dose labels, response values, n, errors and statistics are not reliably readable. No exact values inferred."
+  },
+  "overall_verdict": "部分通过",
+  "verdict_reason": "两份报告的主阶段科学语义、图像数字、关键对照、证据记录与范围诚实性均通过。英文速读的阅读动作覆盖几乎全部短主文，因此其长文选择性与效率仅部分得到验证；不据此判定科学内容失败，也不将短报告等同于速读已验证。",
+  "cases": [
+    {
+      "case": "visual-update-main",
+      "stage": "main-only; report-before.md",
+      "overall_verdict": "通过",
+      "scientific_semantics_verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "用户语言与阅读模式",
+          "verdict": "通过",
+          "reason": "请求未指定语言或缩减模式，采用中文默认完整精读。主文 p1-p3、完整图注和全部主图概览被明确记录；不能获得的补充材料逐项限定，未把缺附件自动转换为速读。",
+          "report_locations": [
+            "report-before.md:3",
+            "report-before.md:14-21",
+            "report-before.md:110-117"
+          ],
+          "input_or_gold_basis": [
+            "request.txt:1",
+            "input/main.md:3-5",
+            "input/main.md:7-47"
+          ],
+          "execution_record_locations": [
+            "trace-main.json:23-39",
+            "trace-main.json:41-59"
+          ]
+        },
+        {
+          "criterion": "关键数字与统计单位",
+          "verdict": "通过",
+          "reason": "独立阅图确认 A-E 的标签数字与报告一致；保留 A 的正负方向和 B 的小数冲突。准确区分 12 人、24 组织、48 切片、12,000 细胞与 C-E 每条件四份培养制备；A 的实际推断单位在主文中未知，没有确诊伪重复。",
+          "report_locations": [
+            "report-before.md:27",
+            "report-before.md:43-47",
+            "report-before.md:53-61",
+            "report-before.md:75-82"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:15-17",
+            "input/main.md:33",
+            "input/main.md:39",
+            "input/main.md:43",
+            "figure1.png:A-E"
+          ]
+        },
+        {
+          "criterion": "科学判断与缺材料边界",
+          "verdict": "通过",
+          "reason": "未由图注与图像一致就擅自认定正文更正；相关未升级为显著或因果；KO vehicle 未代替 KO+AX-17，回补未证明内源必要性或完整中介。刺激 KO、聚合方法和独立性的不确定性明确来自当时未获补充材料，未变成原研究未做的断言。建议含特异性与活性控制。",
+          "report_locations": [
+            "report-before.md:5",
+            "report-before.md:43-49",
+            "report-before.md:57",
+            "report-before.md:63",
+            "report-before.md:89-104",
+            "report-before.md:112"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:21-27",
+            "input/main.md:33",
+            "input/main.md:39",
+            "input/main.md:43"
+          ]
+        },
+        {
+          "criterion": "核查动作与真实范围",
+          "verdict": "通过",
+          "reason": "报告区分整图概览、A-E 可读核对和 F 不可定量核查；算术是已报告/图内标签的简单复算，未冒称统计检验复现或 raw-data reanalysis。trace-main 与报告逐项对应，独立阅图支持其转录内容。动作记录本身不是完整宿主历史的独立证明。时间记录明确排除前置读取，不宜直接与其他任务耗时相比。",
+          "report_locations": [
+            "report-before.md:17-21",
+            "report-before.md:43",
+            "report-before.md:47",
+            "report-before.md:61",
+            "report-before.md:67",
+            "report-before.md:75-83"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:5",
+            "input/main.md:33",
+            "input/main.md:47",
+            "figure1.png:A-F"
+          ],
+          "execution_record_locations": [
+            "trace-main.json:25-39",
+            "trace-main.json:41-69",
+            "trace-main.json:71-72",
+            "execution-main.json:3-7"
+          ]
+        },
+        {
+          "criterion": "核心证据记录与定位",
+          "verdict": "通过",
+          "reason": "E1-E9 覆盖方向冲突、独立单位、相关 P 冲突、验证独立性、功能面板、必要对照、回补边界、低清和临床模型。M1/V1 与 main-v1 定义明确，逻辑页被如实区分于 PDF 页码；比较、单位、动作和边界均落在报告中。",
+          "report_locations": [
+            "report-before.md:14",
+            "report-before.md:20",
+            "report-before.md:71-83"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:3-5",
+            "input/main.md:13-47",
+            "figure1.png:main-v1"
+          ]
+        }
+      ],
+      "applicable_gold_checks": [
+        {
+          "id": "V01_direction_conflict",
+          "verdict": "通过",
+          "reason": "明确记录正文 lesion 1.80/reference 1.20 与图注、图像 reference 1.80/lesion 1.20 的冲突，并保留 +0.60/-0.60 两套值。",
+          "report_locations": [
+            "report-before.md:43",
+            "report-before.md:75"
+          ],
+          "input_basis": [
+            "input/main.md:15",
+            "input/main.md:33",
+            "figure1.png:A"
+          ]
+        },
+        {
+          "id": "V02_decimal_visual",
+          "verdict": "通过",
+          "reason": "真实原图可读 P=0.08；报告准确转录，指出正文 0.8，不宣称常规显著相关。",
+          "report_locations": [
+            "report-before.md:47",
+            "report-before.md:77"
+          ],
+          "input_basis": [
+            "input/main.md:17",
+            "input/main.md:33",
+            "figure1.png:B"
+          ]
+        },
+        {
+          "id": "V03_nested_unknown",
+          "verdict": "通过",
+          "reason": "区分四层样本及未知推断单位，不把 12,000 个细胞当独立患者，不武断伪重复。",
+          "report_locations": [
+            "report-before.md:27",
+            "report-before.md:45",
+            "report-before.md:76"
+          ],
+          "input_basis": [
+            "input/main.md:15",
+            "input/main.md:39"
+          ]
+        },
+        {
+          "id": "V04_necessary_control",
+          "verdict": "通过",
+          "reason": "明确需要 WT/KO 各自刺激前后比较；刺激 KO 在未获取 S1，不宣称原研究缺此实验或主图已证明受体必要。",
+          "report_locations": [
+            "report-before.md:57",
+            "report-before.md:80",
+            "report-before.md:100",
+            "report-before.md:112"
+          ],
+          "input_basis": [
+            "input/main.md:21",
+            "input/main.md:33",
+            "figure1.png:D"
+          ]
+        },
+        {
+          "id": "V05_rescue_boundary",
+          "verdict": "通过",
+          "reason": "回补与内源必要性区分，未证明完整中介；建议 AX-17 下直接降低 CY-2、非靶向对照、回补，并检查选择性与活性。",
+          "report_locations": [
+            "report-before.md:61-63",
+            "report-before.md:81",
+            "report-before.md:101"
+          ],
+          "input_basis": [
+            "input/main.md:23",
+            "input/main.md:33",
+            "input/main.md:43",
+            "figure1.png:E"
+          ]
+        },
+        {
+          "id": "V06_low_resolution",
+          "verdict": "通过",
+          "reason": "F 确实低清，报告具体说明剂量、点值、误差不可读，没有精确剂量效应、P、n 或拟合参数。",
+          "report_locations": [
+            "report-before.md:67",
+            "report-before.md:82"
+          ],
+          "input_basis": [
+            "input/main.md:33",
+            "figure1.png:F"
+          ]
+        },
+        {
+          "id": "V10_scope_provenance",
+          "verdict": "通过",
+          "reason": "main-v1 的主文与图像来源独立定义，真实已读与未获状态明确；没有声称 raw reanalysis 或官方更正查询。with-supplement 更新部分不在本次范围。",
+          "report_locations": [
+            "report-before.md:14-21",
+            "report-before.md:71-83",
+            "report-before.md:110-117"
+          ],
+          "input_basis": [
+            "input/main.md:3-5",
+            "input/main.md:47"
+          ]
+        }
+      ],
+      "not_applicable_gold_checks": [
+        "V07_donor_update",
+        "V08_KO_update",
+        "V09_overlap_map"
+      ],
+      "timing_interpretation": "execution-main.json:3-7 的 403 秒自首个捕获时钟到末时钟，明确未包含请求/技能/主文前置读取；只作记录真实性说明，不作完整任务速度评分。"
+    },
+    {
+      "case": "english-fast",
+      "stage": "quick-read main-only",
+      "overall_verdict": "部分通过",
+      "scientific_semantics_verdict": "通过",
+      "scope_honesty_verdict": "通过",
+      "quick_read_efficiency_demonstration": "未充分证明",
+      "issues": [
+        {
+          "id": "FAST_SCOPE_DEMONSTRATION_LIMIT",
+          "severity": "评价限制；不构成科学错误",
+          "finding": "实际读取覆盖全部 p1 叙事、完整图注与全部现有 Methods，仅留下资源声明未读；因此本例不能证明长文速读会先筛选再按价值限制读取。",
+          "locations": [
+            "report.md:11-13",
+            "trace.json:9-32",
+            "trace.json:106"
+          ],
+          "input_basis": [
+            "input/main.md:1-47"
+          ],
+          "implication": "科学语义与范围诚实性通过；阅读动作选择性/长文效率只判部分通过。单图、短文使全部面板和几乎全部方法都可能成为决定性证据，不能据此武断认定伪装为速读，也不能宣称效率已得到验证。"
+        }
+      ],
+      "checks": [
+        {
+          "criterion": "英文要求与筛选交付",
+          "verdict": "通过",
+          "reason": "报告全英文，直接给 selective close reading 的筛选判断及原因、关键风险、精读优先项和实际已读/未读范围，符合请求的表达职责。",
+          "report_locations": [
+            "report.md:1-13",
+            "report.md:33-41"
+          ],
+          "input_or_gold_basis": [
+            "request.txt:1"
+          ]
+        },
+        {
+          "criterion": "速读实际读取选择性",
+          "verdict": "部分通过",
+          "reason": "trace 记载先读 1-27 再读 29-43：这涵盖全部 p1、全部图注与全部已给 Methods，并非少量正文定点读取。没有证据显示读取全文后伪装为仅读摘要；报告诚实承认 broad coverage，只剩资源声明未读。本例是单图、47 行短材料，因所有面板均含决定性冲突或对照，广泛读取本身不构成科学错误；却不足以验证长文速读的筛选顺序或效率。",
+          "report_locations": [
+            "report.md:11-13",
+            "report.md:41"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:1-47",
+            "references/reading-modes.md:速读范围和范围声明"
+          ],
+          "execution_record_locations": [
+            "trace.json:9-32",
+            "trace.json:44-53",
+            "trace.json:98-106"
+          ]
+        },
+        {
+          "criterion": "关键数字、必要对照与统计单位",
+          "verdict": "通过",
+          "reason": "独立查看英文任务原图确认 A-E 的标签与报告一致。12/24/48/12,000 层级、6人/组、四独立培养制备和均值±SD均正确；A 的单位未知并未诊断伪重复。明确 KO vehicle 无法回答刺激效应，需要 S1 的刺激 KO。B P=0.08 正确且和正文 0.8 并存。",
+          "report_locations": [
+            "report.md:17-21",
+            "report.md:27-31"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:15-23",
+            "input/main.md:33",
+            "input/main.md:39",
+            "input/main.md:43",
+            "figure1.png:A-E"
+          ]
+        },
+        {
+          "criterion": "科学判断与缺材料边界",
+          "verdict": "通过",
+          "reason": "图文方向冲突未被选边遮蔽，相关未被升级为显著或因果；回补未证明 CY-2 内源必要性或完整路线。S1 不可得、选择性/活性未在主稿报告的范围明确，没有把本次未获取推成全研究未做。建议具体联系缺口，标为 proposed validation priorities。",
+          "report_locations": [
+            "report.md:3-5",
+            "report.md:17-21",
+            "report.md:29-30",
+            "report.md:35-37"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:21-27",
+            "input/main.md:33",
+            "input/main.md:39",
+            "input/main.md:43"
+          ]
+        },
+        {
+          "criterion": "视觉动作、低清与复算真实性",
+          "verdict": "通过",
+          "reason": "当前原图支持报告的全部可读转录。报告和 trace 区分一次整图查看、F 不可读、简单 summary arithmetic 与未重算 P/未 raw-data reanalysis；没有猜 F 数字。仅据提供记录不能独立证明原读者每次工具执行，但未见内容或动作状态矛盾。",
+          "report_locations": [
+            "report.md:11-13",
+            "report.md:19",
+            "report.md:27-31"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:33",
+            "figure1.png:A-F"
+          ],
+          "execution_record_locations": [
+            "trace.json:34-42",
+            "trace.json:55-104"
+          ]
+        },
+        {
+          "criterion": "核心证据记录与定位",
+          "verdict": "通过",
+          "reason": "E1-E5 覆盖筛选判断所依赖的方向、统计与嵌套层级、受体必要对照、回补及低清风险，给出版本/逻辑页/面板、比较及独立单位、真实动作与支持边界。main-v1 与图像链接明确，未把 unread resource statement 作为核实数据入口。",
+          "report_locations": [
+            "report.md:9-13",
+            "report.md:25-31",
+            "report.md:41"
+          ],
+          "input_or_gold_basis": [
+            "input/main.md:3-5",
+            "input/main.md:13-43"
+          ]
+        }
+      ],
+      "applicable_gold_checks": [
+        {
+          "id": "V01_direction_conflict",
+          "verdict": "通过",
+          "reason": "正文称病变更高与图/图注参照1.80病变1.20的方向冲突明确保留；图示差值−0.60未冒充统一结论。",
+          "report_locations": [
+            "report.md:17",
+            "report.md:27"
+          ],
+          "input_basis": [
+            "input/main.md:15",
+            "input/main.md:33",
+            "figure1.png:A"
+          ]
+        },
+        {
+          "id": "V02_decimal_visual",
+          "verdict": "通过",
+          "reason": "P=0.08图像值准确，保留0.8文本差异，未按通常0.05阈值称显著。",
+          "report_locations": [
+            "report.md:19",
+            "report.md:28"
+          ],
+          "input_basis": [
+            "input/main.md:17",
+            "figure1.png:B"
+          ]
+        },
+        {
+          "id": "V03_nested_unknown",
+          "verdict": "通过",
+          "reason": "独立参与者和嵌套测量明确区分；主阶段推断单位未知，未武断诊断伪重复。",
+          "report_locations": [
+            "report.md:17",
+            "report.md:27"
+          ],
+          "input_basis": [
+            "input/main.md:15",
+            "input/main.md:39"
+          ]
+        },
+        {
+          "id": "V04_necessary_control",
+          "verdict": "通过",
+          "reason": "指出刺激KO在未提供S1，并解释KO vehicle不能检验刺激反应必要性；未称全研究没有实验。",
+          "report_locations": [
+            "report.md:21",
+            "report.md:29",
+            "report.md:35"
+          ],
+          "input_basis": [
+            "input/main.md:21",
+            "input/main.md:33",
+            "figure1.png:D"
+          ]
+        },
+        {
+          "id": "V05_rescue_boundary",
+          "verdict": "通过",
+          "reason": "内源CY-2必要性未由回补证明；建议刺激下loss/blockade、matched control、resistant restoration及viability/RX-4测量。",
+          "report_locations": [
+            "report.md:21",
+            "report.md:30",
+            "report.md:35"
+          ],
+          "input_basis": [
+            "input/main.md:23",
+            "input/main.md:33",
+            "input/main.md:43",
+            "figure1.png:E"
+          ]
+        },
+        {
+          "id": "V06_low_resolution",
+          "verdict": "通过",
+          "reason": "F的数值剂量关系明确不可读，没有EC50或精确剂量/终点/P/n。",
+          "report_locations": [
+            "report.md:11",
+            "report.md:31"
+          ],
+          "input_basis": [
+            "input/main.md:33",
+            "figure1.png:F"
+          ]
+        },
+        {
+          "id": "V10_scope_provenance",
+          "verdict": "通过",
+          "reason": "main-v1逻辑页定位，整图/读文/简单复算/未原始数据重分析与未外查状态一致；未读资源段明确披露。",
+          "report_locations": [
+            "report.md:9-13",
+            "report.md:25-31",
+            "report.md:41"
+          ],
+          "input_basis": [
+            "input/main.md:3-5",
+            "input/main.md:33"
+          ]
+        }
+      ],
+      "not_applicable_gold_checks": [
+        "V07_donor_update",
+        "V08_KO_update",
+        "V09_overlap_map"
+      ],
+      "timing_interpretation": "execution.json:3-6 从09:00:11至09:03:29为198秒，记录称始于请求/材料读取之前；与main阶段排除前置读取的计时口径不同，不据此比较速读相对效率。"
+    }
+  ],
+  "severity_summary": {
+    "critical_scientific_errors": 0,
+    "major_scientific_errors": 0,
+    "unsupported_visual_or_raw_reanalysis_claims_found": 0,
+    "mode_efficiency_evaluation_limitations": 1
+  },
+  "execution_evidence_limit": "本次提供的是trace/execution记录而非完整逐次工具调用历史。独立阅图能确认图像转录与可读性，报告/trace能核对范围声明；不能由这些记录单独认定原读者真实执行史已独立证明。",
+  "summary": "主阶段视觉语义通过；英文速读科学与范围诚实性通过，动作选择性和长文效率未充分验证，故整体部分通过。不存在利用补充材料倒算主阶段成绩；未读补充、未看S1，未修改报告。"
+}

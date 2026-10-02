@@ -1,0 +1,26 @@
+{
+  "phase": "update",
+  "started_utc": "2026-10-02T09:03:24Z",
+  "ended_utc": "2026-10-02T09:14:28Z",
+  "elapsed_seconds": 664,
+  "clock_source": "clock.curr_time",
+  "start_captured_before_reading": true,
+  "timing_note": "The start was captured before reading request-update.txt or inventorying/reading any update material. The end is the actual UTC clock reading after report updates, supplementary-image checks, calculations, preserved-report hash comparison, relative-link verification, trace JSON parsing and stale-limitation review, immediately before final metadata serialization.",
+  "input_directory": "input",
+  "new_text_read": "input/supplement.md, full logical s-p1/s-p2",
+  "new_image_viewed": "input/figure-s1.png, full view with panels A-C checked",
+  "main_materials_reused": [
+    "input/main.md",
+    "input/figure1.png"
+  ],
+  "main_text_reread": false,
+  "figure1_reopened": false,
+  "preserved_main_report": "report-before.md",
+  "updated_report": "report.md",
+  "trace_path": "trace-update.json",
+  "network_used": false,
+  "raw_data_reanalysis": false,
+  "skill_modified": false,
+  "scoring_performed": false,
+  "status": "completed"
+}

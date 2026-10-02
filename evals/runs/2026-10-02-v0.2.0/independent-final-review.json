@@ -1,0 +1,442 @@
+{
+  "reviewer": "independent_final_semantic_review",
+  "overall_verdict": "部分通过",
+  "scope": {
+    "cases": [
+      "visual-update-final",
+      "english-method-focus",
+      "english-fast-selective"
+    ],
+    "files_read": {
+      "visual-update": [
+        "request-update.txt",
+        "input/supplement.md",
+        "input/figure-s1.png",
+        "report.md",
+        "trace-update.json",
+        "execution-update.json",
+        "report-before.md via prior read and current unified diff"
+      ],
+      "english-method-focus": [
+        "request.txt",
+        "input/prediction-method.md",
+        "report.md",
+        "trace.json",
+        "execution.json"
+      ],
+      "english-fast-selective": [
+        "request.txt",
+        "input/quick-screening.md",
+        "report.md",
+        "trace.json",
+        "execution.json"
+      ]
+    },
+    "skill_rules_reused": [
+      "SKILL.md",
+      "references/evidence-rules.md",
+      "references/reading-modes.md"
+    ],
+    "gold_reused_for_visual_scoring_only": "evals/fixtures/visual/gold.json",
+    "not_read": [
+      "grading-update.json",
+      "grading.json",
+      "other readers outputs beyond assigned cases"
+    ],
+    "approach": "依照输入和实际报告语义审阅数字、单位、判断、动作和选择范围；不按长度或标题完整性评分。有限合成材料的通过不代表真实长论文总体准确性已证明。",
+    "main_evidence_reuse": {
+      "text": "main.md main-v1 was fully read in this independent review sequence; reused its text and locations",
+      "image": "figure1.png main-v1 was actually viewed at original detail previously; current visual-update and previously viewed english-fast copies have identical SHA256",
+      "sha256": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948",
+      "reused_panels": "A-E legible labels/values and F quantitative unreadability; no repeat viewing required"
+    },
+    "new_visual_action": {
+      "file": "run:visual-update/input/figure-s1.png",
+      "tool": "view_image",
+      "detail": "original",
+      "scope": "Whole supplied supplement-s1 figure actually viewed; A-C annotations, axes, groups and donor ID boxes read",
+      "observed": {
+        "A": "Lesion-reference=-0.60; 95% CI[-1.30,0.10]; P=.09; interval crosses zero; independent donor unit, 6 lesion/6 reference",
+        "B": "WT vehicle1.00/AX-171.60; KO vehicle.98/AX-171.50; 4 preparations; vehicle and AX-17 paired within preparation",
+        "C": "DISC D01-D08; VAL D05-D12; boxes identify repeated D05-D08; SYNTH labels explicitly local fictional labels"
+      }
+    },
+    "preserved_report_check": {
+      "action": "current unified diff plus SHA256 check of report-before.md",
+      "sha256": "80c3c04f88a3a4969ad2cdd02255842a56f2c6616b563bb422fd8e62f39d47d3",
+      "agrees_with_trace_update_preservation_hash": true,
+      "note": "当前保留稿内容与trace记录哈希一致，diff实际显示各依赖判断同步更新；不能由此单独证明完整历史复制操作。"
+    }
+  },
+  "cases": [
+    {
+      "case": "visual-update-final",
+      "verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "补充身份、实际查看及全局判断更新",
+          "verdict": "通过",
+          "reason": "supplement-s1明确属于main-v1；报告定义M1/V1/S1/VS1、实际读取和复用动作。当前与before的diff显示开篇、样本解释、图组、证据记录、机制表、局限和后续方案均改变，超出资源表更新。原主阶段未获补充的状态仍保留在before，而没有倒算成当时已知。",
+          "report_locations": [
+            "report.md:1-21",
+            "report.md:27-33",
+            "report.md:95-115",
+            "report.md:119-148"
+          ],
+          "input_basis": [
+            "request-update.txt:1",
+            "input/supplement.md:3",
+            "report-before.md:3-21",
+            "report-before.md:75-83"
+          ],
+          "execution_record_locations": [
+            "trace-update.json:21-60",
+            "trace-update.json:87-96",
+            "execution-update.json:7-19"
+          ]
+        },
+        {
+          "criterion": "参与者单位与跨零CI",
+          "verdict": "通过",
+          "reason": "细胞→切片→组织→参与者聚合、每人一个均值及6vs6 Welch分析被正确更新为已知，未知单位/伪重复批评未陈旧保留。报告与实际S1A一致：差-.60，95%CI[-1.30,.10]，P=.09；方向不确定，非显著差异，也未证明等效。main正文+.60冲突仍记为未解决，未伪称正式更正。",
+          "report_locations": [
+            "report.md:5",
+            "report.md:27",
+            "report.md:41-45",
+            "report.md:95-96",
+            "report.md:111-112"
+          ],
+          "input_basis": [
+            "input/main.md:15",
+            "input/main.md:33",
+            "input/main.md:39",
+            "input/supplement.md:9",
+            "figure-s1.png:A",
+            "report-before.md:43-45"
+          ]
+        },
+        {
+          "criterion": "KO仍响应、配对与不等效边界",
+          "verdict": "通过",
+          "reason": "刺激KO已从未知改为1.50vs.98、配对增量.52 CI[.25,.79]；WT增量.60 CI[.34,.86]及每基因型n4配对准确。均值增量差-.08和比86.7%仅作算术描述，未因两个正CI证明相等/等效、未把86.7%称通路贡献。受体丰度<5%只归作者报告，原图/表未供应；残留受体等替代解释保留。",
+          "report_locations": [
+            "report.md:5",
+            "report.md:60-73",
+            "report.md:100",
+            "report.md:114",
+            "report.md:119",
+            "report.md:130"
+          ],
+          "input_basis": [
+            "input/supplement.md:13",
+            "input/supplement.md:17",
+            "input/supplement.md:23-26",
+            "figure-s1.png:B",
+            "report-before.md:57",
+            "report-before.md:80"
+          ],
+          "execution_record_locations": [
+            "trace-update.json:64-69",
+            "trace-update.json:91",
+            "trace-update.json:96"
+          ]
+        },
+        {
+          "criterion": "4/8重叠、不同子集与图表角色",
+          "verdict": "通过",
+          "reason": "DISC D01-D08/VAL D05-D12，各8，交D05-D08四人即每批50%，并12人均准确；病变/参照6/2与2/6、VAL独有四人均参照正确。按同采样成员清单拒绝整体独立验证，区分验证方向未单独绘图、B同12人和C-F独立培养体系，未宣称16独立供者或原始表达重分析。",
+          "report_locations": [
+            "report.md:49-56",
+            "report.md:98",
+            "report.md:113",
+            "report.md:132",
+            "report.md:144"
+          ],
+          "input_basis": [
+            "input/supplement.md:30-37",
+            "figure-s1.png:C",
+            "report-before.md:49",
+            "report-before.md:78"
+          ],
+          "execution_record_locations": [
+            "trace-update.json:71-82",
+            "trace-update.json:90"
+          ]
+        },
+        {
+          "criterion": "保留主文冲突、回补边界和低清限制",
+          "verdict": "通过",
+          "reason": "B的正文.8/图像.08未被补充虚构修正；CY-2回补未证明必要性或完整中介，补充的内源损失/选择性未评估状态被具体补入；F仍不可定量，没有猜测数值。新增材料未掩盖这些现有边界。",
+          "report_locations": [
+            "report.md:47",
+            "report.md:77-83",
+            "report.md:97",
+            "report.md:101-103",
+            "report.md:124",
+            "report.md:131",
+            "report.md:134"
+          ],
+          "input_basis": [
+            "input/main.md:17",
+            "input/main.md:23",
+            "input/main.md:33",
+            "input/main.md:43",
+            "input/supplement.md:13",
+            "input/supplement.md:26",
+            "figure1.png:B/E/F"
+          ]
+        },
+        {
+          "criterion": "证据记录与真实动作层次",
+          "verdict": "通过",
+          "reason": "E1-E9记录新/旧来源、版本和位置，独立单位、比较、已做动作及限制齐备。复用主图、实际新看S1、成员集合算术和均值差复算均与trace对应；无CI/P复现、交互模型、raw-data reanalysis或官方查询冒称。",
+          "report_locations": [
+            "report.md:14-21",
+            "report.md:87-103",
+            "report.md:140-148"
+          ],
+          "input_basis": [
+            "input/main.md:3-5",
+            "input/main.md:47",
+            "input/supplement.md:3",
+            "input/supplement.md:9",
+            "input/supplement.md:13",
+            "input/supplement.md:37"
+          ],
+          "execution_record_locations": [
+            "trace-update.json:29-85",
+            "trace-update.json:96",
+            "execution-update.json:10-19"
+          ]
+        }
+      ],
+      "gold_checks": {
+        "V01_direction_conflict": "通过；现补充支持负向估计，主文冲突仍保留",
+        "V02_decimal_visual": "通过；复用已核清.08/.8冲突",
+        "V03_nested_unknown": "主阶段通过；更新后正确转为参与者单位已知",
+        "V04_necessary_control": "主阶段通过；更新后刺激KO已取得并纳入机制判断",
+        "V05_rescue_boundary": "通过",
+        "V06_low_resolution": "通过",
+        "V07_donor_update": "通过",
+        "V08_KO_update": "通过",
+        "V09_overlap_map": "通过",
+        "V10_scope_provenance": "通过"
+      }
+    },
+    {
+      "case": "english-method-focus",
+      "verdict": "部分通过",
+      "issues": [
+        {
+          "id": "METHOD_STEP_ORDER_AMBIGUITY",
+          "severity": "局部方法说明问题；不涉及数字或已确认泄漏判断错误",
+          "finding": "编号Step5写Fit the predictor，Step6才写Randomly split cells into training/validation/test，随后称这张表为executable explanation。按编号执行会被理解为先拟合后划分，容易误导方法复用。",
+          "report_locations": [
+            "report-first.md:17-18",
+            "report-first.md:20"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:33"
+          ],
+          "why_it_matters": "原输入明确先全数据筛基因再划分，而训练/验证/测试划分应在对应拟合和评估之前。报告其他段落没有声称全数据拟合，也正确指出筛基因泄漏，故不是已证实的额外拟合泄漏错误；问题是可执行步骤顺序表达。",
+          "suggested_fix": "把划分步骤置于拟合之前，保留原文先全数据选基因的已报告事实；或明确该表只拆解模型构造与评测组成、不代表执行顺序，并另列准确时序。"
+        }
+      ],
+      "checks": [
+        {
+          "criterion": "英文专题范围与上下文",
+          "verdict": "通过",
+          "reason": "英文直接解释inputs→neighbour means→concatenation→logistic probability，训练标签与部署输入分开，实际全读短方法片段与任务相关；未当作长论文精读或新算法。",
+          "report_locations": [
+            "report-first.md:3-9",
+            "report-first.md:20-24",
+            "report-first.md:54"
+          ],
+          "input_basis": [
+            "request.txt:1",
+            "input/prediction-method.md:3",
+            "input/prediction-method.md:7",
+            "input/prediction-method.md:22-29"
+          ]
+        },
+        {
+          "criterion": "公式与术语解释真实性",
+          "verdict": "通过",
+          "reason": "邻域均值Σx/|N|和logistic sigmoid正确解释原文操作，明确标为explanatory reconstruction而非原文公式或已执行模型；L2作用描述准确。50um、200邻域特征和未知自身表达维数合理，未擅定总400维或校准能力。自包含、空邻域、预处理等未知明确。",
+          "report_locations": [
+            "report-first.md:9",
+            "report-first.md:13-17",
+            "report-first.md:22-24",
+            "report-first.md:28",
+            "report-first.md:40"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:7",
+            "input/prediction-method.md:22-29",
+            "input/prediction-method.md:33"
+          ],
+          "execution_record_locations": [
+            "trace-first.json:88"
+          ]
+        },
+        {
+          "criterion": "编号步骤的执行顺序",
+          "verdict": "部分通过",
+          "reason": "构造内容本身准确，但拟合在Step5、随机划分在Step6与executable explanation措辞造成先拟合后划分的歧义。需明确划分发生在拟合之前，不应让读者用表格编号复用错误流程。",
+          "report_locations": [
+            "report-first.md:17-20"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:33"
+          ]
+        },
+        {
+          "criterion": "性能数字、单位与泄漏边界",
+          "verdict": "通过",
+          "reason": "AUROC .95/.93绝对差.02，12供者/60000细胞、42000/9000/9000总和及70/15/15正确。全标签筛基因泄漏有直接依据，不量化未知乐观偏差；共享12供者不能证明新供者泛化。跨集合邻域共享仍标未知风险；AUROC未等同accuracy/calibration/clinical benefit。",
+          "report_locations": [
+            "report-first.md:3",
+            "report-first.md:30-34",
+            "report-first.md:41-44"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:11",
+            "input/prediction-method.md:17-18",
+            "input/prediction-method.md:33",
+            "input/prediction-method.md:37"
+          ],
+          "execution_record_locations": [
+            "trace-first.json:45-87"
+          ]
+        },
+        {
+          "criterion": "证据记录、动作与迁移建议",
+          "verdict": "通过",
+          "reason": "E1-E5覆盖构造、数字和主要批评，方法源码及算法实测未执行状态明确，summary arithmetic未冒充AUROC重现、raw reanalysis或成本测量。建议对应供者泛化/泄漏/消融目标并标为未实施。",
+          "report_locations": [
+            "report-first.md:38-54"
+          ],
+          "input_basis": [
+            "input/prediction-method.md:3",
+            "input/prediction-method.md:33",
+            "input/prediction-method.md:41"
+          ],
+          "execution_record_locations": [
+            "trace-first.json:9-30",
+            "trace-first.json:45-98"
+          ]
+        }
+      ]
+    },
+    {
+      "case": "english-fast-selective",
+      "verdict": "通过",
+      "issues": [],
+      "checks": [
+        {
+          "criterion": "用户问题、英文筛选判断与模式",
+          "verdict": "通过",
+          "reason": "针对donor-level biological association给defer full close reading的判断，依据主比较不确定、年龄未调整和无独立验证；并给适用的设计借鉴及条件性转移工程协议时再精读。不是按长度缩写全文。",
+          "report_locations": [
+            "report.md:1-13",
+            "report.md:24-28"
+          ],
+          "input_basis": [
+            "request.txt:1",
+            "input/quick-screening.md:9",
+            "input/quick-screening.md:13",
+            "input/quick-screening.md:17",
+            "input/quick-screening.md:23",
+            "input/quick-screening.md:37"
+          ]
+        },
+        {
+          "criterion": "真正选读范围与未读声明",
+          "verdict": "通过",
+          "reason": "trace读1-37与76-EOF，覆盖概览问题/讨论、决定性p2及availability；校准与漂移的可得正文、表和工程方法38-75未读。报告准确列出这些范围，只有标题扫描不被称为读取，未引用未读技术数值或背书工程性能；ancillary overview明确归作者。",
+          "report_locations": [
+            "report.md:22",
+            "report.md:28",
+            "report.md:32-36"
+          ],
+          "input_basis": [
+            "input/quick-screening.md:1-37",
+            "input/quick-screening.md:39-78"
+          ],
+          "execution_record_locations": [
+            "trace.json:9-48",
+            "trace.json:100-114"
+          ]
+        },
+        {
+          "criterion": "关键数字、比较与独立单位",
+          "verdict": "通过",
+          "reason": "10vs10独立供者、每人一组织两技术扫描、20scores而非40独立观察准确；1.90-1.50=.40，CI[-.30,1.10]、P=.24、年龄68-54=14均正确。Welch供者层面及预固定权重/协议依据Methods，没有把扫描重复当独立验证。",
+          "report_locations": [
+            "report.md:9-13",
+            "report.md:19-21"
+          ],
+          "input_basis": [
+            "input/quick-screening.md:9",
+            "input/quick-screening.md:23",
+            "input/quick-screening.md:29-37"
+          ],
+          "execution_record_locations": [
+            "trace.json:49-99"
+          ]
+        },
+        {
+          "criterion": "科学判断和建议边界",
+          "verdict": "通过",
+          "reason": "跨零CI既未证明差异也未证明等效，年龄作为未量化的竞争解释；没从均值估计混杂方向大小。无独立验证是已读原文明示，技术实验不提供队列的判断基于overview并归作者。建议需独立年龄平衡/调整，未假装做功效计算或治疗机制判断。",
+          "report_locations": [
+            "report.md:3",
+            "report.md:11-13",
+            "report.md:22",
+            "report.md:26-28"
+          ],
+          "input_basis": [
+            "input/quick-screening.md:9",
+            "input/quick-screening.md:17",
+            "input/quick-screening.md:23",
+            "input/quick-screening.md:37"
+          ]
+        },
+        {
+          "criterion": "证据记录与实际动作",
+          "verdict": "通过",
+          "reason": "E1-E4覆盖筛选的单位、估计、混杂及验证范围，screen-v1与逻辑页/小标题定位明确。复算仅报告均值/count arithmetic，P/CI仍作者报告，未重新拟合、调整年龄或raw reanalysis。没有图像则未声称visual check。",
+          "report_locations": [
+            "report.md:5",
+            "report.md:17-22",
+            "report.md:32-36"
+          ],
+          "input_basis": [
+            "input/quick-screening.md:3",
+            "input/quick-screening.md:23-37",
+            "input/quick-screening.md:78"
+          ],
+          "execution_record_locations": [
+            "trace.json:38",
+            "trace.json:49-114"
+          ]
+        }
+      ],
+      "generalisation_limit": "本例已证明按用户兴趣选择主结果/相关方法并留下可得无关工程部分未读；输入仅78行且已有清晰概览，不代表真实长篇复杂论文的效率或总体准确性已得到验证。此前english-fast单图短例的选择性限制仍应保留，不以本例倒改旧评分。"
+    }
+  ],
+  "global_limitations": [
+    "trace/execution是提供的动作记录，独立审阅能核对内部一致性及与输入/报告对应，但没有原读者完整逐次宿主工具日志；不把自报记录单独当成真实执行的独立证明。",
+    "三个案例均为有限原创合成输入。本评分只支持所测行为，不证明技能对所有研究设计、真实PDF提取或长论文的总体准确性。",
+    "新速读案例体现本例真实选择范围；未以报告短、动作少或耗时短推断所有论文的效率。"
+  ],
+  "severity_summary": {
+    "critical_scientific_errors": 0,
+    "major_scientific_errors": 0,
+    "local_method_order_ambiguities": 1,
+    "unsupported_visual_or_raw_reanalysis_claims_found": 0
+  },
+  "summary": "visual-update最终更新通过，english-fast-selective真实选择范围通过；english-method-focus科学数字/公式/泄漏及动作通过，但可执行表格编号将拟合置于划分前造成顺序歧义，判部分通过。均不以有限输入推定总体准确性。",
+  "export_note": "English method case references point to the preserved first output reviewed here; subsequent independent retest is recorded separately."
+}

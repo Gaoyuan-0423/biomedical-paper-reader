@@ -1,0 +1,1 @@
+现加入同一研究的本地补充材料 supplement.md 与 figure-s1.png。请使用 $biomedical-paper-reader 读取必要补充并更新现有中文报告，记录判断变化，保留 report-before.md 的主阶段原报告。

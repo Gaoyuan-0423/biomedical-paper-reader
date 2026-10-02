@@ -1,0 +1,210 @@
+{
+  "date": "2026-10-02",
+  "scope": "Actual offline development checks; no semantic scoring or runtime-speed claim",
+  "checks": [
+    {
+      "check": "integrity negative self-tests",
+      "command": "python3 evals/validate_repo.py --self-test",
+      "started_at_utc": "2026-10-02T09:32:41.352034+00:00",
+      "ended_at_utc": "2026-10-02T09:32:41.433654+00:00",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "test_links_and_anchors (__main__.IntegrityTests) ... ok\ntest_stale_scoring_quote_is_rejected (__main__.IntegrityTests) ... ok\ntest_tampered_output_is_rejected (__main__.IntegrityTests) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.004s\n\nOK\n"
+    },
+    {
+      "check": "rebuild original synthetic visual fixtures",
+      "command": "python3 evals/generate_visual_fixtures.py",
+      "started_at_utc": "2026-10-02T09:32:41.435739+00:00",
+      "ended_at_utc": "2026-10-02T09:32:41.922478+00:00",
+      "exit_code": 0,
+      "stdout": "generated: evals/fixtures/visual/main.md\ngenerated: evals/fixtures/visual/figure1.png\ngenerated: evals/fixtures/visual/supplement.md\ngenerated: evals/fixtures/visual/figure-s1.png\ngenerated: evals/fixtures/visual/gold.json\n",
+      "stderr": ""
+    },
+    {
+      "check": "same-environment fixture repeatability",
+      "status": "pass",
+      "before_sha256": {
+        "gold.json": "1051dd2895113f567c6ae114d96db3543ac6af5a80fadecf557d0ed77b1b9821",
+        "supplement.md": "af66a35e2d9f49af5db898e4bef8b98c1be682af68e7063ad5f2605c99d45d01",
+        "figure-s1.png": "e2b8cbb9f7c0103d3ae2ef045e753cb52b59bc17d444e203111c0181c3166b4c",
+        "main.md": "a694edf0498d5693bd7ea4f723bebbb57e4a2c487c23a70094bd293a2a2fe5e0",
+        "figure1.png": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948"
+      },
+      "after_sha256": {
+        "gold.json": "1051dd2895113f567c6ae114d96db3543ac6af5a80fadecf557d0ed77b1b9821",
+        "supplement.md": "af66a35e2d9f49af5db898e4bef8b98c1be682af68e7063ad5f2605c99d45d01",
+        "figure-s1.png": "e2b8cbb9f7c0103d3ae2ef045e753cb52b59bc17d444e203111c0181c3166b4c",
+        "main.md": "a694edf0498d5693bd7ea4f723bebbb57e4a2c487c23a70094bd293a2a2fe5e0",
+        "figure1.png": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948"
+      },
+      "limitation": "No byte-equivalence check under other fonts or operating systems"
+    },
+    {
+      "check": "JSON parse, Python syntax and PNG decode",
+      "status": "pass",
+      "parsed_files_count": 42,
+      "decoded_pngs": [
+        {
+          "path": "evals/fixtures/visual/figure-s1.png",
+          "size": [
+            1800,
+            1010
+          ]
+        },
+        {
+          "path": "evals/fixtures/visual/figure1.png",
+          "size": [
+            1800,
+            1490
+          ]
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/input/figure1.png",
+          "size": [
+            1800,
+            1490
+          ]
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/input/figure1.png",
+          "size": [
+            1800,
+            1490
+          ]
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/input/figure1.png",
+          "size": [
+            1800,
+            1490
+          ]
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/input/figure-s1.png",
+          "size": [
+            1800,
+            1010
+          ]
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/input/figure1.png",
+          "size": [
+            1800,
+            1490
+          ]
+        }
+      ],
+      "python": "3.9.6",
+      "Pillow": "11.3.0"
+    },
+    {
+      "check": "official Skill Creator frontmatter validator",
+      "command": "PYTHONPATH=<temporary PyYAML 6.0.3 directory> python3 <Skill Creator>/scripts/quick_validate.py .",
+      "started_at_utc": "2026-10-02T09:32:41.958786+00:00",
+      "ended_at_utc": "2026-10-02T09:32:42.033556+00:00",
+      "exit_code": 0,
+      "stdout": "Skill is valid!\n",
+      "stderr": ""
+    },
+    {
+      "check": "working diff whitespace check",
+      "command": "git diff --check",
+      "started_at_utc": "2026-10-02T09:32:42.033586+00:00",
+      "ended_at_utc": "2026-10-02T09:32:42.077606+00:00",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "check": "portable exported-path scan",
+      "status": "pass",
+      "hits": [],
+      "scope": "Known local user and temporary export prefixes; not a general secret scanner"
+    },
+    {
+      "check": "final local links, anchors, instruction hashes, archived artifact hashes and exact grading quotes",
+      "command": "python3 evals/validate_repo.py",
+      "started_at_utc": "2026-10-02T09:34:48.014222+00:00",
+      "ended_at_utc": "2026-10-02T09:34:48.123413+00:00",
+      "exit_code": 1,
+      "stdout": "{\n  \"status\": \"fail\",\n  \"local_links_checked\": 218,\n  \"external_links_not_fetched\": [\n    \"https://doi.org/10.1038/s41588-026-02673-0\",\n    \"https://doi.org/10.1186/s12943-026-02682-x\",\n    \"https://doi.org/10.1186/s12943-026-02777-5\",\n    \"https://github.com/Gaoyuan-0423/biomedical-paper-reader/issues\"\n  ],\n  \"errors\": [\n    \"evals/runs/2026-10-02-v0.2.0/FAILURES.md: link escapes repository: ../../../../references/study-checks.md\"\n  ],\n  \"scope\": \"link/anchor and recorded-artifact integrity; no semantic scoring or speed claim\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "check": "final portable exported-path scan",
+      "status": "pass",
+      "hits": [],
+      "scope": "Known local user and temporary export prefixes; not a general secret scanner"
+    },
+    {
+      "check": "recheck local links and archived evidence after correcting reference depth",
+      "command": "python3 evals/validate_repo.py",
+      "started_at_utc": "2026-10-02T09:35:45.370293+00:00",
+      "ended_at_utc": "2026-10-02T09:35:45.473781+00:00",
+      "exit_code": 0,
+      "stdout": "{\n  \"status\": \"pass\",\n  \"local_links_checked\": 218,\n  \"external_links_not_fetched\": [\n    \"https://doi.org/10.1038/s41588-026-02673-0\",\n    \"https://doi.org/10.1186/s12943-026-02682-x\",\n    \"https://doi.org/10.1186/s12943-026-02777-5\",\n    \"https://github.com/Gaoyuan-0423/biomedical-paper-reader/issues\"\n  ],\n  \"errors\": [],\n  \"scope\": \"link/anchor and recorded-artifact integrity; no semantic scoring or speed claim\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "check": "final whitespace check",
+      "command": "git diff --check",
+      "started_at_utc": "2026-10-02T09:35:45.473818+00:00",
+      "ended_at_utc": "2026-10-02T09:35:45.494419+00:00",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "check": "initial staged whitespace check including new reports",
+      "command": "git diff --cached --check",
+      "checked_at_utc": "2026-10-02T09:37:37.912653+00:00",
+      "exit_code": 2,
+      "stdout": "evals/runs/2026-10-02-v0.2.0/english-full/report.md:56: new blank line at EOF.\nevals/runs/2026-10-02-v0.2.0/legacy-incomplete/report.md:42: new blank line at EOF.\nevals/runs/2026-10-02-v0.2.0/legacy-method/report.md:58: new blank line at EOF.\n",
+      "stderr": ""
+    },
+    {
+      "check": "report EOF format correction",
+      "status": "applied",
+      "changes": [
+        {
+          "artifact": "evals/runs/2026-10-02-v0.2.0/english-full/report.md",
+          "original_sha256": "d08de1dd7e45b7c5bd24349f1818de6bea6cf6f9836528de1ff18193d00380d1",
+          "exported_sha256": "958abf48596b5ee132dd520cf54c858f8a1d3de754667839e1be7193aab14227",
+          "operation": "remove exactly one empty EOF line; no analysis or evidence-line changes"
+        },
+        {
+          "artifact": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/report.md",
+          "original_sha256": "74cf21ec5fe181374ffe4b70e328da67f5ba91cce1e5ae2440f5913101b248fe",
+          "exported_sha256": "5d1edc9eaa0916447cdd6fd4b4f6773f9b2b2f1dacf01804696a7272402972a9",
+          "operation": "remove exactly one empty EOF line; no analysis or evidence-line changes"
+        },
+        {
+          "artifact": "evals/runs/2026-10-02-v0.2.0/legacy-method/report.md",
+          "original_sha256": "18b6858ba6d1a9cca63e4f42ab18ffe770ca8e9def6817770a1dcbcbc2b6d706",
+          "exported_sha256": "5e3a73c18add6a3b8e6ce6ecd30ae5b808b36465916e0d493bedda045a08d210",
+          "operation": "remove exactly one empty EOF line; no analysis or evidence-line changes"
+        }
+      ],
+      "scope": "One trailing empty line only; semantic output retained"
+    },
+    {
+      "check": "final archived integrity after EOF formatting",
+      "command": "python3 evals/validate_repo.py",
+      "started_at_utc": "2026-10-02T09:38:04.956114+00:00",
+      "ended_at_utc": "2026-10-02T09:38:05.055963+00:00",
+      "exit_code": 0,
+      "stdout": "{\n  \"status\": \"pass\",\n  \"local_links_checked\": 218,\n  \"external_links_not_fetched\": [\n    \"https://doi.org/10.1038/s41588-026-02673-0\",\n    \"https://doi.org/10.1186/s12943-026-02682-x\",\n    \"https://doi.org/10.1186/s12943-026-02777-5\",\n    \"https://github.com/Gaoyuan-0423/biomedical-paper-reader/issues\"\n  ],\n  \"errors\": [],\n  \"scope\": \"link/anchor and recorded-artifact integrity; no semantic scoring or speed claim\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "check": "final staged whitespace check",
+      "command": "git diff --cached --check",
+      "started_at_utc": "2026-10-02T09:38:05.056007+00:00",
+      "ended_at_utc": "2026-10-02T09:38:05.078367+00:00",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "overall_offline_integrity_status": "pass after documented reference and EOF corrections; earlier failures preserved"
+}
