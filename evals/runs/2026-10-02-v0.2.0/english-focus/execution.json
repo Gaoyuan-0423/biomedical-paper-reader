@@ -1,0 +1,7 @@
+{
+  "task": "english-focus",
+  "started_at_utc": "2026-10-02T09:03:29Z",
+  "ended_at_utc": "2026-10-02T09:06:32Z",
+  "clock_source": "clock__curr_time",
+  "timing_note": "Start captured before task request read; end after report write and before metadata write."
+}

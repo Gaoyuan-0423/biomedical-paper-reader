@@ -1,0 +1,129 @@
+{
+  "task": "english-full",
+  "mode": "full_close_reading_of_all_supplied_text",
+  "language": "English",
+  "material_read": [
+    {
+      "file": "request.txt",
+      "sections": [
+        "entire request"
+      ]
+    },
+    {
+      "file": "input/observational.md",
+      "sections": [
+        "source heading and fictional-source notice",
+        "Introduction",
+        "Results — A difference depends on the unit of analysis",
+        "Table 1 — Cohort and measurements",
+        "Methods",
+        "Discussion",
+        "Data availability"
+      ]
+    }
+  ],
+  "skill_files_read": [
+    {
+      "file": "repo:SKILL.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/reading-modes.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/evidence-rules.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/report-template.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/material-handling.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/study-checks.md",
+      "heading_inventory": "all headings scanned with rg",
+      "shared_sections_read_for_assigned_batch": [
+        "多队列、嵌套样本与统计单位",
+        "人群、分层与治疗",
+        "实验与机制",
+        "组学、空间与多模态配对",
+        "算法、预测与评测",
+        "无图、纯观察或其他组织形式"
+      ],
+      "sections_applied_to_this_task": [
+        "多队列、嵌套样本与统计单位",
+        "人群、分层与治疗",
+        "无图、纯观察或其他组织形式"
+      ]
+    }
+  ],
+  "visual_actions": [],
+  "recalculations": [
+    {
+      "inputs": [
+        2.1,
+        1.4
+      ],
+      "formula": "2.1 - 1.4",
+      "result_rounded": 0.7,
+      "action": "Python arithmetic from reported means; floating-point output 0.7000000000000002"
+    },
+    {
+      "inputs": [
+        9,
+        4
+      ],
+      "formula": "9 * 4",
+      "result": 36,
+      "action": "Python arithmetic from reported donors and tissues per donor"
+    },
+    {
+      "inputs": [
+        70,
+        50
+      ],
+      "formula": "70 - 50",
+      "result": 20,
+      "unit": "years",
+      "action": "Python arithmetic from reported age means"
+    }
+  ],
+  "verification_actions": [
+    "Read full available article and Table 1",
+    "Compared table and prose means",
+    "Checked donor-level Welch-test and confidence-interval descriptions",
+    "Compared cell-independent test with nested sampling design",
+    "Distinguished repeated tissues from matched donor pairs",
+    "Checked age imbalance and stated absence of adjustment",
+    "Kept reported P values and CI separate from arithmetic recalculations",
+    "Checked English output and report local input links"
+  ],
+  "not_performed": [
+    "network access",
+    "official publication lookup",
+    "image viewing",
+    "P-value or confidence-interval reproduction",
+    "raw-data reanalysis",
+    "age-adjusted model fitting",
+    "data or code download",
+    "power calculation",
+    "grading",
+    "skill editing",
+    "commit"
+  ],
+  "output": "report.md"
+}

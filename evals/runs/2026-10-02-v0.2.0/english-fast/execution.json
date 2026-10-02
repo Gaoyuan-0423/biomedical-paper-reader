@@ -1,0 +1,7 @@
+{
+  "task": "english-fast",
+  "started_at_utc": "2026-10-02T09:00:11Z",
+  "ended_at_utc": "2026-10-02T09:03:29Z",
+  "clock_source": "clock__curr_time",
+  "timing_note": "Start captured before task request and material reading; end captured after report write, immediately before metadata write."
+}

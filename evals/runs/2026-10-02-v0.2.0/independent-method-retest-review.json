@@ -1,0 +1,269 @@
+{
+  "reviewer": "independent_method_retest_semantic_review",
+  "review_kind": "修订后独立盲测复验；独立新记录，不覆盖首次试读评分",
+  "case": "english-method-focus",
+  "case_directory": "run:english-method-focus",
+  "overall_verdict": "通过",
+  "scope": {
+    "files_read": [
+      "request.txt",
+      "input/prediction-method.md",
+      "report.md",
+      "trace.json",
+      "execution.json"
+    ],
+    "current_skill_files_read": [
+      "repo:SKILL.md",
+      "repo:references/study-checks.md"
+    ],
+    "previously_read_rules_reused": [
+      "references/evidence-rules.md",
+      "references/reading-modes.md"
+    ],
+    "current_relevant_rule": "references/study-checks.md:60 明确区分论文叙述与计算执行顺序，写清特征选择、划分、拟合和测试；保留作者实际问题，改进另标建议。",
+    "not_read_or_modified": [
+      "Other cases were not rerun",
+      "No report or skill files were modified",
+      "Old independent-final-review.json and first-run report were not overwritten",
+      "No commit"
+    ],
+    "approach": "依原文与报告逐项审阅语义和精确位置，不按标题、关键词或篇幅判分。当前输出单独评分，旧失败/部分通过历史保留。"
+  },
+  "checks": [
+    {
+      "criterion": "英语要求与方法专题范围",
+      "verdict": "通过",
+      "reason": "标题、解释、证据边界、建议与资源状态均为英语，准确原题保留中文不影响英文要求。任务聚焦构造、假设与效用，整份短材料均相关，报告明确不是模型实现或独立复现，也未冒称长论文全文精读。",
+      "report_locations": [
+        "report.md:1",
+        "report.md:3-5",
+        "report.md:71-85"
+      ],
+      "original_input_basis": [
+        "request.txt:1",
+        "input/prediction-method.md:1-3",
+        "input/prediction-method.md:7-41"
+      ],
+      "execution_record_locations": [
+        "trace.json:3-26"
+      ],
+      "skill_rule_locations": [
+        "SKILL.md:12-14",
+        "SKILL.md:28"
+      ]
+    },
+    {
+      "criterion": "输入、处理、输出与术语",
+      "verdict": "通过",
+      "reason": "正确解释坐标/表达/监督标签、50um邻域平均、拼接与L2 logistic regression到二分类概率。标签不被当作已拟合模型部署输入；供者ID仅用于分组评估，未凭空写成预测特征。200邻域特征已据每基因均值解释，拼接400维仅作附明确条件的例子，保留自身表达宽度未知。",
+      "report_locations": [
+        "report.md:9-18",
+        "report.md:28-38"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:7",
+        "input/prediction-method.md:22",
+        "input/prediction-method.md:28-29",
+        "input/prediction-method.md:33"
+      ],
+      "execution_record_locations": [
+        "trace.json:68-69",
+        "trace.json:92-93",
+        "trace.json:144-148"
+      ],
+      "skill_rule_locations": [
+        "references/study-checks.md:59"
+      ]
+    },
+    {
+      "criterion": "数学解释与实现未知状态",
+      "verdict": "通过",
+      "reason": "Σx/|N|准确拆解非空邻域的均值，明确为mathematical explanation而非原文公式或实现代码。自包含、空邻域、样本边界、distance/preprocessing和neighbor跨split均未知；L2抑制系数而不保证无泄漏/跨供者转移的解释正确。未编造损失、调参强度或性能。",
+      "report_locations": [
+        "report.md:11-13",
+        "report.md:18",
+        "report.md:28-38",
+        "report.md:44-48"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:22",
+        "input/prediction-method.md:28-29",
+        "input/prediction-method.md:33"
+      ],
+      "execution_record_locations": [
+        "trace.json:92-93",
+        "trace.json:144-148"
+      ],
+      "skill_rule_locations": [
+        "references/study-checks.md:59",
+        "references/study-checks.md:64"
+      ]
+    },
+    {
+      "criterion": "叙述顺序与计算执行順序",
+      "verdict": "通过",
+      "reason": "明确原文Results先Table2性能、后Table1构造，不误写原文论证顺序。报告编号先全数据选基因、再数据划分、后拟合和内部比较，解决首次先拟合后划分的歧义。邻域构造的真实时点明确未知；训练集拟合被说明为clean evaluation规范，而非本研究已独立核实的实现。",
+      "report_locations": [
+        "report.md:20-26",
+        "report.md:28-40"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:9-22",
+        "input/prediction-method.md:31-33"
+      ],
+      "execution_record_locations": [
+        "trace.json:72-73",
+        "trace.json:76-77"
+      ],
+      "skill_rule_locations": [
+        "SKILL.md:32",
+        "references/study-checks.md:60"
+      ]
+    },
+    {
+      "criterion": "保留原流程泄漏与独立新建议",
+      "verdict": "通过",
+      "reason": "原作者全数据标签参与筛200基因在split前的事实被明确保留，没有偷换成先划分再选特征。报告认定确认的feature-selection leakage，未量化偏差、未给修正AUROC；其他跨split空间共享仅为需核查风险。按供者先分割且只在训练进行选择的清洁流程放在proposed validations，未冒称原作者实际采用。",
+      "report_locations": [
+        "report.md:24",
+        "report.md:34",
+        "report.md:38",
+        "report.md:48",
+        "report.md:54",
+        "report.md:65",
+        "report.md:71-77"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:33",
+        "input/prediction-method.md:37"
+      ],
+      "execution_record_locations": [
+        "trace.json:84-85",
+        "trace.json:145-149",
+        "trace.json:155"
+      ],
+      "skill_rule_locations": [
+        "references/study-checks.md:60-63"
+      ]
+    },
+    {
+      "criterion": "数字、比较、独立单位与简单复算",
+      "verdict": "通过",
+      "reason": "12供者/60000细胞、每集合全部供者、42000/9000/9000及70/15/15正确；测试9000细胞未作为9000独立供者验证。AUROC .95与.93差.02是绝对差，未误写相对百分比。200基因、50um也符合来源。trace记录仅sum/fractions/AUROC difference算术，无指标模型重算。",
+      "report_locations": [
+        "report.md:11-15",
+        "report.md:24-26",
+        "report.md:52-54",
+        "report.md:62-65",
+        "report.md:85"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:11",
+        "input/prediction-method.md:17-18",
+        "input/prediction-method.md:22",
+        "input/prediction-method.md:33"
+      ],
+      "execution_record_locations": [
+        "trace.json:104-142"
+      ],
+      "skill_rule_locations": [
+        "references/study-checks.md:61-62"
+      ]
+    },
+    {
+      "criterion": "统计、泛化和科学判断边界",
+      "verdict": "通过",
+      "reason": "AUROC正确限为binary-class ranking，不等同阈值accuracy、校准或临床获益。一次内部split、无CI/外部测试、未明确tuning可比，不证明稳定增益。新供者claim未被split证明，但也没有反过来宣称新供者必失败。邻域均值的组成/批次解释标为操作含义和未分解假说，未升级成分子因果。",
+      "report_locations": [
+        "report.md:44-54",
+        "report.md:64-67",
+        "report.md:71-79"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:7",
+        "input/prediction-method.md:11",
+        "input/prediction-method.md:33",
+        "input/prediction-method.md:37"
+      ],
+      "execution_record_locations": [
+        "trace.json:80-89"
+      ],
+      "skill_rule_locations": [
+        "references/study-checks.md:62-64"
+      ]
+    },
+    {
+      "criterion": "核心证据记录与引用准确性",
+      "verdict": "通过",
+      "reason": "M1定义完整虚构来源，不编造版本/DOI/页码。六项核心证据覆盖构造、split、性能、泄漏、泛化和归因，各有实际小标题/表、样本单位、真实动作和边界。Methods锚点与原input Methods heading一致；链接目标为指定本地原文。未用标题齐全替代语义评分。",
+      "report_locations": [
+        "report.md:3-5",
+        "report.md:18-40",
+        "report.md:58-67",
+        "report.md:83-85"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:1-3",
+        "input/prediction-method.md:9-41"
+      ],
+      "execution_record_locations": [
+        "trace.json:100-101"
+      ],
+      "skill_rule_locations": [
+        "SKILL.md:30",
+        "SKILL.md:48"
+      ]
+    },
+    {
+      "criterion": "阅读动作和资源/复现状态",
+      "verdict": "通过",
+      "reason": "report已读范围与trace entire text及two tables一致，输入无图像/数据/代码，故不声称视觉检查、数据读取或源码执行。trace仅记录Python summary arithmetic；报告未将其写成raw reanalysis。运行时间、硬件、复杂度和软件版本未知，没有从lite名称推测成本。execution332秒与起止09:20:33/09:26:05一致，计时不用于推导准确率。",
+      "report_locations": [
+        "report.md:5",
+        "report.md:62-67",
+        "report.md:83-85"
+      ],
+      "original_input_basis": [
+        "input/prediction-method.md:3",
+        "input/prediction-method.md:33",
+        "input/prediction-method.md:41"
+      ],
+      "execution_record_locations": [
+        "trace.json:7-27",
+        "trace.json:62-103",
+        "trace.json:104-159",
+        "execution.json:2-17"
+      ],
+      "skill_rule_locations": [
+        "SKILL.md:40",
+        "references/study-checks.md:64"
+      ]
+    }
+  ],
+  "issues": [],
+  "first_run_issue_followup": {
+    "issue_id": "METHOD_STEP_ORDER_AMBIGUITY",
+    "first_run_status": "首次方法专题部分通过的顺序歧义记录保留于 run:independent-final-review.json",
+    "current_status": "本次复验已解决",
+    "evidence": "新report.md:26为划分；report.md:38为拟合；report.md:40为内部比较。report.md:22区分Table2→Table1的呈现顺序和计算顺序；report.md:24仍如实保留全数据标签先筛选，report.md:54/65解释其泄漏。",
+    "history_rule": "本次通过不倒改首次部分通过，也不声称首次已正确。"
+  },
+  "known_and_unknown_computational_order": {
+    "source_explicit": "input/prediction-method.md:33 全部60000细胞标签参与200基因选择，然后按细胞划分42000/9000/9000，每集合均含全部12供者。",
+    "source_unspecified": "邻域构造相对划分时点、跨集合邻居、准确参数拟合/调参实现和validation使用细节未报告。",
+    "report_treatment": "report.md:24/26保持已知时序；:34明确邻域构造时点和共享未知；:38以clean evaluation的规范解释训练集参数拟合，说明本研究具体实现不能独立核查；:75把无泄漏流程明确作为新建议。",
+    "assessment": "未把未知时点当作已确认流程，未将作者全标签筛选默改为训练集选择。编号构造段位于划分之后的排版没有被用来声称原作者邻域实际必在划分后构造，因为同段:34明确否定这种确定性。"
+  },
+  "limitations": [
+    "这是完整但很短的原创虚构方法材料，只有文字与两张文本表。通过仅证明本例的阅读和解释行为，不能代表所有真实方法论文、PDF或长文的准确性。",
+    "trace/execution是提供的动作记录，能够核对范围和动作声明一致性；没有原读者完整逐次工具调用历史，不能将这些记录单独当成全部执行过程的独立证明。",
+    "未执行或复现模型、AUROC、置信区间、原始数据分析或资源基准。对reported results的审阅及简单算术不构成模型复现。"
+  ],
+  "severity_summary": {
+    "critical_errors": 0,
+    "major_errors": 0,
+    "current_step_order_ambiguity": 0,
+    "unsupported_execution_or_reproduction_claims": 0
+  },
+  "summary": "本次独立复验通过：英语与方法解释准确，原文叙述与计算流程分开，分割先于拟合/评估，已确认全标签选择泄漏如实保留，改进另标本次建议。邻域构造时点与拟合实现未知状态不被补造；证据及动作边界完整。首次部分通过记录保留。"
+}

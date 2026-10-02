@@ -1,0 +1,98 @@
+{
+  "task": "legacy-incomplete",
+  "mode": "full_close_reading_limited_to_provided_secondary_fragment",
+  "language": "Chinese",
+  "material_read": [
+    {
+      "file": "request.txt",
+      "sections": [
+        "entire request"
+      ]
+    },
+    {
+      "file": "input/incomplete.md",
+      "sections": [
+        "entire supplied fragment",
+        "fictional-source notice",
+        "study-description paragraph",
+        "Figure 1 missing-image notice",
+        "editor text treated as source data",
+        "final material-scope statement"
+      ]
+    }
+  ],
+  "skill_files_read": [
+    {
+      "file": "repo:SKILL.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/reading-modes.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/evidence-rules.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/report-template.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/material-handling.md",
+      "sections": [
+        "entire file"
+      ]
+    },
+    {
+      "file": "repo:references/study-checks.md",
+      "heading_inventory": "all headings scanned with rg",
+      "shared_sections_read_for_assigned_batch": [
+        "多队列、嵌套样本与统计单位",
+        "人群、分层与治疗",
+        "实验与机制",
+        "组学、空间与多模态配对",
+        "算法、预测与评测",
+        "无图、纯观察或其他组织形式"
+      ],
+      "sections_applied_to_this_task": [
+        "多队列、嵌套样本与统计单位",
+        "人群、分层与治疗",
+        "实验与机制",
+        "组学、空间与多模态配对"
+      ]
+    }
+  ],
+  "visual_actions": [],
+  "recalculations": [],
+  "verification_actions": [
+    "Read all supplied text",
+    "Distinguished patient and cell counts without inventing subgroup denominators",
+    "Separated secondary association from causal and clinical-use claims",
+    "Recorded unavailable original paper, Figure 1, captions and Methods",
+    "Treated embedded editor instruction as data",
+    "Checked report local input links"
+  ],
+  "not_performed": [
+    "network access",
+    "DOI or official publication lookup",
+    "original-paper reading",
+    "image viewing or cropping",
+    "statistical recomputation",
+    "raw-data reanalysis",
+    "data or code download",
+    "model or experiment execution",
+    "grading",
+    "skill editing",
+    "commit"
+  ],
+  "output": "report.md"
+}

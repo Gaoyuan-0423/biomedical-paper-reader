@@ -1,0 +1,167 @@
+{
+  "task": "Explain NeighbourScore-lite construction in English",
+  "mode": "focused_method_analysis",
+  "language": "English",
+  "source_id": "M1",
+  "source_type": "complete fictional method text",
+  "input_files_read": [
+    {
+      "path": "request.txt",
+      "coverage": "entire request"
+    },
+    {
+      "path": "input/prediction-method.md",
+      "coverage": "entire supplied short text",
+      "sections": [
+        "Source identity statement",
+        "Introduction",
+        "Results — Internal discrimination",
+        "Table 2 — Internal evaluation",
+        "Results — Construction of the score",
+        "Table 1 — Model components",
+        "Methods",
+        "Discussion",
+        "Data and code"
+      ],
+      "reason": "All sections directly define the requested method or qualify its reported usefulness"
+    }
+  ],
+  "skill_files_read": [
+    {
+      "path": "repo:SKILL.md",
+      "coverage": "entire"
+    },
+    {
+      "path": "repo:references/reading-modes.md",
+      "coverage": "entire"
+    },
+    {
+      "path": "repo:references/evidence-rules.md",
+      "coverage": "entire"
+    },
+    {
+      "path": "repo:references/report-template.md",
+      "coverage": "entire"
+    },
+    {
+      "path": "repo:references/material-handling.md",
+      "coverage": "entire"
+    },
+    {
+      "path": "repo:references/study-checks.md",
+      "coverage": "heading search, then lines 1-23, 42-49, 57-72",
+      "sections": [
+        "Multi-cohort, nested samples, and statistical units",
+        "Key public data and validation roles",
+        "Omics, spatial, and multimodal pairing",
+        "Algorithms, prediction, and evaluation",
+        "Studies without figures"
+      ]
+    }
+  ],
+  "actual_checks": [
+    {
+      "action": "Read source directly as Markdown, then used line-numbered source for position cross-checking",
+      "finding": "All supplied sections and Tables 1 and 2 were available; no images or DOI"
+    },
+    {
+      "action": "Cross-checked Table 1 against construction text and Methods",
+      "finding": "50 μm fixed-radius means, 200 selected genes, concatenation with own expression, L2 logistic regression, binary probability"
+    },
+    {
+      "action": "Compared presentation order with computational order",
+      "finding": "Results presents Table 2 before Table 1; Methods explicitly selects genes on all cells before splitting. Neighborhood construction timing relative to split is unspecified"
+    },
+    {
+      "action": "Inspected split counts and donor membership",
+      "finding": "42,000 training, 9,000 validation, 9,000 test cells; all 12 donors in each; no donor-held-out evaluation"
+    },
+    {
+      "action": "Compared AUROC claims with baseline and evaluation details",
+      "finding": "0.95 versus 0.93 on one shared split; confidence intervals, external test, and tuning budgets absent from the supplied complete text"
+    },
+    {
+      "action": "Inspected label-based gene selection order",
+      "finding": "All labels used for gene selection before splitting, creating feature-selection leakage. No bias magnitude computed"
+    },
+    {
+      "action": "Compared new-donor claim to Methods and Discussion",
+      "finding": "Claim exceeds what the reported within-donor split tests; failure on new donors not asserted"
+    },
+    {
+      "action": "Checked method ambiguities and stated resource omissions",
+      "finding": "Exact own-expression feature dimension, neighborhood self-inclusion, empty neighborhoods, preprocessing, and calibration unclear; versions, runtime, hardware, complexity, downloadable data and code unreported"
+    },
+    {
+      "action": "Checked no-image status",
+      "finding": "Visual checks not applicable; text tables read without describing visual panels"
+    },
+    {
+      "action": "Checked source links before delivery",
+      "finding": "Every local source link resolves to assigned input/prediction-method.md"
+    }
+  ],
+  "arithmetic": [
+    {
+      "action": "Python arithmetic on reported summaries",
+      "inputs": [
+        0.95,
+        0.93
+      ],
+      "formula": "0.95 - 0.93",
+      "raw_float_result": 0.019999999999999907,
+      "reported_result": 0.02,
+      "interpretation": "absolute AUROC difference"
+    },
+    {
+      "action": "Python arithmetic on reported summaries",
+      "inputs": [
+        42000,
+        9000,
+        9000
+      ],
+      "formula": "42000 + 9000 + 9000",
+      "result": 60000,
+      "interpretation": "split count total"
+    },
+    {
+      "action": "Python arithmetic on reported summaries",
+      "inputs": [
+        42000,
+        9000,
+        9000,
+        60000
+      ],
+      "formula": "each split count / 60000",
+      "result": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "interpretation": "training/validation/test fractions"
+    }
+  ],
+  "explanatory_additions": [
+    "Mean-expression equation is a mathematical unpacking of the supplied description, not recovered implementation code",
+    "400 concatenated features is explicitly conditional on the own-expression block using the same 200 genes",
+    "Logistic regression interpretation and L2 penalty purpose are explanations, not performance findings",
+    "Neighborhood composition and possible cross-partition information sharing are interpretation risks; their occurrence is not asserted",
+    "Donor-grouped evaluation, ablations, shuffled-neighborhood control, and radius checks are proposed validations, not executed actions"
+  ],
+  "not_performed": [
+    "No network browsing or downloads",
+    "No repository evals/cases, RESULTS, gold, examples, or other trial outputs read",
+    "No skill edits or scoring",
+    "No model fitting, raw-data reanalysis, AUROC reproduction, confidence-interval estimation, or significance testing",
+    "No image rendering, visual panel checks, or fabricated figure",
+    "No external source, supplementary file, data, or code retrieval",
+    "No official correction or retraction check: source explicitly fictional and has no publication record",
+    "No commit, push, publication, or message to an external party"
+  ],
+  "outputs": [
+    "report.md",
+    "trace.json",
+    "execution.json"
+  ],
+  "reporting_limits": "Conclusions concern only the supplied fictional method description; reported AUROCs remain author-reported. Arithmetic and text cross-checks do not establish model reproduction."
+}

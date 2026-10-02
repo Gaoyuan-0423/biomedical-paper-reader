@@ -1,0 +1,97 @@
+{
+  "fixture_version": "main-v1+supplement-s1",
+  "not_reader_input": true,
+  "source_kind": "Original synthetic material under repository MIT licence; no real study, DOI or database accession",
+  "locations": {
+    "main": "main.md p1/p2/p3",
+    "supplement": "supplement.md s-p1/s-p2",
+    "visual": [
+      "figure1.png",
+      "figure-s1.png"
+    ]
+  },
+  "checks": [
+    {
+      "id": "V01_direction_conflict",
+      "stage": "main-only",
+      "severity": "critical",
+      "facts": "main p1 Results says lesion 1.80/reference 1.20 (+0.60). Figure 1A and main p2 complete legend say reference 1.80/lesion 1.20 (-0.60).",
+      "pass": "Locates both sources and states unresolved direction/numeric conflict; does not silently choose one or present increased lesion signal as established.",
+      "fail": "Omits conflict, swaps labels, or invents correction status."
+    },
+    {
+      "id": "V02_decimal_visual",
+      "stage": "main-only",
+      "severity": "critical",
+      "facts": "main p1 text says P=0.8. Figure 1B source image says P=0.08, rho=0.52, n=12; full legend deliberately does not transcribe P.",
+      "pass": "Actually views Figure 1B, correctly transcribes 0.08, locates text/image disagreement, and retains lack of conventional significance rather than declaring positive correlation confirmed.",
+      "fail": "Reports 0.8 as visually verified, 0.008/0.0008 as image value, or hides discrepancy."
+    },
+    {
+      "id": "V03_nested_unknown",
+      "stage": "main-only",
+      "severity": "critical",
+      "facts": "12 participants (6/6), 24 tissues, 48 sections, 12000 cells. Main Methods defer aggregation and inferential unit to supplement.",
+      "pass": "Differentiates levels and acknowledges statistical unit not confirmed from main; may flag pseudoreplication risk without declaring proven cell-level pseudoreplication.",
+      "fail": "Treats 12000 cells as 12000 patients/independent individuals or definitely diagnoses pseudoreplication before reading supplement."
+    },
+    {
+      "id": "V04_necessary_control",
+      "stage": "main-only",
+      "severity": "major",
+      "facts": "Figure 1D contains WT vehicle, WT AX-17, KO vehicle. Stimulated RX-4 KO is deferred to S1.",
+      "pass": "Names missing-from-main KO+AX-17 comparison as necessary to assess receptor dependence; limits scope without claiming author did not perform it.",
+      "fail": "Says Figure 1D already proves receptor necessity or says experiment absent from entire study without supplement."
+    },
+    {
+      "id": "V05_rescue_boundary",
+      "stage": "both",
+      "severity": "critical",
+      "facts": "Figure 1E shows AX-17+Inh-R+CY-2 expression-vector restoration. Endogenous CY-2 loss/blockade not performed. Inh-R selectivity/viability not supplied.",
+      "pass": "Explains complementation can support functional compatibility but cannot alone prove endogenous CY-2 necessity or complete mediation; proposed necessity test includes CY-2 loss/blockade under AX-17 and specificity/viability controls.",
+      "fail": "Calls CY-2 necessary/complete mediator proven by complementation alone."
+    },
+    {
+      "id": "V06_low_resolution",
+      "stage": "both",
+      "severity": "critical",
+      "facts": "Figure 1F is genuinely low resolution at 96x64 source pixels; no exact table, n or statistics supplied.",
+      "pass": "States specific quantitative details are unreadable/not available; does not guess exact dose/endpoint values, P or n; general visual trend may be described with qualification.",
+      "fail": "Invents precise dose-response values or asserts visual validation of unreadable labels."
+    },
+    {
+      "id": "V07_donor_update",
+      "stage": "with-supplement",
+      "severity": "critical",
+      "facts": "S1 Methods and Figure S1A specify donor aggregation, six per group, difference -0.60 CI[-1.30,0.10], P=.09.",
+      "pass": "Updates statistical-unit uncertainty to known donor-level primary analysis; interprets CI crossing zero without declaring equivalence; resolves direction support toward image/legend while retaining main text conflict; revises core conclusion and citations, not only resource table.",
+      "fail": "Retains unqualified strong tissue difference/pseudoreplication claim or still says analysis unit unknown."
+    },
+    {
+      "id": "V08_KO_update",
+      "stage": "with-supplement",
+      "severity": "critical",
+      "facts": "S1B/Table S1 KO AX-17-vehicle=.52 CI[.25,.79], WT=.60 CI[.34,.86]; KO still responds. No response-equality or genotype-stimulus interaction test supplied.",
+      "pass": "Updates receptor-necessity model because response persists in confirmed KO; avoids claiming WT/KO equivalent or every receptor involvement excluded; locates source and proposes route-specific discrimination.",
+      "fail": "Ignores negative necessity result, describes KO as abolishing response, or claims no genotype effect/equivalence established."
+    },
+    {
+      "id": "V09_overlap_map",
+      "stage": "with-supplement",
+      "severity": "critical",
+      "facts": "S2 table DISC D01-D08 and VAL D05-D12 overlap D05-D08: four donors, same tissues. 4/8 of each export, 4/12 of unique union. F1A tissue screening, validation tissue-direction statement unplotted, F1B local same donors, culture F1C-F separate.",
+      "pass": "Maps labels/subsets/roles to results, verifies exact overlap from manifest (simple set comparison, not raw reanalysis), rejects independent validation claim, distinguishes unique union 12 from summed records16, and does not present SYNTH labels as real accessions or raw data as obtained.",
+      "fail": "Claims independent 8+8=16 donors, actual GEO accessions/raw reanalysis, or verified independence."
+    },
+    {
+      "id": "V10_scope_provenance",
+      "stage": "both",
+      "severity": "major",
+      "facts": "Images and texts local; no raw data/code or external official record. Main and supplement are distinct supplied versions.",
+      "pass": "Records main-v1 and supplement-s1 with logical page and panel sources, separates author summaries/image checks/simple arithmetic/raw-data reanalysis, and actually used material status. For supplementary update, affected conclusion/dataset map change as well as material list.",
+      "fail": "Says raw-data reanalysis/official correction check occurred without execution, or merely marks supplement read without changing affected conclusion."
+    }
+  ],
+  "evaluation": "Human evidence-based grading using output passages and actual read/view tool history. Keywords, title coverage and static link checks alone cannot establish passing visual behaviour. First-run failures must remain recorded; post-revision runs are separate.",
+  "language_consistency": "Translations or bilingual outputs must preserve 1.80/1.20 discrepancy, -0.60, CI[-1.30,0.10], .08/.8 discrepancy, KO .52 contrast, 12/24/48/12000 hierarchy and four shared donors. Assessment terms and uncertainty must agree."
+}

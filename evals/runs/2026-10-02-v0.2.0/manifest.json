@@ -1,0 +1,455 @@
+{
+  "version": "v0.2.0",
+  "date": "2026-10-02",
+  "base_commit": "9b5e89725e562777a4eca20d8409adc0fdcf9aaf",
+  "branch": "codex/evidence-modes-v0.2.0",
+  "instruction_sha256": {
+    "SKILL.md": "39b40c9cb84ada706cbbc30297b9ffb1ffdb674577de849883cde4b2589df060",
+    "agents/openai.yaml": "4e01d29e677af07a61abda6c3fc7a40f970cfe1f0c362284b2609b5675341857",
+    "references/evidence-rules.md": "5f4428250a49b299683c1352e2a57d833b21b18f42175f280097300f7a9c29c3",
+    "references/material-handling.md": "c30c32eb1bfde8123c4b3f31a4a23a575ebd309bcd351afb6df4a47a8a0fea42",
+    "references/reading-modes.md": "bffb31ae672f0058b71e0751899b6585616475600f4a32f712f29e5626f9ae78",
+    "references/report-template.md": "0f985e231095b1c062928020c73e8205d314333340963520982179b1a66bc559",
+    "references/study-checks.md": "95fe2fe233ce1f9db0fac6bf4d6ae288d7820fd8695bf6ad175c74ab06a0b296"
+  },
+  "cases": [
+    {
+      "id": "legacy-incomplete",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/grading.json",
+      "instruction_profile": "initial",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/execution.json",
+          "sha256": "2be601c09b340e6b04092e7288674c5ade8efd56f0ea9a188807d72c5f32dc7f"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/grading.json",
+          "sha256": "c8302343d6caed2161a5f02482e2982f8a3ed8c8f64f75984f9da088712e74b0"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/input/incomplete.md",
+          "sha256": "b2f42f467751bbab9e3eadf617c9104115b1e71f10cafd69d525456dffcda104"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/report.md",
+          "sha256": "5d1edc9eaa0916447cdd6fd4b4f6773f9b2b2f1dacf01804696a7272402972a9"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/request.txt",
+          "sha256": "c3c44d31a67c107e3e6794c72b08c7d9b7960eaf985cfc0c8e9505bfd37bf765"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/trace.json",
+          "sha256": "93aeb494caefd164c8150f6b153f7675e4f0b7a6b65a3a112059984bb50e48ea"
+        }
+      ]
+    },
+    {
+      "id": "english-full",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/english-full/grading.json",
+      "instruction_profile": "initial",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-full/execution.json",
+          "sha256": "2be601c09b340e6b04092e7288674c5ade8efd56f0ea9a188807d72c5f32dc7f"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-full/grading.json",
+          "sha256": "b1fad712d477d10fda3d654aaac99d2e94f61ad224da60aa16871b57252b3a26"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-full/input/observational.md",
+          "sha256": "1e56552a46519563481b8528b1a26a52e0d455e4c5109643c82d7ad5fed89611"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-full/report.md",
+          "sha256": "958abf48596b5ee132dd520cf54c858f8a1d3de754667839e1be7193aab14227"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-full/request.txt",
+          "sha256": "6ff22c0e16233d70e9a8f1e4b248a1e7d0a0fe12b23cc7c0e85066770c17cfdc"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-full/trace.json",
+          "sha256": "b28326cd0a3474516a89468316268f439c8e0425bc07397d232e5e3bbc757f1d"
+        }
+      ]
+    },
+    {
+      "id": "legacy-method",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/legacy-method/grading.json",
+      "instruction_profile": "initial",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-method/execution.json",
+          "sha256": "2be601c09b340e6b04092e7288674c5ade8efd56f0ea9a188807d72c5f32dc7f"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-method/grading.json",
+          "sha256": "539103b7c7038d3cfba0d9a53ea79680452d166c3056baa22dff8c5528cb2aad"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-method/input/prediction-method.md",
+          "sha256": "48e4bb9e1ed3607f737969155e980d50cb2c772f104227ca7ee0635b5b90cd3d"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-method/report.md",
+          "sha256": "5e3a73c18add6a3b8e6ce6ecd30ae5b808b36465916e0d493bedda045a08d210"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-method/request.txt",
+          "sha256": "ce0b2b7ae95968c21ae7433dd036426c99c6edd77cd0130bdc1968866a0164e0"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/legacy-method/trace.json",
+          "sha256": "ef8021b5a6f4d4607753536193e398fbd97c1665efb1e45f76cab9d36faa7a7d"
+        }
+      ]
+    },
+    {
+      "id": "visual-update",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/visual-update/grading.json",
+      "instruction_profile": {
+        "main": "initial",
+        "update": "mode-review"
+      },
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/execution-main.json",
+          "sha256": "77b8707bb77180e613578df94a8765de82b5639b8dd8271826b4a43bfba8959e"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/execution-update.json",
+          "sha256": "a5a949ff2b7c3c2700f0638e4f45bcc78b6ed039eb56400985168dfcebc855c6"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/grading-main.json",
+          "sha256": "43cb7023f867df57f5e35baf1385d5ef0189d89f05815673dce58473423d2348"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/grading-update.json",
+          "sha256": "cc7c1787b12548a8b26dbf2c6bc23f762ad48997dce173244c5882279d9b4a2e"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/grading.json",
+          "sha256": "6336326e636e12b1dcf7ab9420b83493b7e910bbba2b0eec91ae1bfe49174f25"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/input/figure-s1.png",
+          "sha256": "e2b8cbb9f7c0103d3ae2ef045e753cb52b59bc17d444e203111c0181c3166b4c"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/input/figure1.png",
+          "sha256": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/input/main.md",
+          "sha256": "a694edf0498d5693bd7ea4f723bebbb57e4a2c487c23a70094bd293a2a2fe5e0"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/input/supplement.md",
+          "sha256": "af66a35e2d9f49af5db898e4bef8b98c1be682af68e7063ad5f2605c99d45d01"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/report-before.md",
+          "sha256": "80c3c04f88a3a4969ad2cdd02255842a56f2c6616b563bb422fd8e62f39d47d3"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/report.md",
+          "sha256": "d9350a17b8573bc028a8c33fa7004e9b9f4409991ab3f93f70ae91b7ce9ca2a4"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/request-update.txt",
+          "sha256": "25590057a53bc6bfc59d46251c1cb5097697484b6e5793c452aeac62729181ee"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/request.txt",
+          "sha256": "484b37150512ed06880ed379a3e008e98daacd3ac0eadf385b2c52c4099a967f"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/trace-main.json",
+          "sha256": "0d3350d60e2dd9e55019db4b4d2371339efa2bc0724c209e0d1563aa70ff621a"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/visual-update/trace-update.json",
+          "sha256": "596eb716134cdc0c5d4da6de6a790ffad901a79774c624cce77cb5c7a825c838"
+        }
+      ],
+      "phases": [
+        "main-only report-before.md",
+        "local supplement added; report.md updated"
+      ]
+    },
+    {
+      "id": "english-fast",
+      "status": "partial",
+      "grading": "evals/runs/2026-10-02-v0.2.0/english-fast/grading.json",
+      "instruction_profile": "mode-review",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/execution.json",
+          "sha256": "7e63555c4604410bc94451fac7bdfbb6365f24010789299da6c73b9456643eb2"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/grading.json",
+          "sha256": "3720c2c657f015f3c18fd99cc721e67a5eeeca930b7d3cb3e452ccb2c45d120b"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/input/figure1.png",
+          "sha256": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/input/main.md",
+          "sha256": "a694edf0498d5693bd7ea4f723bebbb57e4a2c487c23a70094bd293a2a2fe5e0"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/report.md",
+          "sha256": "f5489fd0e7af649905d7eec54bcdbd3decd48d625422eb830c93dd130e0e546c"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/request.txt",
+          "sha256": "33d16f254f3082d178a7876523e595dce96c95e32ca83ed138bccb8e3ad68487"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast/trace.json",
+          "sha256": "5dc101f4fa06ade02c24086af8c3aa8a79c28c1f6b615967166240a9b47972bd"
+        }
+      ]
+    },
+    {
+      "id": "english-focus",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/english-focus/grading.json",
+      "instruction_profile": "mode-review",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/execution.json",
+          "sha256": "b1bc91e3c2b8445649f16c96cd103b95ecf45bcb97a73d1649ab09b12a0c3f26"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/grading.json",
+          "sha256": "e972442581994ae73da3af2513cb871191786044accdecfe14702ad716e53767"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/input/figure1.png",
+          "sha256": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/input/main.md",
+          "sha256": "a694edf0498d5693bd7ea4f723bebbb57e4a2c487c23a70094bd293a2a2fe5e0"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/report.md",
+          "sha256": "51f034e4d0d75d2cbaccaed852bd2ecc718460621a6b5f0ddc7b9b731ba1d6dd"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/request.txt",
+          "sha256": "48e78923dd13004e20f59c2a9dd5499bd6f1f05338faab6484d212b0df79e376"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-focus/trace.json",
+          "sha256": "8195f4953e4767746033b923fbba38bed2bbeaabc94e5b34d37e60cc95c3d6a5"
+        }
+      ]
+    },
+    {
+      "id": "bilingual-focus",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/grading.json",
+      "instruction_profile": "mode-review",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/execution.json",
+          "sha256": "dfcffac184349df65982b64ffc880f90c70760f32100f7670ce49742e2fa0461"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/grading.json",
+          "sha256": "4bc5eb39d4254c8c7844479151cc36fed8f15188c36f85a27f8f6760cc3e11db"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/input/figure1.png",
+          "sha256": "0ea84fc04d4e74a4ea711eb93be76b7bff2c7baed6d385b4c96145b8e3623948"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/input/main.md",
+          "sha256": "a694edf0498d5693bd7ea4f723bebbb57e4a2c487c23a70094bd293a2a2fe5e0"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/report.md",
+          "sha256": "7924f01c7c91c552a2a2ce5b7fc8b94f4d83ccc3abbf9541c5dce542d84c0ad5"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/request.txt",
+          "sha256": "483feedb5cc05fc4567c3cabefa2225ca62fa0b69ad4891f17eea3072a65dbc9"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/bilingual-focus/trace.json",
+          "sha256": "ad351c034115ccf7c1ebd19a0a79b666d99607d0e75e12b4d777c81aed48d554"
+        }
+      ]
+    },
+    {
+      "id": "english-method-focus",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/english-method-focus/grading.json",
+      "instruction_profile": "release",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/execution-first.json",
+          "sha256": "d4c0e36d14afb82c7c39bdb091ba05eaeac55f46043a5b509128ddd7b7d2f034"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/execution.json",
+          "sha256": "35232b109a53de8923585c07bec93756e9736e3a6a65dc66c8d279378be268e4"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/grading-first.json",
+          "sha256": "f0110f25920be2d35c4b86661c28a71ae841e9080f924473d04cc3799e677ac6"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/grading.json",
+          "sha256": "5186f156e159720fff91447b825a48750575af56a7df45d991c484745ae10cb8"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/input/prediction-method.md",
+          "sha256": "48e4bb9e1ed3607f737969155e980d50cb2c772f104227ca7ee0635b5b90cd3d"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/report-first.md",
+          "sha256": "e6771b7f69a8652c9598051f9b8e649c48a375c1a625d117ac9cf521077ae4a6"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/report.md",
+          "sha256": "886c87962d8918970fe0848f4de15cb67ccd0620f2ada70dd33710b34bef2e75"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/request.txt",
+          "sha256": "520b9c0329a7a4918c3f6c960ee9ed8ac062b94f2f90876686479e11001b1a26"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/trace-first.json",
+          "sha256": "18cc007f65170521d9275ccb79c0eae978f037f905e21a2411d36e35dad75fca"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-method-focus/trace.json",
+          "sha256": "107d9103cac75612d169b99608bf510a61664f2826282bd06518b7344e13a2cb"
+        }
+      ],
+      "attempts": [
+        {
+          "attempt": "first",
+          "instruction_profile": "mode-review",
+          "status": "partial",
+          "grading": "evals/runs/2026-10-02-v0.2.0/english-method-focus/grading-first.json"
+        },
+        {
+          "attempt": "retest",
+          "instruction_profile": "release",
+          "status": "pass",
+          "grading": "evals/runs/2026-10-02-v0.2.0/english-method-focus/grading.json"
+        }
+      ]
+    },
+    {
+      "id": "english-fast-selective",
+      "status": "pass",
+      "grading": "evals/runs/2026-10-02-v0.2.0/english-fast-selective/grading.json",
+      "instruction_profile": "mode-review",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast-selective/execution.json",
+          "sha256": "928cb8a995dce656b6a0c79716776a1140671e6401f78a2b2d3a0fa8955dfe58"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast-selective/grading.json",
+          "sha256": "df44b1f0e73c21d6b4f86fc829eb9bb909ea43b118dff0276e944d46688afa03"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast-selective/input/quick-screening.md",
+          "sha256": "df955752aea2a51bc3883a23718901f27cb5221e9c0896880b14fa2c8617011b"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast-selective/report.md",
+          "sha256": "a18d85fd876d4bfddf8590fc5c928beea7f2e3db395cd50fa29f95d2b92ec30a"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast-selective/request.txt",
+          "sha256": "791af1300ec122f3fa475a3018414a7789c9d6c417b26df23087563d04e4fa2e"
+        },
+        {
+          "path": "evals/runs/2026-10-02-v0.2.0/english-fast-selective/trace.json",
+          "sha256": "e31256d4f482ddc10a257505311cb7fe42dfba3c44c7591c9c9adeaeb4ba944e"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "No real-paper reanalysis or speed benchmark",
+    "No Wisp/DeepSeekHarness runtime or plan UI validation",
+    "No cross-platform bitmap comparison"
+  ],
+  "tested_instruction_profiles": {
+    "initial": {
+      "SKILL.md": "39b40c9cb84ada706cbbc30297b9ffb1ffdb674577de849883cde4b2589df060",
+      "agents/openai.yaml": "4e01d29e677af07a61abda6c3fc7a40f970cfe1f0c362284b2609b5675341857",
+      "references/evidence-rules.md": "5f4428250a49b299683c1352e2a57d833b21b18f42175f280097300f7a9c29c3",
+      "references/material-handling.md": "bb550c50660a0ac898111385c42e900d24bcd979e1fd3ae7da86df42f5533cf9",
+      "references/reading-modes.md": "bffb31ae672f0058b71e0751899b6585616475600f4a32f712f29e5626f9ae78",
+      "references/report-template.md": "0f985e231095b1c062928020c73e8205d314333340963520982179b1a66bc559",
+      "references/study-checks.md": "f5b77eb7671f7114e513d50145a49310967762a465c382c3aeee20d083e1071b"
+    },
+    "mode-review": {
+      "SKILL.md": "39b40c9cb84ada706cbbc30297b9ffb1ffdb674577de849883cde4b2589df060",
+      "agents/openai.yaml": "4e01d29e677af07a61abda6c3fc7a40f970cfe1f0c362284b2609b5675341857",
+      "references/evidence-rules.md": "5f4428250a49b299683c1352e2a57d833b21b18f42175f280097300f7a9c29c3",
+      "references/material-handling.md": "c30c32eb1bfde8123c4b3f31a4a23a575ebd309bcd351afb6df4a47a8a0fea42",
+      "references/reading-modes.md": "bffb31ae672f0058b71e0751899b6585616475600f4a32f712f29e5626f9ae78",
+      "references/report-template.md": "0f985e231095b1c062928020c73e8205d314333340963520982179b1a66bc559",
+      "references/study-checks.md": "f5b77eb7671f7114e513d50145a49310967762a465c382c3aeee20d083e1071b"
+    },
+    "release": {
+      "SKILL.md": "39b40c9cb84ada706cbbc30297b9ffb1ffdb674577de849883cde4b2589df060",
+      "agents/openai.yaml": "4e01d29e677af07a61abda6c3fc7a40f970cfe1f0c362284b2609b5675341857",
+      "references/evidence-rules.md": "5f4428250a49b299683c1352e2a57d833b21b18f42175f280097300f7a9c29c3",
+      "references/material-handling.md": "c30c32eb1bfde8123c4b3f31a4a23a575ebd309bcd351afb6df4a47a8a0fea42",
+      "references/reading-modes.md": "bffb31ae672f0058b71e0751899b6585616475600f4a32f712f29e5626f9ae78",
+      "references/report-template.md": "0f985e231095b1c062928020c73e8205d314333340963520982179b1a66bc559",
+      "references/study-checks.md": "95fe2fe233ce1f9db0fac6bf4d6ae288d7820fd8695bf6ad175c74ab06a0b296"
+    }
+  },
+  "review_adjustment": "Initial scope wording clarification did not alter full-reading semantics. A later algorithm-specific rule separates narrative and execution order after an English method-report ordering error; affected English method case is rerun independently on the release profile. Other cases retain their exact pre-rule profiles; visual/mode instructions are unchanged.",
+  "initial_working_tree": "clean; no existing user changes present",
+  "reader_context": "Three initial fresh agents; some cases share a batch. A fourth independent fresh reader reran the method case after the algorithm-order rule. Readers received only the skill, isolated input and request, without golden answers.",
+  "path_export": "Only path prefixes normalized: repo: relative to repository, run: relative to this run, input paths relative to each case. Analysis text and timing values preserved. Three first-batch reports also have exactly one empty EOF line removed; original/exported hashes recorded. No analysis or numbered evidence line changed.",
+  "evaluation": "Manual primary source/image/output comparison plus independent semantic review. Scripts only check artifact/link integrity.",
+  "report_count": 11,
+  "current_case_status_counts": {
+    "pass": 8,
+    "partial": 1
+  },
+  "prior_failures_preserved": "english-method-focus first execution-order criterion failed; overall partial; independent retest passed",
+  "report_format_exports": [
+    {
+      "artifact": "evals/runs/2026-10-02-v0.2.0/english-full/report.md",
+      "original_sha256": "d08de1dd7e45b7c5bd24349f1818de6bea6cf6f9836528de1ff18193d00380d1",
+      "exported_sha256": "958abf48596b5ee132dd520cf54c858f8a1d3de754667839e1be7193aab14227",
+      "operation": "remove exactly one empty EOF line; no analysis or evidence-line changes"
+    },
+    {
+      "artifact": "evals/runs/2026-10-02-v0.2.0/legacy-incomplete/report.md",
+      "original_sha256": "74cf21ec5fe181374ffe4b70e328da67f5ba91cce1e5ae2440f5913101b248fe",
+      "exported_sha256": "5d1edc9eaa0916447cdd6fd4b4f6773f9b2b2f1dacf01804696a7272402972a9",
+      "operation": "remove exactly one empty EOF line; no analysis or evidence-line changes"
+    },
+    {
+      "artifact": "evals/runs/2026-10-02-v0.2.0/legacy-method/report.md",
+      "original_sha256": "18b6858ba6d1a9cca63e4f42ab18ffe770ca8e9def6817770a1dcbcbc2b6d706",
+      "exported_sha256": "5e3a73c18add6a3b8e6ce6ecd30ae5b808b36465916e0d493bedda045a08d210",
+      "operation": "remove exactly one empty EOF line; no analysis or evidence-line changes"
+    }
+  ]
+}

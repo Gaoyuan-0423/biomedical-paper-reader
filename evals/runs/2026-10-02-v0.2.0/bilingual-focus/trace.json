@@ -1,0 +1,108 @@
+{
+  "task": "bilingual-focus",
+  "mode": "focused_analysis",
+  "language": "Chinese and English",
+  "target": "Figure 1B–D",
+  "sources": {
+    "M1": "input/main.md; main-v1; synthetic",
+    "F1": "input/figure1.png; main-v1"
+  },
+  "actual_text_reads": [
+    {
+      "file": "input/main.md",
+      "line_ranges": [
+        [
+          1,
+          11
+        ],
+        [
+          17,
+          21
+        ],
+        [
+          29,
+          33
+        ],
+        [
+          37,
+          43
+        ]
+      ],
+      "locations": [
+        "Identity/version and Introduction",
+        "p1 plasma Results paragraph",
+        "p1 first culture Results paragraph",
+        "p2 complete Figure 1 legend",
+        "p3 both Methods subsections"
+      ]
+    },
+    {
+      "file": "input/main.md",
+      "action": "rg section-heading/navigation scan; identity and legend matched and displayed"
+    }
+  ],
+  "actual_image_reads": [
+    {
+      "file": "input/figure1.png",
+      "action": "view_image whole image once, focused inspection B–D",
+      "display": "source 1800x1490 resized by tool to 1728x1430",
+      "checks": "B axes/rho0.52/P0.08/n12; C WT labels and means1.00,1.70; D WT/KO labels and means1.00,1.60,0.98; visible variability bars; SD defined in legend",
+      "incidental": "A,E,F visible in overview and complete legend read, not analysed as extra results",
+      "crops": []
+    }
+  ],
+  "skill_reference_use": "Reused already read SKILL.md and reading-modes, evidence-rules, report-template, material-handling; nested-sample, public-data and mechanism study-checks",
+  "tool_actions": [
+    "Read request.txt",
+    "rg heading scan",
+    "sed selected ranges",
+    "view_image",
+    "rg --files input inventory",
+    "JavaScript arithmetic",
+    "apply_patch report and metadata",
+    "clock__curr_time UTC timing"
+  ],
+  "simple_recalculations": [
+    {
+      "inputs": [
+        1.7,
+        1
+      ],
+      "formula": "C AX-17 - vehicle",
+      "result": 0.7
+    },
+    {
+      "inputs": [
+        1.7,
+        1
+      ],
+      "formula": "C AX-17 / vehicle",
+      "result": 1.7
+    },
+    {
+      "inputs": [
+        1.6,
+        1
+      ],
+      "formula": "D WT AX-17 - WT vehicle",
+      "result": 0.6
+    },
+    {
+      "inputs": [
+        0.98,
+        1
+      ],
+      "formula": "D KO vehicle - WT vehicle",
+      "result": -0.02
+    }
+  ],
+  "bilingual_consistency_check": "Compared paired Chinese/English passages during writing: rho and P discrepancy, n=12, 24h, n=4 cultures per condition, SD, panel means/differences, no receptor-necessity claim, unprovided Figure S1 and unperformed analyses have matching strength and status; shared evidence index.",
+  "not_performed": [
+    "Read tissue Results, CY-2 Results, Discussion or Data/resource statement",
+    "Further analyse A,E,F",
+    "Read/obtain supplement, Figure S1, donor metadata, raw data or code",
+    "Search outside this task's material scope",
+    "Network access or downloads",
+    "Image cropping, point reconstruction, P-value computation, model refitting or raw-data analysis"
+  ]
+}

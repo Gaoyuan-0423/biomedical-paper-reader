@@ -1,0 +1,206 @@
+{
+  "case": "visual-update",
+  "reviewer": "primary agent; main and supplementary phases separately compared with source and source figures",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "V01_direction_conflict",
+      "status": "pass",
+      "reason": "定位正文+0.60和图注/图像-0.60两者；保留冲突而不伪造更正。",
+      "source_basis": "main.md p1 Results / p2 Fig1A; figure1.png A",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 43,
+          "quote": "正文 p1 报告病变均值 1.80、参照均值 1.20"
+        }
+      ]
+    },
+    {
+      "id": "V02_decimal_visual",
+      "status": "pass",
+      "reason": "实际看图读出0.08并指出正文0.8，未称显著或复算P值；trace-main有查看B面板。",
+      "source_basis": "main.md p1 Results; figure1.png B",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 47,
+          "quote": "图内注释为 Spearman ρ = **0.52，P = 0.08，n = 12**"
+        }
+      ]
+    },
+    {
+      "id": "V03_nested_unknown",
+      "status": "pass",
+      "reason": "12/24/48/12000层级正确；主文方法把聚合推断单位放在补充，因此保留无法确认而不直接指控伪重复。",
+      "source_basis": "main.md p1 Results / p3 Tissue Methods",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 45,
+          "quote": "不能因此直接判定作者把细胞错误地当作独立个体"
+        }
+      ]
+    },
+    {
+      "id": "V04_necessary_control",
+      "status": "pass",
+      "reason": "识别刺激KO必要比较放在未获S1，而非说研究未做或主图已证必要性。",
+      "source_basis": "main.md p2 Fig1D / p3 Culture Methods; figure1.png D",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 57,
+          "quote": "不能用“KO vehicle”替代“KO + AX-17”"
+        }
+      ]
+    },
+    {
+      "id": "V05_rescue_boundary",
+      "status": "pass",
+      "reason": "区分外源回补和内源必要性；机制逐边及后续损失/特异性/活性对照对应缺口。",
+      "source_basis": "main.md p1 Culture Results / p2 Fig1E / p3 Culture Methods",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 63,
+          "quote": "必要性要求直接降低或阻断内源 CY-2"
+        }
+      ]
+    },
+    {
+      "id": "V06_low_resolution",
+      "status": "pass",
+      "reason": "实际查看F但不猜精确数值；无重复无效放大，限制具体定位F。",
+      "source_basis": "main.md p2 Fig1F; figure1.png F",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 67,
+          "quote": "不能报告具体剂量、倍数变化、EC50、平台值或统计趋势"
+        }
+      ]
+    },
+    {
+      "id": "V10_scope_provenance",
+      "status": "pass",
+      "reason": "M1/V1 main-v1与逻辑页正确；核心表区分作者报告、视觉与实际JS简单算术；补充明确未取得。",
+      "source_basis": "main.md identity / p3 resource statement",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 21,
+          "quote": "未重算 P 值、未做原始数据重分析"
+        }
+      ]
+    },
+    {
+      "id": "V07_donor_update",
+      "status": "pass",
+      "reason": "从主阶段无法确认更新为供者聚合Welch；6vs6、-0.60、CI[-1.30,.10]、P=.09准确，未称等效。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 27,
+          "quote": "统计独立单位已可确认为参与者"
+        }
+      ]
+    },
+    {
+      "id": "V08_KO_update",
+      "status": "pass",
+      "reason": "KO .52 [.25,.79]与WT .60 [.34,.86]进入机制判断；未推断响应相等、等效或排除一切受体作用。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 100,
+          "quote": "KO 后仍保留刺激增量"
+        }
+      ]
+    },
+    {
+      "id": "V09_overlap_map",
+      "status": "pass",
+      "reason": "来源子集、发现验证角色、图表关联都有映射；4共同供者/每标签8/并集12明确；成员集合核对未冒称原始矩阵重分析。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 98,
+          "quote": "DISC D01–D08，VAL D05–D12"
+        }
+      ]
+    },
+    {
+      "id": "V10_update_propagation",
+      "status": "pass",
+      "reason": "开篇、图组、证据表、机制、局限、资源和缺口建议均同步更新；保留真实未执行P/CI复算及未解冲突。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 5,
+          "quote": "**当前发现：**"
+        }
+      ]
+    },
+    {
+      "id": "V01_conflict_retained",
+      "status": "pass",
+      "reason": "新增补充支持图注负向估计，但没有伪装成官方更正或抹去主文冲突。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 95,
+          "quote": "主文仍写 +0.60"
+        }
+      ]
+    },
+    {
+      "id": "V05_rescue_boundary",
+      "status": "pass",
+      "reason": "补充后仍没有把CY2回补当内源必要性；建议对应损失/特异性/活性。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 101,
+          "quote": "不证明必要性"
+        }
+      ]
+    },
+    {
+      "id": "V06_low_resolution",
+      "status": "pass",
+      "reason": "附件加入后仅更新受影响项，F具体定量限制仍保留而未猜值。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 102,
+          "quote": "新增附件无 F 的表或清晰图"
+        }
+      ]
+    }
+  ],
+  "phase_input_sets": {
+    "main": [
+      "input/main.md",
+      "input/figure1.png"
+    ],
+    "supp": [
+      "input/main.md",
+      "input/figure1.png",
+      "input/supplement.md",
+      "input/figure-s1.png"
+    ]
+  },
+  "limitations": [
+    "No raw donor scores or culture preparations analyzed; all P values and confidence intervals remain source-reported.",
+    "No formal genotype interaction/equivalence test executed."
+  ],
+  "independent_review": "See run-level independent review records; this file retains primary source-based scoring."
+}

@@ -1,0 +1,77 @@
+{
+  "case": "bilingual-focus",
+  "reviewer": "primary agent; manual section/figure/output comparison and bilingual pair comparison",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "bilingual-numbers-and-directions",
+      "status": "pass",
+      "reason": "两种语言一致保留rho=.52、P=.08/.8、n12、1.00/1.70/+0.70、1.00/1.60/.98/+0.60/-.02；逐段核对方向和比较。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 27,
+          "quote": "**rho = 0.52、P = 0.08、n = 12**"
+        }
+      ]
+    },
+    {
+      "id": "bilingual-judgment",
+      "status": "pass",
+      "reason": "中文和英文都没有把正rho升级确定关联，未把基线相近升级等效或必要性。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 29,
+          "quote": "Neither P value is below 0.05"
+        }
+      ]
+    },
+    {
+      "id": "shared-evidence",
+      "status": "pass",
+      "reason": "共用E1-E4记录，main-v1与逻辑页准确；两种语言核查/未核查状态一致。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 53,
+          "quote": "This table is the common evidence index for both languages"
+        }
+      ]
+    },
+    {
+      "id": "target-context-and-control",
+      "status": "pass",
+      "reason": "目标方法/人群vs培养体系与关键KO刺激对照有必要上下文；没有宣称已查看S1。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 45,
+          "quote": "That requires comparing AX-17 and vehicle responses within KO"
+        }
+      ]
+    },
+    {
+      "id": "scope-actions",
+      "status": "pass",
+      "reason": "真实局部阅读、全图展示/重点B-D、简单算术和未执行项与trace一致。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 76,
+          "quote": "no network access, download, P-value recomputation or model refitting occurred"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Trace is a reader-produced action summary, not a complete host tool log.",
+    "No raw-data or statistical-test reproduction."
+  ],
+  "independent_review": "See run-level independent review records; this file retains primary source-based scoring."
+}

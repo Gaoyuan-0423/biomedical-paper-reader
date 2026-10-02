@@ -1,0 +1,102 @@
+{
+  "case": "visual-update:supp",
+  "reviewer": "primary agent; manual visual/text/update comparison",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "V07_donor_update",
+      "status": "pass",
+      "reason": "从主阶段无法确认更新为供者聚合Welch；6vs6、-0.60、CI[-1.30,.10]、P=.09准确，未称等效。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 27,
+          "quote": "统计独立单位已可确认为参与者"
+        }
+      ]
+    },
+    {
+      "id": "V08_KO_update",
+      "status": "pass",
+      "reason": "KO .52 [.25,.79]与WT .60 [.34,.86]进入机制判断；未推断响应相等、等效或排除一切受体作用。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 100,
+          "quote": "KO 后仍保留刺激增量"
+        }
+      ]
+    },
+    {
+      "id": "V09_overlap_map",
+      "status": "pass",
+      "reason": "来源子集、发现验证角色、图表关联都有映射；4共同供者/每标签8/并集12明确；成员集合核对未冒称原始矩阵重分析。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 98,
+          "quote": "DISC D01–D08，VAL D05–D12"
+        }
+      ]
+    },
+    {
+      "id": "V10_update_propagation",
+      "status": "pass",
+      "reason": "开篇、图组、证据表、机制、局限、资源和缺口建议均同步更新；保留真实未执行P/CI复算及未解冲突。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 5,
+          "quote": "**当前发现：**"
+        }
+      ]
+    },
+    {
+      "id": "V01_conflict_retained",
+      "status": "pass",
+      "reason": "新增补充支持图注负向估计，但没有伪装成官方更正或抹去主文冲突。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 95,
+          "quote": "主文仍写 +0.60"
+        }
+      ]
+    },
+    {
+      "id": "V05_rescue_boundary",
+      "status": "pass",
+      "reason": "补充后仍没有把CY2回补当内源必要性；建议对应损失/特异性/活性。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 101,
+          "quote": "不证明必要性"
+        }
+      ]
+    },
+    {
+      "id": "V06_low_resolution",
+      "status": "pass",
+      "reason": "附件加入后仅更新受影响项，F具体定量限制仍保留而未猜值。",
+      "source_basis": "input/supplement.md supplement-s1 s-p1 Methods/Table S1 and s-p2 Table S2; figure-s1.png A-C; unchanged main-v1 conflict/F",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 102,
+          "quote": "新增附件无 F 的表或清晰图"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "No raw donor scores or culture preparations analyzed; all P values and confidence intervals remain source-reported.",
+    "No formal genotype interaction/equivalence test executed."
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "case": "english-method-focus",
+  "reviewer": "primary agent; manual source and method-explanation comparison",
+  "status": "partial",
+  "criteria": [
+    {
+      "id": "English-method-and-context",
+      "status": "pass",
+      "reason": "自然英文解释输入、方法、输出和假设；推导公式明确本次解释而非论文原式或已验证代码。",
+      "source_basis": "input/prediction-method.md Introduction, Results Tables 2/1, Methods, Discussion, Data and code",
+      "evidence": [
+        {
+          "artifact": "report-first.md",
+          "line": 22,
+          "quote": "These equations are **an explanatory reconstruction"
+        }
+      ]
+    },
+    {
+      "id": "method-accuracy",
+      "status": "pass",
+      "reason": "50um/200gene及标准L2逻辑回归准确，未知自己表达特征总数/邻居规则未编造；结果真实顺序有说明。",
+      "source_basis": "input/prediction-method.md Introduction, Results Tables 2/1, Methods, Discussion, Data and code",
+      "evidence": [
+        {
+          "artifact": "report-first.md",
+          "line": 9,
+          "quote": "50 µm radius"
+        }
+      ]
+    },
+    {
+      "id": "evaluation-boundaries",
+      "status": "pass",
+      "reason": "明确先全数据选特征的泄漏及同12供者内部划分，新供者泛化未建立；没有量化未知偏差。",
+      "source_basis": "input/prediction-method.md Introduction, Results Tables 2/1, Methods, Discussion, Data and code",
+      "evidence": [
+        {
+          "artifact": "report-first.md",
+          "line": 30,
+          "quote": "**Gene-selection leakage is explicit.**"
+        }
+      ]
+    },
+    {
+      "id": "numbers-and-evidence",
+      "status": "pass",
+      "reason": "数字/样本层级/分母、来源定位、实际算术和范围在E1-E5表中记录；不是重算AUROC。",
+      "source_basis": "input/prediction-method.md Introduction, Results Tables 2/1, Methods, Discussion, Data and code",
+      "evidence": [
+        {
+          "artifact": "report-first.md",
+          "line": 34,
+          "quote": "0.95 − 0.93 = 0.02"
+        }
+      ]
+    },
+    {
+      "id": "focused-scope",
+      "status": "pass",
+      "reason": "方法短输入全部相关所以读全，专题组织未扩成无关全文/领域史；未声称原始数据/模型复现。",
+      "source_basis": "input/prediction-method.md Introduction, Results Tables 2/1, Methods, Discussion, Data and code",
+      "evidence": [
+        {
+          "artifact": "report-first.md",
+          "line": 54,
+          "quote": "whose whole content is relevant"
+        }
+      ]
+    },
+    {
+      "id": "execution-order",
+      "status": "fail",
+      "reason": "Independent review caught Fit as step5 before random partition in step6 while the table is called executable explanation. This can imply fitting before train/test split; preserve actual selection-before-split leakage, but fitting must be placed after the split.",
+      "source_basis": "input/prediction-method.md Methods; distinguish article Table2->Table1 writing order from data pipeline",
+      "evidence": [
+        {
+          "artifact": "report-first.md",
+          "line": 17,
+          "quote": "Fit the predictor"
+        },
+        {
+          "artifact": "report-first.md",
+          "line": 18,
+          "quote": "Randomly split cells"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Short method input is wholly relevant; no test of long-paper method routing.",
+    "No model fitting or raw-data analysis."
+  ]
+}

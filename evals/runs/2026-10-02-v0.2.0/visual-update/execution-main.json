@@ -1,0 +1,22 @@
+{
+  "phase": "main",
+  "started_utc": "2026-10-02T08:54:53Z",
+  "ended_utc": "2026-10-02T09:01:36Z",
+  "elapsed_seconds": 403,
+  "clock_source": "clock.curr_time",
+  "timing_note": "The start is the first captured UTC clock reading, after the request, skill, four references, and main text preflight reads. Those initial reads are documented in trace-main.json but precede the measured interval. The end is the actual UTC clock reading after report writing, image analysis, arithmetic, local-link verification, and trace JSON parsing, immediately before final metadata serialization.",
+  "mode": "full_read_of_available_materials",
+  "language": "zh-CN",
+  "source_version": "main-v1 synthetic research material",
+  "input_directory": "input",
+  "read_inputs": [
+    "input/main.md",
+    "input/figure1.png"
+  ],
+  "report_path": "report.md",
+  "trace_path": "trace-main.json",
+  "network_used": false,
+  "skill_modified": false,
+  "scoring_performed": false,
+  "status": "completed_main_phase_waiting_for_later_user_materials"
+}

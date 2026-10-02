@@ -1,0 +1,1 @@
+Use $biomedical-paper-reader to analyze Figure 1B–D in English, including the relevant methods and context needed to interpret these panels.

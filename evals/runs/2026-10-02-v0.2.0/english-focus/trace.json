@@ -1,0 +1,111 @@
+{
+  "task": "english-focus",
+  "mode": "focused_analysis",
+  "language": "English",
+  "target": "Figure 1B–D",
+  "sources": {
+    "M1": "input/main.md; main-v1; synthetic",
+    "F1": "input/figure1.png; main-v1"
+  },
+  "actual_text_reads": [
+    {
+      "file": "input/main.md",
+      "line_ranges": [
+        [
+          1,
+          11
+        ],
+        [
+          17,
+          21
+        ],
+        [
+          29,
+          33
+        ],
+        [
+          37,
+          43
+        ]
+      ],
+      "locations": [
+        "Identity/version and Introduction",
+        "p1 plasma Results paragraph",
+        "p1 first culture Results paragraph",
+        "p2 complete Figure 1 legend",
+        "p3 both Methods subsections"
+      ]
+    },
+    {
+      "file": "input/main.md",
+      "action": "rg headings/navigation scan; body text matching identity and legend also displayed",
+      "locations": "section headings only beyond ranges above"
+    }
+  ],
+  "actual_image_reads": [
+    {
+      "file": "input/figure1.png",
+      "action": "whole image view once with view_image; focused visual checks B–D",
+      "display": "1800x1490 source resized to 1728x1430 by tool",
+      "checked": "B x/y axes, participant count, rho 0.52, P 0.08; C labels/means 1.00 and 1.70; D WT/KO labels and 1.00,1.60,0.98; visible error bars; SD meaning taken from legend",
+      "incidental": "A,E,F visible as layout context, no additional-result analysis",
+      "crops": []
+    }
+  ],
+  "skill_reference_use": [
+    "Reused previously read SKILL.md, reading-modes, evidence-rules, report-template, material-handling and relevant nested/mechanism study-checks",
+    "Read study-checks lines 15–23 on public data/independent validation"
+  ],
+  "tool_actions": [
+    "Read request.txt",
+    "rg heading navigation",
+    "sed selected text ranges",
+    "view_image",
+    "rg --files input material inventory",
+    "Executed JavaScript arithmetic",
+    "apply_patch report/metadata",
+    "clock__curr_time UTC timing"
+  ],
+  "simple_recalculations": [
+    {
+      "inputs": [
+        1.7,
+        1
+      ],
+      "formula": "phosphorylation ratio AX-17 - vehicle",
+      "result": 0.7
+    },
+    {
+      "inputs": [
+        1.7,
+        1
+      ],
+      "formula": "phosphorylation ratio AX-17 / vehicle",
+      "result": 1.7
+    },
+    {
+      "inputs": [
+        1.6,
+        1
+      ],
+      "formula": "WT migration AX-17 - vehicle",
+      "result": 0.6
+    },
+    {
+      "inputs": [
+        0.98,
+        1
+      ],
+      "formula": "KO vehicle migration - WT vehicle",
+      "result": -0.02
+    }
+  ],
+  "not_performed": [
+    "Read tissue Results paragraph, CY-2 Results paragraph, Discussion, or Data/resource statement",
+    "Analyse Figure1A,E,F as results",
+    "Read or obtain Figure S1, supplement, donor metadata, raw data or code",
+    "Look beyond authorized task directory for materials",
+    "Network access",
+    "Crop images, compute P values, fit models or analyse raw data"
+  ]
+}

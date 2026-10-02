@@ -1,0 +1,7 @@
+{
+  "task": "bilingual-focus",
+  "started_at_utc": "2026-10-02T09:06:32Z",
+  "ended_at_utc": "2026-10-02T09:09:57Z",
+  "clock_source": "clock__curr_time",
+  "timing_note": "Start captured before request reading; end captured after bilingual report write, before metadata write."
+}

@@ -1,4 +1,4 @@
 interface:
   display_name: "生物医学文献精读"
-  short_description: "按论文原文和图表拆解研究逻辑，核对证据边界并提炼可迁移的课题设计"
-  default_prompt: "使用 $biomedical-paper-reader 阅读这篇论文，生成中文逐图精读报告、阅读建议与课题借鉴。"
+  short_description: "精读、速读或指定图方法解析；支持中英文，记录证据定位与核查边界"
+  default_prompt: "使用 $biomedical-paper-reader 阅读这篇论文，默认中文完整精读，并按我明确指定的语言和范围生成报告。"

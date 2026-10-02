@@ -1,0 +1,99 @@
+{
+  "case": "visual-update:main",
+  "reviewer": "primary agent; manual visual/source/report comparison",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "V01_direction_conflict",
+      "status": "pass",
+      "reason": "定位正文+0.60和图注/图像-0.60两者；保留冲突而不伪造更正。",
+      "source_basis": "main.md p1 Results / p2 Fig1A; figure1.png A",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 43,
+          "quote": "正文 p1 报告病变均值 1.80、参照均值 1.20"
+        }
+      ]
+    },
+    {
+      "id": "V02_decimal_visual",
+      "status": "pass",
+      "reason": "实际看图读出0.08并指出正文0.8，未称显著或复算P值；trace-main有查看B面板。",
+      "source_basis": "main.md p1 Results; figure1.png B",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 47,
+          "quote": "图内注释为 Spearman ρ = **0.52，P = 0.08，n = 12**"
+        }
+      ]
+    },
+    {
+      "id": "V03_nested_unknown",
+      "status": "pass",
+      "reason": "12/24/48/12000层级正确；主文方法把聚合推断单位放在补充，因此保留无法确认而不直接指控伪重复。",
+      "source_basis": "main.md p1 Results / p3 Tissue Methods",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 45,
+          "quote": "不能因此直接判定作者把细胞错误地当作独立个体"
+        }
+      ]
+    },
+    {
+      "id": "V04_necessary_control",
+      "status": "pass",
+      "reason": "识别刺激KO必要比较放在未获S1，而非说研究未做或主图已证必要性。",
+      "source_basis": "main.md p2 Fig1D / p3 Culture Methods; figure1.png D",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 57,
+          "quote": "不能用“KO vehicle”替代“KO + AX-17”"
+        }
+      ]
+    },
+    {
+      "id": "V05_rescue_boundary",
+      "status": "pass",
+      "reason": "区分外源回补和内源必要性；机制逐边及后续损失/特异性/活性对照对应缺口。",
+      "source_basis": "main.md p1 Culture Results / p2 Fig1E / p3 Culture Methods",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 63,
+          "quote": "必要性要求直接降低或阻断内源 CY-2"
+        }
+      ]
+    },
+    {
+      "id": "V06_low_resolution",
+      "status": "pass",
+      "reason": "实际查看F但不猜精确数值；无重复无效放大，限制具体定位F。",
+      "source_basis": "main.md p2 Fig1F; figure1.png F",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 67,
+          "quote": "不能报告具体剂量、倍数变化、EC50、平台值或统计趋势"
+        }
+      ]
+    },
+    {
+      "id": "V10_scope_provenance",
+      "status": "pass",
+      "reason": "M1/V1 main-v1与逻辑页正确；核心表区分作者报告、视觉与实际JS简单算术；补充明确未取得。",
+      "source_basis": "main.md identity / p3 resource statement",
+      "evidence": [
+        {
+          "artifact": "report-before.md",
+          "line": 21,
+          "quote": "未重算 P 值、未做原始数据重分析"
+        }
+      ]
+    }
+  ],
+  "limitation": "Supplement-specific checks were not applicable until the next stage; no raw reanalysis or official-record query."
+}

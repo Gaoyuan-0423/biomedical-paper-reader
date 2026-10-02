@@ -1,0 +1,90 @@
+{
+  "case": "english-fast",
+  "reviewer": "primary agent, confirmed by independent-visual-main-review.json",
+  "status": "partial",
+  "criteria": [
+    {
+      "id": "English-screening",
+      "status": "pass",
+      "reason": "英文筛选判断、科学风险与后续优先级明确。",
+      "source_basis": "input/main.md main-v1 p1/p2/p3 and input/figure1.png A-F; actual trace section ranges",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 3,
+          "quote": "**Recommendation: selective close reading.**"
+        }
+      ]
+    },
+    {
+      "id": "conflicts-and-nested-units",
+      "status": "pass",
+      "reason": "实际视觉数值及方向冲突保留；12个体与嵌套细胞区分；方法未知不直接判伪重复。",
+      "source_basis": "input/main.md main-v1 p1/p2/p3 and input/figure1.png A-F; actual trace section ranges",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 19,
+          "quote": "**P = 0.8 in the Results and P = 0.08 in Fig. 1B**"
+        }
+      ]
+    },
+    {
+      "id": "control-and-mechanism",
+      "status": "pass",
+      "reason": "关键KO+刺激缺本次材料的限制正确，回补未冒充必要性，低清未猜数字。",
+      "source_basis": "input/main.md main-v1 p1/p2/p3 and input/figure1.png A-F; actual trace section ranges",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 21,
+          "quote": "this baseline comparison does not test whether RX-4 is required"
+        }
+      ]
+    },
+    {
+      "id": "scope-honesty",
+      "status": "pass",
+      "reason": "主动明确几乎全部叙述和Methods已读，不把短报告称狭窄局部或全文核验，trace与报告一致。",
+      "source_basis": "input/main.md main-v1 p1/p2/p3 and input/figure1.png A-F; actual trace section ranges",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 11,
+          "quote": "This is broad coverage of a short manuscript"
+        }
+      ]
+    },
+    {
+      "id": "selective-reading-demonstration",
+      "status": "partial",
+      "reason": "本例只未读资源声明；单图短文不能充分展示多结果选择性。保留部分通过，另增多结果真实试读而不伪造提速。",
+      "source_basis": "input/main.md main-v1 p1/p2/p3 and input/figure1.png A-F; actual trace section ranges",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 13,
+          "quote": "I did not read the p3 **Data and resource statement**."
+        }
+      ]
+    },
+    {
+      "id": "evidence-actions",
+      "status": "pass",
+      "reason": "核心表保留版本逻辑页、比較样本、图像与算术动作和边界，未声称原始数据重分析。",
+      "source_basis": "input/main.md main-v1 p1/p2/p3 and input/figure1.png A-F; actual trace section ranges",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 28,
+          "quote": "no raw-data recomputation"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Short single-figure input does not establish long-paper execution efficiency.",
+    "No elapsed-speed comparison because trial timing scopes differ."
+  ],
+  "independent_review": "See run-level independent review records; this file retains primary source-based scoring."
+}

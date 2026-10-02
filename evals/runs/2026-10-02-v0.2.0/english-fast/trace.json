@@ -1,0 +1,107 @@
+{
+  "task": "english-fast",
+  "mode": "quick_read",
+  "language": "English",
+  "sources": {
+    "M1": "input/main.md, main-v1, synthetic",
+    "F1": "input/figure1.png, main-v1, synthetic"
+  },
+  "actual_text_reads": [
+    {
+      "file": "input/main.md",
+      "line_ranges": [
+        [
+          1,
+          27
+        ],
+        [
+          29,
+          43
+        ]
+      ],
+      "locations": [
+        "Identity/version note",
+        "p1 Introduction",
+        "p1 Results — Tissue and plasma observations",
+        "p1 Results — RX-4 and CY-2 in culture",
+        "p1 Discussion",
+        "p2 complete Figure 1 legend",
+        "p3 Methods — Tissue collection and measurement",
+        "p3 Methods — Culture perturbations"
+      ]
+    }
+  ],
+  "actual_image_reads": [
+    {
+      "file": "input/figure1.png",
+      "action": "whole-image view via view_image",
+      "display": "source 1800x1490 resized by tool to 1728x1430",
+      "readable_checks": "A–E labels, group comparisons, numeric mean annotations; B rho, P and n; visible error bars",
+      "unresolved": "F numerical axis values and dose-response points cannot be read reliably",
+      "crops": []
+    }
+  ],
+  "tool_actions": [
+    "Read SKILL.md and references reading-modes, evidence-rules, report-template and material-handling",
+    "Enumerated main.md headings using rg",
+    "Read study-checks lines 5–14 (nested samples/statistical unit) and 31–41 (experiments/mechanism)",
+    "Read request.txt",
+    "Read main.md with sed for ranges listed",
+    "Viewed figure1.png once",
+    "Listed only supplied input files with rg --files",
+    "Executed JavaScript arithmetic on reported/visible summary numbers",
+    "Wrote report.md, trace.json and execution.json via apply_patch"
+  ],
+  "simple_recalculations": [
+    {
+      "inputs": [
+        1.2,
+        1.8
+      ],
+      "formula": "lesion - reference",
+      "result": -0.6
+    },
+    {
+      "inputs": [
+        1.2,
+        1.8
+      ],
+      "formula": "(lesion - reference) / reference",
+      "result": -0.3333333333333333,
+      "note": "executed, not used as a separate report claim"
+    },
+    {
+      "inputs": [
+        1.7,
+        1
+      ],
+      "formula": "AX-17 phosphorylation - vehicle phosphorylation",
+      "result": 0.7
+    },
+    {
+      "inputs": [
+        1.6,
+        1
+      ],
+      "formula": "WT AX-17 migration - WT vehicle migration",
+      "result": 0.6
+    },
+    {
+      "inputs": [
+        1.55,
+        1.1
+      ],
+      "formula": "CY-2 complementation - inhibitor condition",
+      "result": 0.45
+    }
+  ],
+  "not_performed": [
+    "Read p3 Data and resource statement",
+    "Read or obtain companion supplement, Figure S1, donor IDs, raw data or code",
+    "Search other task directories or repository evals/cases, RESULTS, gold, examples or generator scripts",
+    "Network access or external identity/correction checks",
+    "Crop/enlarge F or infer blurred values",
+    "Recalculate P values, fit models or reanalyse raw data"
+  ],
+  "scope_note": "Read all p1 narrative and both supplied Methods subsections. Quick-read output is not evidence of narrowly partial text reading; only the resource statement remains unread in main.md."
+}

@@ -1,0 +1,91 @@
+{
+  "case": "legacy-method",
+  "reviewer": "primary agent; manual source-to-output comparison, not keyword-based decisions",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "language-order-and-method",
+      "status": "pass",
+      "reason": "中文且真实论证顺序/输入处理输出准确。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 13,
+          "quote": "Table 2 在 Table 1 之前"
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/prediction-method.md",
+        "location": "Results — Internal discrimination / Construction of the score; Tables 2/1; Methods; Discussion; Data and code"
+      }
+    },
+    {
+      "id": "numbers-and-actions",
+      "status": "pass",
+      "reason": "AUROC差值和42000/9000/9000、70/15/15仅简单复算，与trace匹配。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 25,
+          "quote": "0.95 − 0.93 = **0.02 AUROC**"
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/prediction-method.md",
+        "location": "Results — Internal discrimination / Construction of the score; Tables 2/1; Methods; Discussion; Data and code"
+      }
+    },
+    {
+      "id": "leakage-and-overlap",
+      "status": "pass",
+      "reason": "对明确先筛选后划分和所有集合12供者可作具体批评；未量化偏差。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 29,
+          "quote": "测试标签参与模型特征选择，构成标签信息泄漏"
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/prediction-method.md",
+        "location": "Results — Internal discrimination / Construction of the score; Tables 2/1; Methods; Discussion; Data and code"
+      }
+    },
+    {
+      "id": "uncertainty-and-resources",
+      "status": "pass",
+      "reason": "未编造资源成本或已复现性能，未核实的跨集合邻居依赖明确保留。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 21,
+          "quote": "软件版本、硬件、运行时间和理论复杂度均未报告"
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/prediction-method.md",
+        "location": "Results — Internal discrimination / Construction of the score; Tables 2/1; Methods; Discussion; Data and code"
+      }
+    },
+    {
+      "id": "evidence-record",
+      "status": "pass",
+      "reason": "核心数值与批评都有版本定位、比较/样本、动作、支持边界。",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 38,
+          "quote": "E4：全部数据标签参与筛选 200 个基因"
+        }
+      ],
+      "source_basis": {
+        "artifact": "input/prediction-method.md",
+        "location": "Results — Internal discrimination / Construction of the score; Tables 2/1; Methods; Discussion; Data and code"
+      }
+    }
+  ],
+  "limitations": [
+    "Reader used one shared batch for the three legacy inputs; case times are not independent duration measures."
+  ],
+  "independent_review": "See run-level independent review records; this file retains primary source-based scoring."
+}

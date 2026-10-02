@@ -2,9 +2,9 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.1.2。默认中文，保留必要英文术语。面向原创生物医学研究；临床、动物、机制、组学、空间、谱系或方法论文按实际证据选择检查点。
+版本：v0.2.0。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。面向原创生物医学研究；按实际证据选择检查点。
 
-A Chinese-first agent skill for reading one biomedical paper at a time: follow its figures and argument, assess evidence, and develop testable research ideas.
+A Chinese-first agent skill for close reading, quick screening, or focused figure/method analysis of one biomedical paper. Explicit English and Chinese–English requests are supported with the same evidence standards.
 
 [Skill 入口](SKILL.md) · [报告模板](references/report-template.md) · [示例](examples/README.md) · [验收记录](evals/RESULTS.md) · [MIT 许可](LICENSE)
 
@@ -18,9 +18,17 @@ A Chinese-first agent skill for reading one biomedical paper at a time: follow i
 
 **直接复用可读的 PDF 提取结果。** 使用现有工具提取文本、检查阅读顺序并保留页序，不再优先使用 MarkItDown，也不要求先生成 Markdown 底稿。原 PDF 继续用于数字和图像核查。只有具体页面的提取质量影响解读时才更换处理方式。
 
-**每张主图先概览，必要面板再放大。** 完整阅读图注，关注核心结论、必要对照、阴性结果及图文冲突；已经看清的内容直接复用，同一图组的待查面板成组准备。报告区分概览和具体核查范围。执行细节见[材料处理说明](references/material-handling.md)。
+**范围内的图先概览，必要面板再放大。** 完整精读覆盖每张主图；速读／专题覆盖选定结果及必要对照所在图。读完整图注，关注核心结论、必要对照、阴性结果及图文冲突；已看清内容复用，同组待查面板成组准备。报告区分概览和具体核查范围。执行细节见 [材料处理说明](references/material-handling.md)。
 
-默认报告顺序：
+语言由用户要求决定，英文论文不会自动触发英文输出。未指定就用中文；明确双语时两种表述共用证据记录，数字、方向和判断保持一致。英文直接依据证据写作，标题、解读、局限和建议均使用自然学术英文。
+
+| 模式 | 实际读取与交付 |
+|---|---|
+| 完整精读（默认） | 通读可用正文和方法、覆盖主图／核心结果；已有相关补充按主张阅读；交付完整论证与逐图／结果解释 |
+| 速读 | 先读摘要、问题、结果结构与讨论，再定点核查筛选判断依据的图、对照及方法；列明未读范围，不声称全文核验 |
+| 指定图／方法 | 解析目标并补足影响解释的上下文、必要对照和已有相关补图；交付局部设计、结果、边界及适配建议 |
+
+用户表达明确即可选用，无需填写参数。详见 [模式与语言适配](references/reading-modes.md)。完整精读的写作职责如下，信息简单时允许合并重复章节：
 
 1. 开篇导读：核心发现、看点、阅读建议和适用场景。
 2. 文章信息：身份、来源、已读与未获取材料。
@@ -28,7 +36,7 @@ A Chinese-first agent skill for reading one biomedical paper at a time: follow i
 4. 全文逻辑路线图：跟随原文证据推进，标注图表。
 5. 逐图/逐结果精读：动机、方法、结果、逻辑、边界、原图定位。
 6. 研究总结与课题借鉴：贡献、局限、可迁移环节和待验证设计。
-7. 数据与复现入口：资源用途、实际获取状态和关键缺口。
+7. 核心证据记录及数据入口：来源版本、页码／图号／面板、比较、样本／分母、实际核查方式、冲突和支持边界；资源用途及真实读取状态。
 
 有文件工具时交付独立论文目录下的 `report.md`，必要图像放在 `assets/`；报告内链接保持相对路径。没有文件工具时直接输出文本。
 
@@ -63,11 +71,41 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 使用 $biomedical-paper-reader 解析这篇论文：<DOI、链接或附件>。
 ```
 
-还可以补充研究方向以获得更贴合的迁移建议；未补充时给条件式适用场景。用户要求速读时压缩篇幅，要求专题方法解析时加深对应部分。
+还可以补充研究方向以获得更贴合的迁移建议；未补充时给条件式适用场景。速读会缩小实际阅读范围；专题会补足必要上下文，不靠省略关键对照实现简短。
+
+### 语言与模式调用示例
+
+中文完整精读（也是未指定语言和模式时的默认）：
+
+```text
+使用 $biomedical-paper-reader 精读这份 PDF，生成中文报告：<附件>。
+```
+
+英文完整精读：
+
+```text
+Use $biomedical-paper-reader to produce a full close-reading report in English for <PDF or DOI>, including figure interpretation, limitations, and research suggestions.
+```
+
+英文速读：
+
+```text
+使用 $biomedical-paper-reader 用英文速读这篇论文，判断是否值得完整精读，并说明实际已读和未读范围：<附件>。
+```
+
+指定图英文解析：
+
+```text
+Use $biomedical-paper-reader to analyze Figure 3 in English. Read the relevant methods, controls, and surrounding results needed to interpret it: <PDF>.
+```
+
+明确双语或专题方法也可直接表达，例如“中英双语解析 Figure 2”或“用英文讲解该文的谱系追踪方法及关键假设”。这些是分析报告，不是全文逐句翻译。
 
 ## 工作方式
 
-先建立原文章节、图表和主张索引，再核对正文、Methods、图注及实际图像，最后写阅读判断与研究建议。独立个体数与细胞/切片数、观察与因果、作者解释与新增假设都分别处理。
+按所选模式建立并复用原文章节、图表和主张索引，再联读相关正文、Methods、图注及图像。核心结论、引用数字和主要批评的证据记录直接进入输出；作者报告、图像核对、简单复算与原始数据重分析分别说明，不把未执行动作写成已完成。
+
+多队列／嵌套样本记录个体→组织→切片→细胞层级及分析单位，方法不明时标无法确认。关键公开数据按数据集、子集、发现／验证角色和支持图表映射，说明样本重叠是否实际核实。机制按 A→B→C 逐边说明证据、替代解释和缺口；相关检查按需启用。
 
 方法检查点按内容启用，不要求每篇出现空间组学、通讯、谱系或动物实验。无图论文按主表、结果小节或方法单元展开。背景历史、复杂算法、写作表达按相关性决定深度。
 
@@ -77,13 +115,16 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 - `SKILL.md`：触发说明、工作流和交付要求。
 - `references/report-template.md`：各部分与逐图单元的写作职责。
+- `references/reading-modes.md`：三种模式的读取范围、必要核查、输出及语言适配。
 - `references/evidence-rules.md`：定位、统计单位、推断范围与缺失信息规则。
 - `references/study-checks.md`：按证据类型选用的内部检查点。
 - `references/material-handling.md`：本地附件、文本复用、分步看图、下载调度和状态同步。
 - `agents/openai.yaml`：可选的 Codex 界面元数据。
 - `evals/cases.md`、`evals/fixtures/`：行为验收设计和原创虚构材料。
-- `evals/RESULTS.md`：本轮真实验收记录与限制。
-- `examples/`：三份原创虚构材料的实际输出，便于预览报告风格。
+- `evals/RESULTS.md`：版本对应的验收入口；历史记录与新回归分开。
+- `evals/generate_visual_fixtures.py`、`evals/fixtures/visual/`：可重建的原创多面板图、正文及补充材料；不含第三方论文资源。
+- `evals/validate_repo.py`：使用 Python 标准库检查本地链接、文件引用与回归记录完整性；不替代语义评分。
+- `examples/`、`evals/runs/`：历史示例与当前版本实际试读输出、评分及失败记录。
 - `CHANGELOG.md`：版本变化。
 
 ## 示范与验证
@@ -93,7 +134,9 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 - [HCC 新辅助 nivolumab 多模态研究](https://doi.org/10.1186/s12943-026-02682-x)
 - [小鼠结肠炎突变与空间邻域研究](https://doi.org/10.1038/s41588-026-02673-0)
 
-另外使用三份明确标注为虚构的短材料检查来源缺失、观察证据与计算预测的适配能力。可查看[输入与实际报告](examples/README.md)。验收关注真实行为，而非只检查标题或关键词，结果见[验收记录](evals/RESULTS.md)。两份真实论文完整试读作为本地验收材料保留；公开仓库提供论文入口和验收结论，完整论文、原图及原始数据不随仓库分发。
+既有两篇真实试读和三份虚构短文的行为验收对应 v0.1.0；v0.1.1、v0.1.2 没有重跑，不能把旧结果当作当前版验收。当前版增加原创多面板视觉输入、语言／模式案例及补充加入后的更新案例；实际输出、逐项语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)。可查看 [输入与报告示例](examples/README.md)。完整第三方论文、原图和原始数据不随公开仓库分发。
+
+开发验收可执行 `python3 evals/validate_repo.py`；视觉夹具可用已有 Pillow 运行 `python3 evals/generate_visual_fixtures.py` 重建。Pillow 仅用于开发夹具，技能阅读不强制 Python 或任何库。模型行为由独立试读和逐项来源复核评估，不能只靠关键词、标题或静态脚本判通过。
 
 ## 来源与许可
 

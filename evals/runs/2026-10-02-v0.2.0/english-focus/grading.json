@@ -1,0 +1,77 @@
+{
+  "case": "english-focus",
+  "reviewer": "primary agent; manual section/figure/output comparison and bilingual pair comparison",
+  "status": "pass",
+  "criteria": [
+    {
+      "id": "English-focused-scope",
+      "status": "pass",
+      "reason": "全英文且解释聚焦B-D，未把可見全图称全部面板已核验。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 3,
+          "quote": "RX-4 dependence of induced migration unresolved"
+        }
+      ]
+    },
+    {
+      "id": "decimal-and-units",
+      "status": "pass",
+      "reason": "正确识别0.08/0.8冲突、12个体与细胞层级；不重新拟合统计。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 15,
+          "quote": "The image and Results agree on **rho = 0.52**"
+        }
+      ]
+    },
+    {
+      "id": "necessary-control",
+      "status": "pass",
+      "reason": "必要的KO+刺激和配对上下文没有遗漏；基线接近未升级等效或受体必要性。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 29,
+          "quote": "The knockout vehicle condition is a useful baseline control."
+        }
+      ]
+    },
+    {
+      "id": "evidence-and-actions",
+      "status": "pass",
+      "reason": "证据表覆盖核心比较/样本/动作/边界，trace实际选择段落与报告一致。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 48,
+          "quote": "I did not read the tissue Results paragraph"
+        }
+      ]
+    },
+    {
+      "id": "gap-aligned-proposal",
+      "status": "pass",
+      "reason": "建议对应受体必要性缺口，不凭B-D扩为CY2完整机制。",
+      "source_basis": "input/main.md main-v1 p1 Introduction/plasma/culture Results, p2 complete legend, p3 relevant Methods; input/figure1.png B-D",
+      "evidence": [
+        {
+          "artifact": "report.md",
+          "line": 42,
+          "quote": "compare the **AX-17-induced change across genotypes**"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Trace is a reader-produced action summary, not a complete host tool log.",
+    "No raw-data or statistical-test reproduction."
+  ],
+  "independent_review": "See run-level independent review records; this file retains primary source-based scoring."
+}
