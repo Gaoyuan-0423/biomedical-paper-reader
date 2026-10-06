@@ -1,0 +1,10 @@
+{"event_id": "convert-1", "kind": "convert", "success": true, "figure_ids": ["S1"]}
+{"event_id": "convert-2", "kind": "convert", "success": true, "figure_ids": ["S2"]}
+{"event_id": "convert-3", "kind": "convert", "success": true, "figure_ids": ["S3"]}
+{"event_id": "convert-4", "kind": "convert", "success": true, "figure_ids": ["S4"]}
+{"event_id": "convert-5", "kind": "convert", "success": true, "figure_ids": ["S5"]}
+{"event_id": "convert-6", "kind": "convert", "success": true, "figure_ids": ["S6"]}
+{"event_id": "convert-7", "kind": "convert", "success": true, "figure_ids": ["S7"]}
+{"event_id": "convert-8", "kind": "convert", "success": true, "figure_ids": ["S8"]}
+{"event_id": "view-6", "kind": "image_view", "success": true, "figure_ids": ["S6"]}
+{"event_id": "view-7", "kind": "image_view", "success": true, "figure_ids": ["S7"]}

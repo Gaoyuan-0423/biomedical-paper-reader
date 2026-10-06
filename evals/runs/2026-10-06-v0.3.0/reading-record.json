@@ -1,0 +1,422 @@
+{
+  "schema_version": 1,
+  "mode": "full",
+  "delivery_status": "complete",
+  "inventory_complete": true,
+  "figures": [
+    {
+      "id": "Fig. 1",
+      "role": "main",
+      "source": "input/figure1.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-01"
+      ],
+      "observation": "整图A–C已看清。A纵轴组织样本n，HC/PRI/LM/PM为10/20/10/15，总55组织/20患者。B为B细胞内TAAB比例的患者聚合中位数0.08/0.12/0.16/0.10，无误差线或个体点。C标明全部恶性上皮患者聚合、LM−PM，NES3.20、nominal P0.001，LM n10/PM n15、配对成分建模，固定30基因集。",
+      "checked_panels": [
+        "A",
+        "B",
+        "C"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S1",
+      "role": "supplementary",
+      "source": "input/figure-s1.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-02"
+      ],
+      "observation": "整图A–C已看清。A过滤后每保留细胞检出基因中位数HC1800、PRI2200、LM2050、PM2150。B可辨认P01–P20全部标签，各标签点围成环状，不能以显示标签判断整合正确。C明确8000细胞、55组织文库嵌套20患者，校正协变量是文库，全部患者保留。",
+      "checked_panels": [
+        "A",
+        "B",
+        "C"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S2",
+      "role": "supplementary",
+      "source": "input/figure-s2.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-03"
+      ],
+      "observation": "整图A–B已看清。A行是turquoise/brown/blue模块，列TNF score/TAAB fraction/EMT score；turquoise对应r0.62/0.48/0.31，blue与EMT r0.35。B标明30/24/18基因、患者聚合归一化表达和探索性关联，功能过度代表见S8。",
+      "checked_panels": [
+        "A",
+        "B"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S3",
+      "role": "supplementary",
+      "source": "input/figure-s3.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-04"
+      ],
+      "observation": "A–C整图清晰。A箭头从TAAB/DC到CD4 T/CD8 T，图底部定义source CD86→target CD28。B明确TAAB→CD4 T0.30、TAAB→CD8 T0.12、DC→CD4 T0.22、DC→CD8 T0.08。C限定表达推断，未干预或空间验证，保留患者/文库层级。",
+      "checked_panels": [
+        "A",
+        "B",
+        "C"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S4",
+      "role": "supplementary",
+      "source": "input/figure-s4.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-05"
+      ],
+      "observation": "A–C整图清晰。A三列Chr1–4/Chr5–8/Chr9–12：正常上皮0.05/0.06/0.04、肿瘤上皮0.76/0.64/0.81、B参考0.02/0.03/0.02。B蓝normal、红tumor两个分开的点团。C九个基因簇C1–C9各10基因、共90基因，表示程序而非细胞比例；状态来自以B细胞为二倍体参照的RNA-CNV推断，没有直接DNA测量。",
+      "checked_panels": [
+        "A",
+        "B",
+        "C"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S5",
+      "role": "supplementary",
+      "source": "input/figure-s5.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-06"
+      ],
+      "observation": "A–B整图清晰。A列PRI/LM/PM，行Epi→TAAB为0.18/0.26/0.22，TAAB→Epi为0.07/0.09/0.08，DC→CD4 T为0.12/0.15/0.14。B明确左行标签source→target，MIF输出是建模值，未测分泌或功能必要性。",
+      "checked_panels": [
+        "A",
+        "B"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S6",
+      "role": "supplementary",
+      "source": "input/figure-s6.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-07",
+        "view-10"
+      ],
+      "observation": "C/D/F整图已看清。C潜能0=已分化、1=全能；D相对顺序0=较多分化、1=较少分化，使用不同配色。F纵轴明确中位潜能0–1，TAAB0.55、Early B0.13、Memory B0.10、Naive B0.08、Plasma B0.09、Reg B0.07；图值方向与正文/图注的TAAB更低不一致，待独立回读复核。 第二轮独立回读先核查F纵轴与六个表型标签，再对照C/D端点、main.md:p2及supplement.md:s-p6；确认同一指标下图值TAAB最高而文字称最低，构成已确认方向冲突。",
+      "checked_panels": [
+        "C",
+        "D",
+        "F"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S7",
+      "role": "supplementary",
+      "source": "input/figure-s7.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-08",
+        "view-11"
+      ],
+      "observation": "A/D/F整图已看清。A标题LM minus PM，图内蓝High in PM、红High in LM；TNFA_NFKB红+4.5、OXPHOS蓝−3.8，与图注红PM/蓝LM描述相反，待复核。D高EMT上皮LM−PRI、10 vs20患者、NES1.65、nominal P0.04，与主图C细胞子集和比较均不同。F颜色=平均表达0–2、点大小=检出率；CD74在TAAB2.0/90%最高，MIF在上皮1.4–1.8/80–90%，TAAB0.3/65%、memory T0.2/55%、CD8 T0.1/50%、Treg0.2/50%。 第二轮独立回读A确认比较LM−PM、图内蓝PM/红LM与正负t值自洽，supplement.md:s-p7的图注颜色语义相反，构成已确认图例冲突；S7D与Fig.1C是不同分析，不计数值冲突。",
+      "checked_panels": [
+        "A",
+        "D",
+        "F"
+      ],
+      "limitation": ""
+    },
+    {
+      "id": "Fig. S8",
+      "role": "supplementary",
+      "source": "input/figure-s8.png",
+      "status": "panels",
+      "required": true,
+      "view_event_ids": [
+        "view-09"
+      ],
+      "observation": "A–B整图已看清。A纵轴−log10(BH-adjusted P)，TNF/NF-kB/Antigen processing/Cell adhesion为4.3/3.5/2.5/1.8。B30模块基因、1000背景表达基因、12通路BH校正，合成成员表；过度代表是基因成员关系，不是特定细胞实测激活。",
+      "checked_panels": [
+        "A",
+        "B"
+      ],
+      "limitation": ""
+    }
+  ],
+  "claims": [
+    {
+      "id": "E1",
+      "kind": "result",
+      "figure_ids": [
+        "Fig. 1",
+        "Fig. S1"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "Fig.1A与S1C的组织/患者/细胞层级一致；另按明示采样关系算术核对55组织，不是原始数据分析。"
+    },
+    {
+      "id": "E2",
+      "kind": "result",
+      "figure_ids": [
+        "Fig. 1"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "B标题与四部位柱标已读清，分母为B细胞；值是患者聚合中位数，没有差异检验或区间。"
+    },
+    {
+      "id": "E3",
+      "kind": "result",
+      "figure_ids": [
+        "Fig. 1",
+        "Fig. S7"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "Fig.1C是全恶性上皮LM−PM，S7D是高EMT LM−PRI；比较与子集不同，两组NES/nominal P不计冲突。全文方法和图注及独立文字审核均确认比较身份；未重跑GSEA。"
+    },
+    {
+      "id": "E4",
+      "kind": "criticism",
+      "figure_ids": [
+        "Fig. S1"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "A/C范围与P01–P20标签已核查；图及图注都限定整合诊断作用，不断言算法失败或整合成功。缺少QC门槛和定量指标的评价来自已读方法。"
+    },
+    {
+      "id": "E5",
+      "kind": "result",
+      "figure_ids": [
+        "Fig. S2",
+        "Fig. S8"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "S2热图行列和r、S8纵轴−log10(BH校正P)及30/1000基因、12通路范围均读清；20患者聚合的相关与成员富集不是独立队列或细胞激活证明。"
+    },
+    {
+      "id": "E6",
+      "kind": "result",
+      "figure_ids": [
+        "Fig. S4"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "A正常/肿瘤/B参考的数值、B蓝normal红tumor、C九个基因簇共90基因均核查；基因程序不是细胞比例，CNV为RNA推断无匹配DNA。"
+    },
+    {
+      "id": "E7",
+      "kind": "result",
+      "figure_ids": [
+        "Fig. S3"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "A箭头定义CD86来源→CD28目标，与B行列绑定；TAAB→CD4 T0.30及三条对照边已读清，模型概率不是接触数或功能效应。"
+    },
+    {
+      "id": "E8",
+      "kind": "result",
+      "figure_ids": [
+        "Fig. S5",
+        "Fig. S7"
+      ],
+      "basis": "image",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "S5按来源→目标行和PRI/LM/PM列核对前向/反向；S7F逐基因与群标签核对表达/检出率，广泛检出与强度不均相容；方向来自网络定义而非表达点图本身。"
+    },
+    {
+      "id": "E9",
+      "kind": "criticism",
+      "figure_ids": [
+        "Fig. S6"
+      ],
+      "basis": "image",
+      "status": "conflict",
+      "comparison_checked": true,
+      "verification_note": "两轮实际查看（view-07、view-10）均读清F中位潜能0–1轴与六表型标签：TAAB0.55，其他0.07–0.13；再对照C/D高值轴义、main.md:p2行19与supplement.md:s-p6行39，确认同一比较中图内TAAB最高、正文/图注写更低。无底层得分不能裁定正确结果。"
+    },
+    {
+      "id": "E10",
+      "kind": "criticism",
+      "figure_ids": [
+        "Fig. S7"
+      ],
+      "basis": "image",
+      "status": "conflict",
+      "comparison_checked": true,
+      "verification_note": "两轮实际查看（view-08、view-11）核对A标题LM minus PM、红TNFA_NFKB+4.5、蓝OXPHOS−3.8和图内蓝PM/红LM，图内自洽；再对照supplement.md:s-p7行45红PM/蓝LM，确认同一面板颜色语义相反。此冲突与D的不同GSEA数值分开。"
+    },
+    {
+      "id": "E11",
+      "kind": "criticism",
+      "figure_ids": [],
+      "basis": "text",
+      "status": "supported",
+      "comparison_checked": true,
+      "verification_note": "通读main.md与supplement.md全文及全部图注；原始矩阵、代码、排序表明确缺失，无干预、空间验证、DNA测量或谱系跟踪；关键方法参数未详述，不能独立复现。独立审核只读文本，没有查看图像。"
+    }
+  ],
+  "report_assertions": [
+    {
+      "figure_id": "Fig. 1",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. 1",
+      "level": "panels",
+      "report_location": "Figure 1｜部位关联的起点；原图说明"
+    },
+    {
+      "figure_id": "Fig. 1",
+      "level": "panels",
+      "report_location": "核心证据记录：E1、E2、E3"
+    },
+    {
+      "figure_id": "Fig. S1",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S1",
+      "level": "panels",
+      "report_location": "Figure S1 与 S4：S1 QC 与文库整合；原图说明"
+    },
+    {
+      "figure_id": "Fig. S1",
+      "level": "panels",
+      "report_location": "核心证据记录：E1、E4"
+    },
+    {
+      "figure_id": "Fig. S2",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S2",
+      "level": "panels",
+      "report_location": "Figure S2 与 S8：模块关联；原图说明"
+    },
+    {
+      "figure_id": "Fig. S2",
+      "level": "panels",
+      "report_location": "核心证据记录：E5"
+    },
+    {
+      "figure_id": "Fig. S3",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S3",
+      "level": "panels",
+      "report_location": "Figure S3、S5 与 S7F：S3 CD86–CD28；原图说明"
+    },
+    {
+      "figure_id": "Fig. S3",
+      "level": "panels",
+      "report_location": "核心证据记录：E7"
+    },
+    {
+      "figure_id": "Fig. S4",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S4",
+      "level": "panels",
+      "report_location": "Figure S1 与 S4：S4 RNA-CNV；原图说明"
+    },
+    {
+      "figure_id": "Fig. S4",
+      "level": "panels",
+      "report_location": "核心证据记录：E6"
+    },
+    {
+      "figure_id": "Fig. S5",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S5",
+      "level": "panels",
+      "report_location": "Figure S3、S5 与 S7F：S5 MIF模型方向；原图说明"
+    },
+    {
+      "figure_id": "Fig. S5",
+      "level": "panels",
+      "report_location": "核心证据记录：E8"
+    },
+    {
+      "figure_id": "Fig. S6",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S6",
+      "level": "panels",
+      "report_location": "Figure S6｜潜能轴义一致，TAAB 结果与文字相反；原图说明"
+    },
+    {
+      "figure_id": "Fig. S6",
+      "level": "panels",
+      "report_location": "核心证据记录：E9"
+    },
+    {
+      "figure_id": "Fig. S7",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S7",
+      "level": "panels",
+      "report_location": "Figure S7A/D与S7F表达点图；原图说明"
+    },
+    {
+      "figure_id": "Fig. S7",
+      "level": "panels",
+      "report_location": "核心证据记录：E3、E8、E10"
+    },
+    {
+      "figure_id": "Fig. S8",
+      "level": "overview",
+      "report_location": "来源与本次范围：1主图、8补图均已概览；资源表9张来源图"
+    },
+    {
+      "figure_id": "Fig. S8",
+      "level": "panels",
+      "report_location": "Figure S2 与 S8：通路成员富集；原图说明"
+    },
+    {
+      "figure_id": "Fig. S8",
+      "level": "panels",
+      "report_location": "核心证据记录：E5"
+    }
+  ]
+}

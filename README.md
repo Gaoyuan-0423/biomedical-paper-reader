@@ -2,7 +2,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.2.0。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。面向原创生物医学研究；按实际证据选择检查点。
+版本：v0.3.0。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。完整精读逐张概览本地已有主图与补图，按实际证据选择深入核查的面板。
 
 A Chinese-first agent skill for close reading, quick screening, or focused figure/method analysis of one biomedical paper. Explicit English and Chinese–English requests are supported with the same evidence standards.
 
@@ -14,17 +14,19 @@ A Chinese-first agent skill for close reading, quick screening, or focused figur
 
 仅有短片段且原文无法获取时，合并无实质内容的章节，集中说明证据与关键缺口；完整报告的篇幅来自原文信息量。
 
-**补充材料默认使用本地已有文件。** 检查上传内容、论文同目录和用户指定的相关文件夹；确认属于该论文后按需分析。没有补充文件就以正文完成报告，说明哪些判断未核查附件。只有用户明确要求补取时才联网下载，不把附件缺失当作作者未做验证。
+**补充材料默认使用本地已有文件。** 检查上传内容、论文同目录和用户指定的相关文件夹；确认属于该论文后，完整精读逐张概览已有补图并读图注，补充表与数据按相关问题读取。没有补充文件时继续正文分析，说明无法核查的主张及受限范围。只有用户明确要求补取时才联网下载，不把附件缺失当作作者未做验证。
 
 **直接复用可读的 PDF 提取结果。** 使用现有工具提取文本、检查阅读顺序并保留页序，不再优先使用 MarkItDown，也不要求先生成 Markdown 底稿。原 PDF 继续用于数字和图像核查。只有具体页面的提取质量影响解读时才更换处理方式。
 
-**范围内的图先概览，必要面板再放大。** 完整精读覆盖每张主图；速读／专题覆盖选定结果及必要对照所在图。读完整图注，关注核心结论、必要对照、阴性结果及图文冲突；已看清内容复用，同组待查面板成组准备。报告区分概览和具体核查范围。执行细节见 [材料处理说明](references/material-handling.md)。
+**范围内的图先概览，必要面板再放大。** 完整精读覆盖已有每张主图、补图及 Extended Data；速读／专题覆盖选定结果及必要对照所在图。读完整图注，关注核心结论、必要对照、阴性结果及图文冲突；已看清内容复用，同组待查面板成组准备。报告区分概览和具体核查范围。执行细节见 [材料处理说明](references/material-handling.md)。
+
+**查看状态可追溯，重大批评须复核。** 使用[逐图记录](references/reading-record.md)汇总范围，转换或复制图片不算查看；图内标签、图注和正文独立对照。先确认样本层级、比较和指标是否相同，再判断冲突。可读图仍待看时继续读取；真实障碍明确标受限交付。可选标准库校验器检查记录与声明，有宿主事件文件时再检查查看动作，不代替科学语义判断。
 
 语言由用户要求决定，英文论文不会自动触发英文输出。未指定就用中文；明确双语时两种表述共用证据记录，数字、方向和判断保持一致。英文直接依据证据写作，标题、解读、局限和建议均使用自然学术英文。
 
 | 模式 | 实际读取与交付 |
 |---|---|
-| 完整精读（默认） | 通读可用正文和方法、覆盖主图／核心结果；已有相关补充按主张阅读；交付完整论证与逐图／结果解释 |
+| 完整精读（默认） | 通读可用正文和方法，逐张概览已有主图／补图，必要面板深入核查；交付论证与逐图／结果解释，未完成范围标受限 |
 | 速读 | 先读摘要、问题、结果结构与讨论，再定点核查筛选判断依据的图、对照及方法；列明未读范围，不声称全文核验 |
 | 指定图／方法 | 解析目标并补足影响解释的上下文、必要对照和已有相关补图；交付局部设计、结果、边界及适配建议 |
 
@@ -119,10 +121,13 @@ Use $biomedical-paper-reader to analyze Figure 3 in English. Read the relevant m
 - `references/evidence-rules.md`：定位、统计单位、推断范围与缺失信息规则。
 - `references/study-checks.md`：按证据类型选用的内部检查点。
 - `references/material-handling.md`：本地附件、文本复用、分步看图、下载调度和状态同步。
+- `references/reading-record.md`、`scripts/check_reading_record.py`：逐图状态、实际查看引用及覆盖／声明检查；无宿主事件时只校验记录一致性。
 - `agents/openai.yaml`：可选的 Codex 界面元数据。
 - `evals/cases.md`、`evals/fixtures/`：行为验收设计和原创虚构材料。
 - `evals/RESULTS.md`：版本对应的验收入口；历史记录与新回归分开。
 - `evals/generate_visual_fixtures.py`、`evals/fixtures/visual/`：可重建的原创多面板图、正文及补充材料；不含第三方论文资源。
+- `evals/generate_coverage_fixtures.py`、`evals/fixtures/coverage/`：所有补图初始已在本地的原创回归材料，覆盖漏看、标签误读及真假冲突。
+- `evals/test_reading_record.py`：查看动作与覆盖状态的执行回归。
 - `evals/validate_repo.py`：使用 Python 标准库检查本地链接、文件引用与回归记录完整性；不替代语义评分。
 - `examples/`、`evals/runs/`：历史示例与当前版本实际试读输出、评分及失败记录。
 - `CHANGELOG.md`：版本变化。
@@ -134,7 +139,7 @@ Use $biomedical-paper-reader to analyze Figure 3 in English. Read the relevant m
 - [HCC 新辅助 nivolumab 多模态研究](https://doi.org/10.1186/s12943-026-02682-x)
 - [小鼠结肠炎突变与空间邻域研究](https://doi.org/10.1038/s41588-026-02673-0)
 
-既有两篇真实试读和三份虚构短文的行为验收对应 v0.1.0；v0.1.1、v0.1.2 没有重跑，不能把旧结果当作当前版验收。当前版增加原创多面板视觉输入、语言／模式案例及补充加入后的更新案例；实际输出、逐项语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)。可查看 [输入与报告示例](examples/README.md)。完整第三方论文、原图和原始数据不随公开仓库分发。
+既有两篇真实试读和三份虚构短文的行为验收对应 v0.1.0；v0.1.1、v0.1.2 没有重跑，不能把旧结果当作当前版验收。v0.2.0 的语言／模式及附件更新试读保留原版本记录；v0.3.0 增加逐图动作校验及所有补图初始可用的回归材料。各版实际输出、语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)。可查看 [输入与报告示例](examples/README.md)。完整第三方论文、原图和原始数据不随公开仓库分发。
 
 开发验收可执行 `python3 evals/validate_repo.py`；视觉夹具可用已有 Pillow 运行 `python3 evals/generate_visual_fixtures.py` 重建。Pillow 仅用于开发夹具，技能阅读不强制 Python 或任何库。模型行为由独立试读和逐项来源复核评估，不能只靠关键词、标题或静态脚本判通过。
 

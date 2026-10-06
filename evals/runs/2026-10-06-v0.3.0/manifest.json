@@ -1,0 +1,160 @@
+{
+  "version": "v0.3.0",
+  "date": "2026-10-06",
+  "instruction_sha256": {
+    "SKILL.md": "1c1043b4dff21afd20fbcb9887f4b49f494152a5f3acffe2e927f89f85ebd0d9",
+    "README.md": "876cab8af8d7f390ea643641c50534b8c6f321f344e5129bf86a4aa5cd49045d",
+    "references/reading-modes.md": "2629ad8afc459eafbd56e8d75c9539565900f635374b55a1283ed47af756cdd2",
+    "references/evidence-rules.md": "66bcd37722e84d0724e42249ff9437951e708813173247908794aa4ab0637dc1",
+    "references/material-handling.md": "c4b158861c6cf907fc116bd4795baef50995396eab990dcc1c460f9c9092bfe7",
+    "references/report-template.md": "ff3e2f4fde863b565ce7e8bd1bcc6d678ff5d8503891f323d431ccdd098a0a77",
+    "references/study-checks.md": "95fe2fe233ce1f9db0fac6bf4d6ae288d7820fd8695bf6ad175c74ab06a0b296",
+    "references/reading-record.md": "228c8b8414551c0c2e7c29a69c57019722f2a1a169a07ef65500372bf92d7112",
+    "scripts/check_reading_record.py": "1d2053120291fc8de28dddfba576be312f19c8db78909afcc978631fc3a78181",
+    "evals/test_reading_record.py": "6eaf7276952132d12ce2c1b50ddf7703c317264ae38318eabd4cedbf9c3dba5c",
+    "evals/generate_coverage_fixtures.py": "aeedead453f5540122fa8b3c967eea6cd5fe49dd79dea45606bea486dc4d9c15"
+  },
+  "cases": [
+    {
+      "id": "coverage-full",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/report.md",
+          "sha256": "73de69cd5807bcafd0528c8cb2abd86112de9c92a77a894bc27b6953af6e3396"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/reading-record.json",
+          "sha256": "cf1fa9c982dcf87f59d6287b6465a763af1592bfbfe05b78d0f7c0fd2ebcebd5"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/image-events.jsonl",
+          "sha256": "d73f89fb8b7e4701837d9410437a1e6a6f2328dc2dc06889fbf0a1a3c9b54b37"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/validation.json",
+          "sha256": "512dbe9883aad088024d349bcd21b2d9d7675b1c49c9043dd018759df9acc0e0"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/grading.json",
+          "sha256": "d29ddaec1ccdd8a41d783aa3a05f404b939f8a9c6a59377fa90d5b49260f8b97"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/checks.json",
+          "sha256": "be4e26eb14c99c10ced1d9cf9d87338f8c0c7b71c5ee1ca405d41b2ef64c4525"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/README.md",
+          "sha256": "284fd0e2a8855a573bdcc34d84a6303a908d02237c917873e1c9dc3db80b77db"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s1.png",
+          "sha256": "59e200900c0503b51770b2d05a14fada95f2c47158319a03a36be74e3957cae3"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s2.png",
+          "sha256": "cbb2042bf44de40cd3ed33eae9cfdd773f15a441072ef28a1d6040c0b8c30217"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s3.png",
+          "sha256": "0fa34605e1ece51bda484f25c32b07452773d54bb183b5d39a173fa822dc7858"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s4.png",
+          "sha256": "4dd17b7a82c5b8a02a7feec77a2243eeab107a7d3466146564a33ed53a02b51d"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s5.png",
+          "sha256": "606f4e4cd79dc91fb924d3e05ec8fa4441434051dd3106af7472378f152e6572"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s6.png",
+          "sha256": "433949cb31ba0e55e0125ef2b7760cd3136f2e3a178a485ab6856ee60e002684"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s7.png",
+          "sha256": "d4be037a381ad056c1b46228cffa5bc3a08e1426b56ecfd1d946014ef8289d18"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure-s8.png",
+          "sha256": "9223e304978a8d1fb93c18a1ea64e7ac42799d6f84203c497d12a913179e99eb"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/figure1.png",
+          "sha256": "a4108b4df624e14a288808126b1e959171f7bf986ea27eb41fbb9939825e3c68"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/main.md",
+          "sha256": "2dd8196648e5835c83fdc5094374d95800f402edf122d8da2aa7b03bfbb90dd5"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/input/supplement.md",
+          "sha256": "c7099ccc62aa517251cffab654e4c010b42200816f0972fd0107da272adc883f"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s1.png",
+          "sha256": "59e200900c0503b51770b2d05a14fada95f2c47158319a03a36be74e3957cae3"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s2.png",
+          "sha256": "cbb2042bf44de40cd3ed33eae9cfdd773f15a441072ef28a1d6040c0b8c30217"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s3.png",
+          "sha256": "0fa34605e1ece51bda484f25c32b07452773d54bb183b5d39a173fa822dc7858"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s4.png",
+          "sha256": "4dd17b7a82c5b8a02a7feec77a2243eeab107a7d3466146564a33ed53a02b51d"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s5.png",
+          "sha256": "606f4e4cd79dc91fb924d3e05ec8fa4441434051dd3106af7472378f152e6572"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s6.png",
+          "sha256": "433949cb31ba0e55e0125ef2b7760cd3136f2e3a178a485ab6856ee60e002684"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s7.png",
+          "sha256": "d4be037a381ad056c1b46228cffa5bc3a08e1426b56ecfd1d946014ef8289d18"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure-s8.png",
+          "sha256": "9223e304978a8d1fb93c18a1ea64e7ac42799d6f84203c497d12a913179e99eb"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/assets/figure1.png",
+          "sha256": "a4108b4df624e14a288808126b1e959171f7bf986ea27eb41fbb9939825e3c68"
+        }
+      ],
+      "grading": "evals/runs/2026-10-06-v0.3.0/grading.json"
+    },
+    {
+      "id": "reading-record-negative",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/negative-record.json",
+          "sha256": "fc997e8967c10db4d420cfc6865e90898e7ad4c3b303d0ac47e59c8fd8ab35d5"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/negative-events.jsonl",
+          "sha256": "d44ea19d7a9431f222e54f3effb88f774129106a13efa0cdf675acfdebe9b998"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/negative-validation.json",
+          "sha256": "daa43e588e4a58bd5941e465dd2c307eb489a436f063b2dd98c22aa903b18432"
+        },
+        {
+          "path": "evals/runs/2026-10-06-v0.3.0/negative-grading.json",
+          "sha256": "2eaabef25882d5acc0b1f88d0e0aaf25957ffb2d6e25209127646dbdc72d59db"
+        }
+      ],
+      "grading": "evals/runs/2026-10-06-v0.3.0/negative-grading.json"
+    }
+  ],
+  "limits": [
+    "One independent synthetic reading case, not an accuracy estimate",
+    "Reader-adapted view events, not authenticated full host logs",
+    "No DSH end-to-end rerun or real manuscript reread"
+  ]
+}

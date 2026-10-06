@@ -133,17 +133,20 @@ class IntegrityTests(unittest.TestCase):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--manifest', type=Path, help='Recorded run manifest; default is the latest dated run with a manifest')
     args = parser.parse_args()
     if args.self_test:
         result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(IntegrityTests))
         return 0 if result.wasSuccessful() else 1
     errors, count, external = check_links(ROOT)
-    manifest = ROOT / 'evals/runs/2026-10-02-v0.2.0/manifest.json'
-    if manifest.exists():
+    manifests = sorted((ROOT / 'evals/runs').glob('*/manifest.json'))
+    manifest = args.manifest or (manifests[-1] if manifests else None)
+    if manifest is not None and manifest.is_file():
         errors += check_manifest(ROOT, json.loads(manifest.read_text()))
     else:
         errors.append('current-version run manifest missing')
     result = {'status': 'pass' if not errors else 'fail', 'local_links_checked': count,
+              'recorded_manifest': str(manifest.relative_to(ROOT)) if manifest is not None and manifest.is_relative_to(ROOT) else str(manifest),
               'external_links_not_fetched': external, 'errors': errors,
               'scope': 'link/anchor and recorded-artifact integrity; no semantic scoring or speed claim'}
     print(json.dumps(result, ensure_ascii=False, indent=2))

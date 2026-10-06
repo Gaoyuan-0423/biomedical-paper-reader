@@ -1,0 +1,18 @@
+{
+  "case": "reading-record-negative",
+  "result": "pass_expected_rejection",
+  "criteria": [
+    {
+      "id": "fake_supp2_and_incomplete_full_delivery",
+      "status": "pass",
+      "evidence": [
+        {
+          "artifact": "negative-validation.json",
+          "line": 2,
+          "quote": "\"status\": \"fail\""
+        }
+      ],
+      "source_check": "All8 conversions but only S6/S7 successful views: unknown_event catches falseS2 view, incomplete_coverage catches required unread figures; CLI exited1."
+    }
+  ]
+}

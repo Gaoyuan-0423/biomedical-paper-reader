@@ -22,6 +22,9 @@ reports/
 downloads/
 sources/
 assets/
+# This recorded run contains only the repository's original synthetic fixtures.
+!evals/runs/2026-10-06-v0.3.0/assets/
+!evals/runs/2026-10-06-v0.3.0/assets/*.png
 *.pdf
 *.xlsx
 *.fastq*

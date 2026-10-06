@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-06",
+  "scope": "Execution regressions, structural validation and whitespace; not scientific semantic grading",
+  "checks": [
+    {
+      "id": "reading_record_regressions",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "test_canonical_coverage_counts_per_role (test_reading_record.ReadingRecordTests.test_canonical_coverage_counts_per_role) ... ok\ntest_caption_only_cannot_support_image_claim_or_assertion (test_reading_record.ReadingRecordTests.test_caption_only_cannot_support_image_claim_or_assertion) ... ok\ntest_cli_jsonl_and_nonzero_failure_exit (test_reading_record.ReadingRecordTests.test_cli_jsonl_and_nonzero_failure_exit) ... ok\ntest_conflict_requires_checked_comparison_and_note (test_reading_record.ReadingRecordTests.test_conflict_requires_checked_comparison_and_note) ... ok\ntest_conversion_copy_failed_and_wrong_figure_are_not_views (test_reading_record.ReadingRecordTests.test_conversion_copy_failed_and_wrong_figure_are_not_views) ... ok\ntest_exact_eight_converted_only_six_seven_viewed_fake_two (test_reading_record.ReadingRecordTests.test_exact_eight_converted_only_six_seven_viewed_fake_two) ... ok\ntest_full_cannot_skip_figure_by_marking_it_optional (test_reading_record.ReadingRecordTests.test_full_cannot_skip_figure_by_marking_it_optional) ... ok\ntest_ids_references_and_schema_are_checked (test_reading_record.ReadingRecordTests.test_ids_references_and_schema_are_checked) ... ok\ntest_limited_pending_needs_a_specific_reason (test_reading_record.ReadingRecordTests.test_limited_pending_needs_a_specific_reason) ... ok\ntest_limited_unreadable_is_honest_but_not_complete (test_reading_record.ReadingRecordTests.test_limited_unreadable_is_honest_but_not_complete) ... ok\ntest_panels_require_names_observation_and_event_ids (test_reading_record.ReadingRecordTests.test_panels_require_names_observation_and_event_ids) ... ok\ntest_portable_sources_do_not_need_to_exist (test_reading_record.ReadingRecordTests.test_portable_sources_do_not_need_to_exist) ... ok\ntest_quick_and_focused_allow_unselected_figures (test_reading_record.ReadingRecordTests.test_quick_and_focused_allow_unselected_figures) ... ok\ntest_record_only_explicitly_disclaims_independent_proof (test_reading_record.ReadingRecordTests.test_record_only_explicitly_disclaims_independent_proof) ... ok\ntest_true_full_coverage_with_actual_events (test_reading_record.ReadingRecordTests.test_true_full_coverage_with_actual_events) ... ok\n\n----------------------------------------------------------------------\nRan 15 tests in 0.234s\n\nOK\n"
+    },
+    {
+      "id": "integrity_self_tests",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "test_links_and_anchors (__main__.IntegrityTests.test_links_and_anchors) ... ok\ntest_stale_scoring_quote_is_rejected (__main__.IntegrityTests.test_stale_scoring_quote_is_rejected) ... ok\ntest_tampered_output_is_rejected (__main__.IntegrityTests.test_tampered_output_is_rejected) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.005s\n\nOK\n"
+    },
+    {
+      "id": "skill_frontmatter",
+      "returncode": 0,
+      "stdout": "Skill is valid!\n",
+      "stderr": ""
+    },
+    {
+      "id": "diff_whitespace",
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

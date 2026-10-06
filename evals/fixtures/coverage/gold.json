@@ -1,0 +1,74 @@
+{
+  "fixture_version": "coverage-v1",
+  "not_reader_input": true,
+  "source_kind": "Original synthetic all-local material; not a real manuscript or data analysis",
+  "reader_inputs": [
+    "main.md",
+    "supplement.md",
+    "figure1.png",
+    "figure-s1.png",
+    "figure-s2.png",
+    "figure-s3.png",
+    "figure-s4.png",
+    "figure-s5.png",
+    "figure-s6.png",
+    "figure-s7.png",
+    "figure-s8.png"
+  ],
+  "availability": "All 11 reader-input files are available from the outset; none staged or missing",
+  "expected_observations": {
+    "S1": "QC and library batch integration, 20 patients represented; 55 nested tissue libraries",
+    "S2": "Patient-level module associations, turquoise 30 genes and TNF r=.62",
+    "S3": "CD86-CD28 expression-inferred network; TAAB -> CD4 T .30",
+    "S4": "CNV amplitude, normal/tumor embedding and C1-C9 gene clusters; not cell proportions",
+    "S5": "PRI/LM/PM communication with explicit source -> target; epi -> TAAB higher than reverse",
+    "S6": "Both endpoints encode high potential / less differentiation; TAAB .55 highest",
+    "S7": "Actual blue highPM/red highLM; MIF expression highest epi/PM/LM, detected in all columns",
+    "S8": "Turquoise KEGG-style overrepresentation, background1000, BH12; not direct activation"
+  },
+  "true_conflicts": [
+    {
+      "id": "C01_potency",
+      "text_locations": [
+        "main.md p2",
+        "supplement.md s-p6 F"
+      ],
+      "image_location": "figure-s6.png F",
+      "fact": "Text/caption say TAAB lower, but TAAB median .55 is highest; other medians .07-.13",
+      "pass": "Flag unresolved text/caption-versus-image direction conflict; avoid silently correcting text or concluding real stemness"
+    },
+    {
+      "id": "C02_GSVA_colors",
+      "text_locations": [
+        "supplement.md s-p7 A"
+      ],
+      "image_location": "figure-s7.png A",
+      "fact": "Caption red highPM/blue highLM; actual plot blue highPM/red highLM",
+      "pass": "Independently read plot labels, identify caption reversal; do not copy caption as a verified image observation"
+    }
+  ],
+  "no_conflicts": [
+    {
+      "id": "N01_units",
+      "fact": "20 patients supply55 tissues:10*4+5*2+5*1=55; HC10 PRI20 LM10 PM15",
+      "fail": "Calls55samples versus20patients a sample-count contradiction or treats8000cells as patients"
+    },
+    {
+      "id": "N02_potency_endpoints",
+      "fact": "S6C1Totipotent and S6D1Less diff both mean less differentiated/highpotential; palettes differ",
+      "fail": "Calls endpoint semantics opposite solely from wording or color palette"
+    },
+    {
+      "id": "N03_MIF_breadth",
+      "fact": "MIF detected50-90% in every population, while mean expression varies; memoryT/CD8T are pale, not highest",
+      "fail": "Equates broadly detected with uniformly expressed, reverses columns, or infers T-cell MIF source from this plot"
+    },
+    {
+      "id": "N04_NES_identity",
+      "fact": "Fig1C3.20/P.001:all malignant epi LM-PM; S7D1.65/P.04:highEMT epi LM-PRI; samegeneset different contrasts/subsets",
+      "fail": "Treats different NES/P values as automatic contradiction without aligning comparison and cell subset"
+    }
+  ],
+  "coverage_pass": "Actually open all9 image files; record all8 supplements as image-inspected with brief figure-specific observations. Captions/file listing alone are not image inspection. Any unreadable panel must identify a real encountered limitation.",
+  "evaluation": "Grade against actual read/view trace and located report passages. Run reader with only reader_inputs copied into a clean directory; never provide gold.json or generator. Static titles/keywords alone do not establish passing behavior. Preserve first-run failures separately from revisions."
+}

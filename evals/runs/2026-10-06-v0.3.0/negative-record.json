@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "mode": "full",
+  "delivery_status": "complete",
+  "inventory_complete": true,
+  "figures": [
+    {
+      "id": "S1",
+      "role": "supplementary",
+      "source": "assets/supp1.png",
+      "status": "caption_only",
+      "required": true,
+      "view_event_ids": [],
+      "observation": "",
+      "checked_panels": [],
+      "limitation": ""
+    },
+    {
+      "id": "S2",
+      "role": "supplementary",
+      "source": "assets/supp2.png",
+      "status": "overview",
+      "required": true,
+      "view_event_ids": [
+        "view-2"
+      ],
+      "observation": "Observed panel labels and group layout.",
+      "checked_panels": [],
+      "limitation": ""
+    },
+    {
+      "id": "S3",
+      "role": "supplementary",
+      "source": "assets/supp3.png",
+      "status": "caption_only",
+      "required": true,
+      "view_event_ids": [],
+      "observation": "",
+      "checked_panels": [],
+      "limitation": ""
+    },
+    {
+      "id": "S4",
+      "role": "supplementary",
+      "source": "assets/supp4.png",
+      "status": "caption_only",
+      "required": true,
+      "view_event_ids": [],
+      "observation": "",
+      "checked_panels": [],
+      "limitation": ""
+    },
+    {
+      "id": "S5",
+      "role": "supplementary",
+      "source": "assets/supp5.png",
+      "status": "caption_only",
+      "required": true,
+      "view_event_ids": [],
+      "observation": "",
+      "checked_panels": [],
+      "limitation": ""
+    },
+    {
+      "id": "S6",
+      "role": "supplementary",
+      "source": "assets/supp6.png",
+      "status": "overview",
+      "required": true,
+      "view_event_ids": [
+        "view-6"
+      ],
+      "observation": "Observed panel labels and group layout.",
+      "checked_panels": [],
+      "limitation": ""
+    },
+    {
+      "id": "S7",
+      "role": "supplementary",
+      "source": "assets/supp7.png",
+      "status": "overview",
+      "required": true,
+      "view_event_ids": [
+        "view-7"
+      ],
+      "observation": "Observed panel labels and group layout.",
+      "checked_panels": [],
+      "limitation": ""
+    },
+    {
+      "id": "S8",
+      "role": "supplementary",
+      "source": "assets/supp8.png",
+      "status": "caption_only",
+      "required": true,
+      "view_event_ids": [],
+      "observation": "",
+      "checked_panels": [],
+      "limitation": ""
+    }
+  ],
+  "claims": [],
+  "report_assertions": [
+    {
+      "figure_id": "S2",
+      "level": "overview",
+      "report_location": "Supplemental coverage statement"
+    }
+  ]
+}

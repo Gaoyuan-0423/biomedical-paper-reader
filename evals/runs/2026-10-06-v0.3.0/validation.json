@@ -1,0 +1,30 @@
+{
+  "status": "pass",
+  "verification_scope": "record_and_supplied_events",
+  "delivery_status": "complete",
+  "completion_record_consistent": true,
+  "completion_verified": true,
+  "coverage_summary": {
+    "main": {
+      "total": 1,
+      "overview_completed": 1,
+      "panels_checked": 1,
+      "pending": 0,
+      "caption_only": 0,
+      "unreadable": 0
+    },
+    "supplementary": {
+      "total": 8,
+      "overview_completed": 8,
+      "panels_checked": 8,
+      "pending": 0,
+      "caption_only": 0,
+      "unreadable": 0
+    }
+  },
+  "errors": [],
+  "warnings": [],
+  "limitations": [
+    "Checks declared coverage/provenance consistency only; does not judge scientific semantics, extract report assertions, or authenticate host-adapted events."
+  ]
+}
