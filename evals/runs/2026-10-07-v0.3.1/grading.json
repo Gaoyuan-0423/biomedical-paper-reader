@@ -1,0 +1,121 @@
+{
+  "version": "v0.3.1",
+  "review": "manual comparison of raw input and independent output; no keyword-only grading",
+  "scope": "one synthetic text-and-table method-chain case",
+  "criteria": [
+    {
+      "id": "first-result-design",
+      "status": "pass",
+      "rationale": "The paired tissue question, donor-level differences and paired-test output are explained from the actual design, not only named.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 43,
+          "quote": "输入是每位供者的两份组织 R 检测读数。"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 47,
+          "quote": "表达更高并不回答受体是否参与信号作用。"
+        }
+      ]
+    },
+    {
+      "id": "later-intervention-input-output",
+      "status": "pass",
+      "rationale": "The second result identifies all conditions, the antibody-versus-vehicle primary contrast, technical-well aggregation before donor inference, and the measured Y endpoint.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 55,
+          "quote": "每位供者每条件先将 3 个技术孔平均"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 55,
+          "quote": "双侧配对 t 检验针对 6 个供者差值"
+        }
+      ]
+    },
+    {
+      "id": "later-validation-input-output",
+      "status": "pass",
+      "rationale": "The third result explains outcome/predictors and age adjustment; distinguishes the independent case-control estimand from the discovery paired contrast.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 71,
+          "quote": "模型以 R 表达为因变量，以病例状态和年龄为自变量"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 73,
+          "quote": "两者估计对象不同"
+        }
+      ]
+    },
+    {
+      "id": "later-result-logical-role",
+      "status": "pass",
+      "rationale": "Both later results explain what they add and what they cannot repair in the previous step; the last connects to the overall model instead of inventing another experiment.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 61,
+          "quote": "这一后续结果能补充关联的外部适用性，却不能自动解决本步骤的抗体特异性问题。"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 77,
+          "quote": "组织关联的外部重复仍不确定。"
+        }
+      ]
+    },
+    {
+      "id": "supplement-quality-control-role",
+      "status": "pass",
+      "rationale": "The QC unit explains replicate precision and common bridging normalization; it supports R tissue measurement, not biological replication or Y-assay verification.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 85,
+          "quote": "桥接样本提供贯穿各批的共同参照"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 89,
+          "quote": "S1 不能充当另一独立队列或独立功能验证。"
+        }
+      ]
+    },
+    {
+      "id": "missing-settings-not-invented",
+      "status": "pass",
+      "rationale": "The absent antibody dose is explicitly a source limitation and no default dose is supplied.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 63,
+          "quote": "抗体剂量未报告"
+        }
+      ]
+    },
+    {
+      "id": "method-result-boundary",
+      "status": "pass",
+      "rationale": "Observed reductions and nonsignificant independent validation are preserved without expanding to patient benefit, mediation, or equivalence.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 63,
+          "quote": "不能宣称两组存活“等效”"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 75,
+          "quote": "现有结果尚不能确定关联已得到重复，也不能证明不存在关联。"
+        }
+      ]
+    }
+  ]
+}

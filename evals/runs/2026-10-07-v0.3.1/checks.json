@@ -1,0 +1,29 @@
+{
+  "version": "v0.3.1",
+  "date": "2026-10-07",
+  "checks": [
+    {
+      "name": "skill-creator quick_validate",
+      "status": "pass",
+      "scope": "frontmatter and scaffold structure"
+    },
+    {
+      "name": "validate_repo",
+      "status": "pass",
+      "local_links_checked": 288,
+      "scope": "links, anchors, saved artifact hashes and grading quote integrity"
+    },
+    {
+      "name": "git diff --check",
+      "status": "pass",
+      "scope": "tracked diff whitespace"
+    }
+  ],
+  "behavior": "7 criteria manually compared against original input and independent output; see grading.json",
+  "not_rerun": [
+    "real-paper full generation",
+    "v0.3.0 visual action case",
+    "all language and mode cases",
+    "scientific computation"
+  ]
+}

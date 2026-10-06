@@ -2,7 +2,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.3.0。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。完整精读逐张概览本地已有主图与补图，按实际证据选择深入核查的面板。
+版本：v0.3.1。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。完整精读逐张概览本地已有主图与补图，按实际证据选择深入核查的面板，并解释各结果的方法与论证作用。
 
 A Chinese-first agent skill for close reading, quick screening, or focused figure/method analysis of one biomedical paper. Explicit English and Chinese–English requests are supported with the same evidence standards.
 
@@ -21,6 +21,8 @@ A Chinese-first agent skill for close reading, quick screening, or focused figur
 **范围内的图先概览，必要面板再放大。** 完整精读覆盖已有每张主图、补图及 Extended Data；速读／专题覆盖选定结果及必要对照所在图。读完整图注，关注核心结论、必要对照、阴性结果及图文冲突；已看清内容复用，同组待查面板成组准备。报告区分概览和具体核查范围。执行细节见 [材料处理说明](references/material-handling.md)。
 
 **查看状态可追溯，重大批评须复核。** 使用[逐图记录](references/reading-record.md)汇总范围，转换或复制图片不算查看；图内标签、图注和正文独立对照。先确认样本层级、比较和指标是否相同，再判断冲突。可读图仍待看时继续读取；真实障碍明确标受限交付。可选标准库校验器检查记录与声明，有宿主事件文件时再检查查看动作，不代替科学语义判断。
+
+**看过图与解释完整分开检查。** 范围内每个主图／主要结果单元都应解释研究问题、对象与比较、方法输入输出、结果支持范围及论证衔接；不能只给前几图方法，后续只贴图或列疑点。共用流程可回指，补图交代 QC、对照、验证或拓展作用；检查具体解释，不按标题或方法名数量判通过。见[逐图解释检查](references/report-template.md#逐图解释的交付检查)。
 
 语言由用户要求决定，英文论文不会自动触发英文输出。未指定就用中文；明确双语时两种表述共用证据记录，数字、方向和判断保持一致。英文直接依据证据写作，标题、解读、局限和建议均使用自然学术英文。
 
@@ -128,6 +130,7 @@ Use $biomedical-paper-reader to analyze Figure 3 in English. Read the relevant m
 - `evals/generate_visual_fixtures.py`、`evals/fixtures/visual/`：可重建的原创多面板图、正文及补充材料；不含第三方论文资源。
 - `evals/generate_coverage_fixtures.py`、`evals/fixtures/coverage/`：所有补图初始已在本地的原创回归材料，覆盖漏看、标签误读及真假冲突。
 - `evals/test_reading_record.py`：查看动作与覆盖状态的执行回归。
+- `evals/fixtures/method-chain.md`：原创三结果与补充 QC 短文，用于检查后续结果的设计、方法与论证解释。
 - `evals/validate_repo.py`：使用 Python 标准库检查本地链接、文件引用与回归记录完整性；不替代语义评分。
 - `examples/`、`evals/runs/`：历史示例与当前版本实际试读输出、评分及失败记录。
 - `CHANGELOG.md`：版本变化。
@@ -139,7 +142,7 @@ Use $biomedical-paper-reader to analyze Figure 3 in English. Read the relevant m
 - [HCC 新辅助 nivolumab 多模态研究](https://doi.org/10.1186/s12943-026-02682-x)
 - [小鼠结肠炎突变与空间邻域研究](https://doi.org/10.1038/s41588-026-02673-0)
 
-既有两篇真实试读和三份虚构短文的行为验收对应 v0.1.0；v0.1.1、v0.1.2 没有重跑，不能把旧结果当作当前版验收。v0.2.0 的语言／模式及附件更新试读保留原版本记录；v0.3.0 增加逐图动作校验及所有补图初始可用的回归材料。各版实际输出、语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)。可查看 [输入与报告示例](examples/README.md)。完整第三方论文、原图和原始数据不随公开仓库分发。
+既有两篇真实试读和三份虚构短文的行为验收对应 v0.1.0；v0.1.1、v0.1.2 没有重跑，不能把旧结果当作当前版验收。v0.2.0 的语言／模式及附件更新试读保留原版本记录；v0.3.0 增加逐图动作校验及所有补图初始可用的回归材料。v0.3.1 用原创多结果短文独立检查后续方法解释，不将这次局部验收扩称为真实论文或视觉全流程重跑。各版实际输出、语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)。可查看 [输入与报告示例](examples/README.md)。完整第三方论文、原图和原始数据不随公开仓库分发。
 
 开发验收可执行 `python3 evals/validate_repo.py`；视觉夹具可用已有 Pillow 运行 `python3 evals/generate_visual_fixtures.py` 重建。Pillow 仅用于开发夹具，技能阅读不强制 Python 或任何库。模型行为由独立试读和逐项来源复核评估，不能只靠关键词、标题或静态脚本判通过。
 

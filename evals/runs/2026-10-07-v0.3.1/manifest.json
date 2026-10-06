@@ -1,0 +1,45 @@
+{
+  "version": "v0.3.1",
+  "date": "2026-10-07",
+  "instruction_sha256": {
+    "SKILL.md": "f40c0d9e03c88ffd6af4d744352c76430158b1fdf2b6e877a68e9e1481640c8e",
+    "references/evidence-rules.md": "66bcd37722e84d0724e42249ff9437951e708813173247908794aa4ab0637dc1",
+    "references/material-handling.md": "c4b158861c6cf907fc116bd4795baef50995396eab990dcc1c460f9c9092bfe7",
+    "references/reading-modes.md": "2629ad8afc459eafbd56e8d75c9539565900f635374b55a1283ed47af756cdd2",
+    "references/reading-record.md": "8470d734d0e837ee7c74b0440831b999673d6f34a3c28dde62899155148beb52",
+    "references/report-template.md": "12916b55be15279a45fadd3a9829ecf1c106dabd998b308c334bd964952a20e4",
+    "references/study-checks.md": "95fe2fe233ce1f9db0fac6bf4d6ae288d7820fd8695bf6ad175c74ab06a0b296"
+  },
+  "cases": [
+    {
+      "id": "method-chain-full",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-07-v0.3.1/output/report.md",
+          "sha256": "2469aa3a1e4d0f73406d094b4590cf5f2036f19b5d5dab0e7119d6f0ee0c1ef4"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.1/input/paper.md",
+          "sha256": "04df87cc308f786e7036eaebf08ef6ab5ced359b3878513a6354635382f777da"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.1/grading.json",
+          "sha256": "4a102dd5b13c54ccd551ce9ecdfe91c08eaba998f2cd7b48f5f2a067fbe731a4"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.1/README.md",
+          "sha256": "4ec4036e107999b0e75fcf90cc8bb56004d1d62fb63438709c1596c24eadf5f7"
+        },
+        {
+          "path": "evals/fixtures/method-chain.md",
+          "sha256": "04df87cc308f786e7036eaebf08ef6ab5ced359b3878513a6354635382f777da"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.1/checks.json",
+          "sha256": "4adef0dc4eb9fe7b1fa7ee130ba8fff1b39700c1eee57d529d6ba5d6f35c8d37"
+        }
+      ],
+      "grading": "evals/runs/2026-10-07-v0.3.1/grading.json"
+    }
+  ]
+}
