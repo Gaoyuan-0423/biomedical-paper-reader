@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "mode": "full",
+  "delivery_status": "limited",
+  "inventory_complete": true,
+  "figures": [
+    {
+      "id": "Fig. 1",
+      "role": "main",
+      "source": "input/paper.md",
+      "status": "unreadable",
+      "required": true,
+      "view_event_ids": [],
+      "observation": "",
+      "checked_panels": [],
+      "limitation": "材料第 7 行仅提及 Figure 1；第 3、7、11 行明确没有原图、图注或其他材料。已盘点任务材料，无法概览或核查面板；不得推定该图内容。"
+    }
+  ],
+  "claims": [
+    {
+      "id": "E1",
+      "kind": "result",
+      "figure_ids": [],
+      "basis": "text",
+      "status": "supported",
+      "comparison_checked": false,
+      "verification_note": "两次读取 paper.md 第 5 行，确认二手报告的 20 名患者与 10,000 个细胞；分组和统计单位未知，未验证原始研究。"
+    },
+    {
+      "id": "E2",
+      "kind": "result",
+      "figure_ids": [],
+      "basis": "text",
+      "status": "unresolved",
+      "comparison_checked": false,
+      "verification_note": "片段称 Q 在无应答组更高，但参照组、应答定义、效应量与原始结果均未知；仅报告此候选关联。"
+    },
+    {
+      "id": "E3",
+      "kind": "criticism",
+      "figure_ids": [],
+      "basis": "text",
+      "status": "supported",
+      "comparison_checked": false,
+      "verification_note": "第二轮从第 5 行重建差异关联、通讯分析及因果表述；通讯证据不能单独确立耐药因果。批评限于二手解读的证据升级；不声称原研究没有干预。"
+    },
+    {
+      "id": "E5",
+      "kind": "criticism",
+      "figure_ids": ["Fig. 1"],
+      "basis": "text",
+      "status": "unresolved",
+      "comparison_checked": false,
+      "verification_note": "原图和图注均不在任务材料，无法确定 Figure 1 的实际比较、数值及其论证作用；未作视觉判断。"
+    },
+    {
+      "id": "E8",
+      "kind": "recommendation",
+      "figure_ids": ["Fig. 1"],
+      "basis": "text",
+      "status": "supported",
+      "comparison_checked": false,
+      "verification_note": "从分组、时点、嵌套统计与图注缺口提出下一步核查，不代替作者补齐数据；Figure 1 仅列为应优先取得的材料。"
+    }
+  ],
+  "report_assertions": []
+}

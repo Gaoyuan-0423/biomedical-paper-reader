@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "mode": "full",
+  "delivery_status": "complete",
+  "inventory_complete": true,
+  "figures": [],
+  "claims": [
+    {"id": "E1", "kind": "result", "figure_ids": [], "basis": "text", "status": "supported", "comparison_checked": true, "verification_note": "Table 1 与 Methods 的 12 个供者配对差值、方向及 CI 一致；定位与边界见 work-record.md。"},
+    {"id": "E3", "kind": "result", "figure_ids": [], "basis": "text", "status": "supported", "comparison_checked": true, "verification_note": "Table 2 与 Methods 确认为 6 个供者内抗体减刺激溶剂的预设比较；技术孔先平均。"},
+    {"id": "E6", "kind": "result", "figure_ids": [], "basis": "text", "status": "supported", "comparison_checked": true, "verification_note": "Table 3 病例系数正向而 CI 跨零；对照 Discussion，外部重复不确定。"},
+    {"id": "E7", "kind": "criticism", "figure_ids": [], "basis": "text", "status": "supported", "comparison_checked": true, "verification_note": "重新从两侧方法建立比较：组织内配对差值与年龄调整组间系数；未把显著性差异写成效应差异。"},
+    {"id": "E8", "kind": "result", "figure_ids": [], "basis": "text", "status": "supported", "comparison_checked": true, "verification_note": "Supplementary Table S1 为技术重复 CV 和桥接归一化，不新增生物学独立样本。"},
+    {"id": "E9", "kind": "criticism", "figure_ids": [], "basis": "text", "status": "supported", "comparison_checked": true, "verification_note": "从全 Results 的对象和终点及 Discussion 复核，未检验 Y 对炎症或患者治疗终点的作用。"}
+  ],
+  "report_assertions": []
+}

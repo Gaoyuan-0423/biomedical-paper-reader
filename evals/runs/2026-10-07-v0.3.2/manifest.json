@@ -1,0 +1,83 @@
+{
+  "version": "v0.3.2",
+  "date": "2026-10-07",
+  "instruction_sha256": {
+    "SKILL.md": "c0b1f480e4c7592d801b909d57ad3aba1b3316bc727f91d21f42457cc54e8be0",
+    "references/evidence-rules.md": "c0128ddc6e7a51b203f2c4736ab6fce02d4293ec9b64ee65a15611c5dc69dd7d",
+    "references/material-handling.md": "2ed4988d9d817593551b9d8632e9e8f63470e33d3969d2c1682037dbc2877d12",
+    "references/reading-modes.md": "c8400206d0c643b91d41b1b0288e1f07d6b7b6879f1d30e75f8a8d0fa12922c2",
+    "references/reading-record.md": "f152caf9457b1a9edfa68038ea6a06aefe37611fb0b3f606bc38463d82104527",
+    "references/report-template.md": "a2e1a101e23673b9ceec4f193902a0aedf13a8416f27ade7106846be12a2b41b",
+    "references/study-checks.md": "867200858ea502720f40bd823a26bbe42877d10d4017dc294f9429b4ae219500"
+  },
+  "cases": [
+    {
+      "id": "reader-oriented-full",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/full/grading.json",
+          "sha256": "157a7232badb096f28d0ba6cae5756274626cf1f52ee3d164355f0f33b497e1a"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/full/input/paper.md",
+          "sha256": "04df87cc308f786e7036eaebf08ef6ab5ced359b3878513a6354635382f777da"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/full/output/reading-record.json",
+          "sha256": "bedba00884478a57b4bad92ea67e8cc2b1ae17209698beaa3308b656115b7850"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/full/output/report.md",
+          "sha256": "bc6add87bdd86d62e7af3a3eefa07c4e44af407fcd14a89f219771db83205a66"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/full/output/work-record.md",
+          "sha256": "f1e529bb9db52e0878dce190d09c4b95823afc8642090d6210f7921989953eb0"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/full/task.md",
+          "sha256": "01d135bc374f3ff608a9ff77f125b2ced4b2a8781e927725f740f1b80f1c80b2"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/README.md",
+          "sha256": "ec41be2f48d8b69bfcdf74c22b3fe5612402f0099a9053f840505591404c165f"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/checks.json",
+          "sha256": "560c059ab71772173babbf4623e1ab7c35ffbb145866df8748881619874519a3"
+        }
+      ],
+      "grading": "evals/runs/2026-10-07-v0.3.2/full/grading.json"
+    },
+    {
+      "id": "reader-oriented-short",
+      "artifacts": [
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/short/grading.json",
+          "sha256": "068c7f883d37522868a9c6c67a3b16b57a5a3870a2ea3ebf8ccebd39860f60de"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/short/input/paper.md",
+          "sha256": "b2f42f467751bbab9e3eadf617c9104115b1e71f10cafd69d525456dffcda104"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/short/output/reading-record.json",
+          "sha256": "2e54e9c3bd46a8b75fd4628863ffe4159ac2f464b166e2b4f7900fd5799b22f9"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/short/output/report.md",
+          "sha256": "dde2ee373d1d9bd192dffa33ad95d64ce9f4efb290628127945fdd23349270ad"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/short/output/validation.json",
+          "sha256": "e02578e702cdcfb8810efeedaf7551de959ea9a77caf08f8f82d0d54cb96fc04"
+        },
+        {
+          "path": "evals/runs/2026-10-07-v0.3.2/short/task.md",
+          "sha256": "4f9994c8bf39ea527efaa2dbf577f29f2814dd505035ca8c242a04002b3cb3fb"
+        }
+      ],
+      "grading": "evals/runs/2026-10-07-v0.3.2/short/grading.json"
+    }
+  ]
+}

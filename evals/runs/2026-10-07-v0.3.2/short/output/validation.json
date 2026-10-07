@@ -1,0 +1,41 @@
+{
+  "status": "pass",
+  "verification_scope": "record_only",
+  "delivery_status": "limited",
+  "completion_record_consistent": false,
+  "completion_verified": false,
+  "coverage_summary": {
+    "main": {
+      "total": 1,
+      "overview_completed": 0,
+      "panels_checked": 0,
+      "pending": 0,
+      "caption_only": 0,
+      "unreadable": 1
+    },
+    "supplementary": {
+      "total": 0,
+      "overview_completed": 0,
+      "panels_checked": 0,
+      "pending": 0,
+      "caption_only": 0,
+      "unreadable": 0
+    }
+  },
+  "errors": [],
+  "warnings": [
+    {
+      "code": "record_only",
+      "path": "$",
+      "message": "Record-only verification: event IDs are reader assertions; no independent tool-event proof was checked."
+    },
+    {
+      "code": "limited_delivery",
+      "path": "$.delivery_status",
+      "message": "This is an honest limited-delivery record, not completed reading coverage."
+    }
+  ],
+  "limitations": [
+    "Checks declared coverage/provenance consistency only; does not judge scientific semantics, extract report assertions, or authenticate host-adapted events."
+  ]
+}

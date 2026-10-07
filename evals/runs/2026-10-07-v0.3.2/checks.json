@@ -1,0 +1,29 @@
+{
+  "skill_frontmatter": {
+    "status": "pass",
+    "output": "Skill is valid!"
+  },
+  "reading_record_regression": {
+    "status": "pass",
+    "tests_run": 15,
+    "output": "Ran 15 tests; OK"
+  },
+  "semantic_review": {
+    "full_criteria_passed": 7,
+    "short_criteria_passed": 5,
+    "visual_trials_run": 0
+  },
+  "repo_integrity": {
+    "status": "pass",
+    "local_links_checked": 306,
+    "recorded_manifest": "evals/runs/2026-10-07-v0.3.2/manifest.json",
+    "external_links_not_fetched": [
+      "https://doi.org/10.1038/s41588-026-02673-0",
+      "https://doi.org/10.1186/s12943-026-02682-x",
+      "https://doi.org/10.1186/s12943-026-02777-5",
+      "https://github.com/Gaoyuan-0423/biomedical-paper-reader/issues"
+    ],
+    "errors": [],
+    "scope": "link/anchor and recorded-artifact integrity; no semantic scoring or speed claim"
+  }
+}

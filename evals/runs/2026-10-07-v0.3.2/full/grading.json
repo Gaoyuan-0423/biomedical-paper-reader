@@ -1,0 +1,141 @@
+{
+  "version": "v0.3.2",
+  "review": "manual source-output comparison, not keyword-only grading",
+  "scope": "one complete fictional text-and-table paper; no visual or raw-data verification",
+  "criteria": [
+    {
+      "id": "reader-oriented-full-report",
+      "status": "pass",
+      "rationale": "The report develops the research question and evidence progression, then explains every result. No mandatory source ID, page list, coverage, event or verification-level column appears in the reading report. The working index is independent and no audit appendix is linked.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 9,
+          "quote": "作者进一步追问：这种组织关联是否对应可被阻断的功能效应"
+        },
+        {
+          "artifact": "output/reading-record.json",
+          "line": 15,
+          "quote": "\"report_assertions\": []"
+        }
+      ]
+    },
+    {
+      "id": "first-result-method-and-role",
+      "status": "pass",
+      "rationale": "The paired design and bridge-normalized donor differences are explained, with n=12 independent donor differences rather than 24 independent tissues. Its logical limitation motivates intervention.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 23,
+          "quote": "先按桥接样本归一化，再计算"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 27,
+          "quote": "由此自然引出下一步"
+        }
+      ]
+    },
+    {
+      "id": "later-intervention-method-and-role",
+      "status": "pass",
+      "rationale": "The second result explains three conditions, the 48-hour Y endpoint, technical aggregation and paired antibody-versus-vehicle contrast. It distinguishes functional evidence from external tissue replication.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 31,
+          "quote": "48 小时后的培养上清 Y 浓度是主终点"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 39,
+          "quote": "预设检验同样使用 6 个供者内的抗体减溶剂差值"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 45,
+          "quote": "却不能替代组织关联的外部验证"
+        }
+      ]
+    },
+    {
+      "id": "later-validation-method-and-role",
+      "status": "pass",
+      "rationale": "The third result explains the outcome and predictors of age-adjusted linear regression, the independent case-control design and its different estimand. CI crossing zero is not reported as successful or absent replication.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 49,
+          "quote": "方法以 R 表达为因变量、病例状态和年龄为自变量进行线性回归"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 51,
+          "quote": "既不能称验证成功，也不能断言 R 与病例状态没有关联"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 53,
+          "quote": "单凭一项显著、另一项不显著，不能证明两队列效应存在统计差异"
+        }
+      ]
+    },
+    {
+      "id": "supplement-quality-control-purpose",
+      "status": "pass",
+      "rationale": "The QC explains technical repeat CV and common bridge normalization, linking to the tissue assays without upgrading it to biological validation.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 59,
+          "quote": "技术重复变异系数为 **3%–8%**"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 61,
+          "quote": "不能把它们算作第三次组织关联重复"
+        }
+      ]
+    },
+    {
+      "id": "scientific-limits-preserved",
+      "status": "pass",
+      "rationale": "Limits explain antibody specificity, missing settings and target engagement, lack of viability equivalence and the untested mediation edge. They concern the scientific claim rather than repeated reader ability or unperformed-action declarations.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 43,
+          "quote": "没有同型抗体对照"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 43,
+          "quote": "但没有等效性检验"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 67,
+          "quote": "本文未直接检验 Y 改变是否导致炎症变化"
+        }
+      ]
+    },
+    {
+      "id": "research-transfer-connected-to-gaps",
+      "status": "pass",
+      "rationale": "Suggestions target specific uncertainties with relevant comparators and readouts, and are expressly new designs rather than reported experiments.",
+      "evidence": [
+        {
+          "artifact": "output/report.md",
+          "line": 75,
+          "quote": "以下为基于本文缺口提出的后续方案"
+        },
+        {
+          "artifact": "output/report.md",
+          "line": 81,
+          "quote": "是区分“Y 只是伴随读数”与“Y 承接部分下游作用”的关键指标"
+        }
+      ]
+    }
+  ]
+}
