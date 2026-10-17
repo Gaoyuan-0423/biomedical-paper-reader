@@ -2,31 +2,23 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.3.2。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。完整精读逐张概览本地已有主图与补图，按实际证据选择深入核查的面板，并解释各结果的方法与论证作用。
+版本：v0.3.3。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。
 
-A Chinese-first agent skill for close reading, quick screening, or focused figure/method analysis of one biomedical paper. Explicit English and Chinese–English requests are supported with the same evidence standards.
+A Chinese-first agent skill for close reading, quick screening, or focused figure/method analysis of one biomedical paper, with traceable evidence records and the same evidence standards in any language.
 
-[Skill 入口](SKILL.md) · [报告模板](references/report-template.md) · [示例](examples/README.md) · [验收记录](evals/RESULTS.md) · [MIT 许可](LICENSE)
+[Skill 入口](SKILL.md) · [示例报告](examples/README.md) · [验收记录](evals/RESULTS.md) · [MIT 许可](LICENSE)
 
-## 输入与输出
+## 报告长什么样
 
-提供 PDF、DOI、论文链接或原文即可开始，无需先写研究问题。二手解析或部分材料也能处理，但会明确覆盖范围与暂定判断。
+> **一句话发现：** 在 18 名供者的横断面组织比较中，病例的 Marker A 平均分数较高，但供者层面差值的置信区间包含 0；把细胞当作独立观察得到的强显著性不能证明 A 驱动疾病。
+> **阅读建议：选择性阅读。** 适合精看其统计单位与结论之间的关系……
+> **本文看点：** 同一数据使用不同统计单位得到不同显著性；组间年龄差异提供了需要检验的替代解释；观察结果与 Discussion 的因果措辞不匹配。
 
-仅有短片段且原文无法获取时，合并无实质内容的章节，集中说明证据与关键缺口；完整报告的篇幅来自原文信息量。
+——摘自[观察研究示例](examples/observational/report.md)。三份完整示例（二手片段、观察研究、预测方法）见[示例目录](examples/README.md)。
 
-**补充材料默认使用本地已有文件。** 检查上传内容、论文同目录和用户指定的相关文件夹；确认属于该论文后，完整精读逐张概览已有补图并读图注，补充表与数据按相关问题读取。没有补充文件时继续正文分析，说明无法核查的主张及受限范围。只有用户明确要求补取时才联网下载，不把附件缺失当作作者未做验证。
+## 输入与模式
 
-**直接复用可读的 PDF 提取结果。** 使用现有工具提取文本、检查阅读顺序并保留页序，不再优先使用 MarkItDown，也不要求先生成 Markdown 底稿。原 PDF 继续用于数字和图像核查。只有具体页面的提取质量影响解读时才更换处理方式。
-
-**范围内的图先概览，必要面板再放大。** 完整精读覆盖已有每张主图、补图及 Extended Data；速读／专题覆盖选定结果及必要对照所在图。读完整图注，关注核心结论、必要对照、阴性结果及图文冲突；已看清内容复用，同组待查面板成组准备。工作记录区分概览和具体核查范围。执行细节见 [材料处理说明](references/material-handling.md)。
-
-**查看状态可追溯，重大批评须复核。** 使用[逐图记录](references/reading-record.md)汇总范围，转换或复制图片不算查看；图内标签、图注和正文独立对照。先确认样本层级、比较和指标是否相同，再判断冲突。可读图仍待看时继续读取；真实障碍明确标受限交付。可选标准库校验器检查记录与声明，有宿主事件文件时再检查查看动作，不代替科学语义判断。
-
-**看过图与解释完整分开检查。** 范围内每个主图／主要结果单元都应解释研究问题、对象与比较、方法输入输出、结果支持范围及论证衔接；不能只给前几图方法，后续只贴图或列疑点。共用流程可回指，补图交代 QC、对照、验证或拓展作用；检查具体解释，不按标题或方法名数量判通过。见[逐图解释检查](references/report-template.md#逐图解释的交付检查)。
-
-**阅读报告与过程记录分开。** 正文围绕作者的问题、设计、结果和论证，保留自然的图号引用及必要科学局限。文件页清单、来源代号、已概览／已放大声明、工具日志、覆盖表和证据索引独立保存，不是默认正文栏目，也不默认生成可读核查附件。用户需要核查、审稿或复现审计时再按其目的展示记录；实际缺材料或读取障碍若影响结论，仍在相应论点简短说明。
-
-语言由用户要求决定，英文论文不会自动触发英文输出。未指定就用中文；明确双语时两种表述共用证据记录，数字、方向和判断保持一致。英文直接依据证据写作，标题、解读、局限和建议均使用自然学术英文。
+提供 PDF、DOI、论文链接或原文即可开始，无需先写研究问题。二手解析或部分材料也能处理，但会明确覆盖范围与暂定判断；仅有短片段时合并无实质内容的章节，篇幅来自原文信息量。
 
 | 模式 | 实际读取与交付 |
 |---|---|
@@ -34,23 +26,20 @@ A Chinese-first agent skill for close reading, quick screening, or focused figur
 | 速读 | 先读摘要、问题、结果结构与讨论，再定点核查筛选判断依据的图、对照及方法；列明未读范围，不声称全文核验 |
 | 指定图／方法 | 解析目标并补足影响解释的上下文、必要对照和已有相关补图；交付局部设计、结果、边界及适配建议 |
 
-用户表达明确即可选用，无需填写参数。详见 [模式与语言适配](references/reading-modes.md)。完整精读的写作职责如下，信息简单时允许合并重复章节：
+完整精读的报告结构：开篇导读 → 文章信息 → 研究概述 → 全文逻辑路线图 → 逐图／逐结果精读 → 研究总结与课题借鉴 → 数据与方法资源。有文件工具时交付独立论文目录下的 `report.md`（图像放 `assets/`，相对路径）；没有文件工具时直接输出文本。详见[报告模板](references/report-template.md)与[模式与语言适配](references/reading-modes.md)。
 
-1. 开篇导读：核心发现、看点、阅读建议和适用场景。
-2. 文章信息：题名、期刊、原文入口、研究对象与设计。
-3. 研究概述：已有认识、缺口、切入点与总体设计。
-4. 全文逻辑路线图：跟随原文证据推进，标注图表。
-5. 逐图/逐结果精读：动机、方法与目的、结果、逻辑、科学边界及图号引用。
-6. 研究总结与课题借鉴：贡献、局限、可迁移环节和待验证设计。
-7. 数据与方法资源：研究用途、入口及影响使用的条件。核心证据索引和完整阅读状态保存在工作记录。
+## 核心规则
 
-有文件工具时交付独立论文目录下的 `report.md`，必要图像放在 `assets/`；报告内链接保持相对路径。没有文件工具时直接输出文本。
+- **阅读报告与过程记录分开。** 正文围绕作者的问题、设计、结果和论证；页码清单、查看事件、覆盖表、证据索引独立保存，用户要求核查或审稿时再展示。见[证据规则](references/evidence-rules.md)。
+- **补充材料默认只用本地已有文件**，用户明确要求补取才联网下载；附件缺失不当作作者未做验证。
+- **实际查看图像后才描述视觉信息。** 转换、复制或插入报告不算查看；逐图状态由[逐图记录](references/reading-record.md)和[标准库校验器](scripts/check_reading_record.py)约束。
+- **措辞与推断强度相称。** 观察不写成因果、救援不等于必要性、联合不自动成协同、模型效果不自动成为患者疗效；统计单位与样本层级逐项区分。
+- **范围内每个结果单元都要解释**研究问题、方法输入输出与论证衔接，不能只给前几图方法、后续退化为图片或疑点清单。
+- **语言由用户要求决定**，英文论文不自动触发英文输出；双语两种表述共用证据记录，数字与判断强度一致。
 
 ## 使用
 
 ### 直接使用
-
-下载或克隆仓库后，在支持文件读取的助手中指定入口：
 
 ```bash
 git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git
@@ -62,79 +51,41 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git
 
 路径相对于你的工作目录；必要时改用 `SKILL.md` 的绝对路径。要使用客户端的技能发现功能，将整个目录放入它支持的 skills 目录，保留 `references/`。
 
-### Codex 本地安装
-
-以下适用于目标目录尚不存在的情况：
+### Codex 本地安装与更新
 
 ```bash
 mkdir -p ~/.codex/skills
 git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/skills/biomedical-paper-reader
 ```
 
-使用自定义配置目录时，改用其对应的 skills 目录。如果已存在同名版本，先比较内容，保留自己的修改。安装后的发现/刷新行为由客户端决定。识别后可使用：
+已安装副本用 `git pull` 更新；`SKILL.md` 标题下标注了当前版本，可与 [CHANGELOG](CHANGELOG.md) 对照确认没有装错版本。使用自定义配置目录时改用其对应 skills 目录；已存在同名版本时先比较内容，保留自己的修改。
 
 ```text
 使用 $biomedical-paper-reader 解析这篇论文：<DOI、链接或附件>。
 ```
 
-还可以补充研究方向以获得更贴合的迁移建议；未补充时给条件式适用场景。速读会缩小实际阅读范围；专题会补足必要上下文，不靠省略关键对照实现简短。
+语言与模式直接表达即可，例如“用英文速读这篇论文，判断是否值得精读”或 "analyze Figure 3 in English, including the methods and controls needed to interpret it"。双语或专题方法同样直接说明；这些是分析报告，不是全文逐句翻译。可补充研究方向以获得更贴合的迁移建议；未补充时给条件式适用场景。
 
-### 语言与模式调用示例
+## English quick start
 
-中文完整精读（也是未指定语言和模式时的默认）：
-
-```text
-使用 $biomedical-paper-reader 精读这份 PDF，生成中文报告：<附件>。
-```
-
-英文完整精读：
-
-```text
-Use $biomedical-paper-reader to produce a full close-reading report in English for <PDF or DOI>, including figure interpretation, limitations, and research suggestions.
-```
-
-英文速读：
-
-```text
-使用 $biomedical-paper-reader 用英文速读这篇论文，判断是否值得完整精读，并说明实际已读和未读范围：<附件>。
-```
-
-指定图英文解析：
-
-```text
-Use $biomedical-paper-reader to analyze Figure 3 in English. Read the relevant methods, controls, and surrounding results needed to interpret it: <PDF>.
-```
-
-明确双语或专题方法也可直接表达，例如“中英双语解析 Figure 2”或“用英文讲解该文的谱系追踪方法及关键假设”。这些是分析报告，不是全文逐句翻译。
+Clone the repo and point any file-capable assistant at `SKILL.md`, or drop the folder into your client's skills directory. Default output is Chinese; request English or bilingual reports explicitly. Three modes: full close reading (default), quick screening, and focused figure/method analysis. Inputs can be a PDF, DOI, link, or pasted text. The skill relies only on host-provided file/PDF/image tools — no fixed MCP servers, third-party skills, or paid services. See [examples](examples/README.md) for sample reports (fictional materials) and [RESULTS.md](evals/RESULTS.md) for evaluation records.
 
 ## 工作方式
 
-按所选模式建立并复用原文章节、图表和主张索引，再联读相关正文、Methods、图注及图像。核心结论、引用数字和主要批评都有独立可追溯记录；正文以科学含义解释结果，不逐图展示阅读者的核查动作或未执行声明，不把未执行动作写成已完成。
-
-多队列／嵌套样本记录个体→组织→切片→细胞层级及分析单位，方法不明时标无法确认。关键公开数据按数据集、子集、发现／验证角色和支持图表映射，说明样本重叠是否实际核实。机制按 A→B→C 逐边说明证据、替代解释和缺口；相关检查按需启用。
-
-方法检查点按内容启用，不要求每篇出现空间组学、通讯、谱系或动物实验。无图论文按主表、结果小节或方法单元展开。背景历史、复杂算法、写作表达按相关性决定深度。
-
-依赖宿主提供的文本、文件、PDF/图像及可选联网能力；没有固定 MCP、第三方 skill、Python 库或付费服务要求。全文无法取得、OCR 不清或图像缺失时会标出具体限制。它生成的是证据支持的阅读报告，未实际执行的代码和数据不会被标为已经复现。
+按所选模式建立并复用原文章节、图表和主张索引，再联读相关正文、Methods、图注及图像。核心结论、引用数字和主要批评都有独立可追溯记录；正文以科学含义解释结果。多队列／嵌套样本记录个体→组织→切片→细胞层级及分析单位；机制链逐边说明证据与缺口；方法检查点按研究设计选用，不要求每篇出现固定技术链条。无图论文按主表、结果小节或方法单元展开。未实际执行的代码和数据不会被标为已经复现。长论文按[增量笔记流程](references/material-handling.md)逐图落盘、组装成稿。
 
 ## 文件组织
 
 - `SKILL.md`：触发说明、工作流和交付要求。
-- `references/report-template.md`：各部分与逐图单元的写作职责。
-- `references/reading-modes.md`：三种模式的读取范围、必要核查、输出及语言适配。
-- `references/evidence-rules.md`：定位、统计单位、推断范围与缺失信息规则。
-- `references/study-checks.md`：按证据类型选用的内部检查点。
-- `references/material-handling.md`：本地附件、文本复用、分步看图、下载调度和状态同步。
-- `references/reading-record.md`、`scripts/check_reading_record.py`：逐图状态、实际查看引用及覆盖／声明检查；无宿主事件时只校验记录一致性。
+- `references/`：[报告模板](references/report-template.md)、[模式与语言](references/reading-modes.md)、[证据规则](references/evidence-rules.md)、[研究检查点](references/study-checks.md)、[材料处理](references/material-handling.md)、[逐图记录](references/reading-record.md)。
+- `scripts/check_reading_record.py`：逐图记录与声明一致性的标准库校验器。
+- `scripts/render_pdf_page.py`：可选 PDF 页渲染辅助（需 pypdfium2 或 PyMuPDF，非运行依赖）。
 - `agents/openai.yaml`：可选的 Codex 界面元数据。
 - `evals/cases.md`、`evals/fixtures/`：行为验收设计和原创虚构材料。
+- `evals/PROTOCOL.md`：用自备论文复现行为评测的协议。
 - `evals/RESULTS.md`：版本对应的验收入口；历史记录与新回归分开。
-- `evals/generate_visual_fixtures.py`、`evals/fixtures/visual/`：可重建的原创多面板图、正文及补充材料；不含第三方论文资源。
-- `evals/generate_coverage_fixtures.py`、`evals/fixtures/coverage/`：所有补图初始已在本地的原创回归材料，覆盖漏看、标签误读及真假冲突。
-- `evals/test_reading_record.py`：查看动作与覆盖状态的执行回归。
-- `evals/fixtures/method-chain.md`：原创三结果与补充 QC 短文，用于检查后续结果的设计、方法与论证解释。
-- `evals/validate_repo.py`：使用 Python 标准库检查本地链接、文件引用与回归记录完整性；不替代语义评分。
-- `examples/`、`evals/runs/`：历史示例与当前版本实际试读输出、评分及失败记录。
+- `evals/test_reading_record.py`、`evals/validate_repo.py`：执行回归与仓库完整性检查（CI 自动运行）。
+- `examples/`、`evals/runs/`：示例与各版本实际试读输出、评分及失败记录。
 - `CHANGELOG.md`：版本变化。
 
 ## 示范与验证
@@ -144,9 +95,9 @@ Use $biomedical-paper-reader to analyze Figure 3 in English. Read the relevant m
 - [HCC 新辅助 nivolumab 多模态研究](https://doi.org/10.1186/s12943-026-02682-x)
 - [小鼠结肠炎突变与空间邻域研究](https://doi.org/10.1038/s41588-026-02673-0)
 
-既有两篇真实试读和三份虚构短文的行为验收对应 v0.1.0；v0.1.1、v0.1.2 没有重跑，不能把旧结果当作当前版验收。v0.2.0 的语言／模式及附件更新试读保留原版本记录；v0.3.0 增加逐图动作校验及所有补图初始可用的回归材料。v0.3.1 用原创多结果短文独立检查后续方法解释；v0.3.2 调整阅读报告与过程记录的交付分工。各版实际输出、语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)，局部试读不扩称为真实论文或视觉全流程重跑。可查看[输入与报告示例](examples/README.md)；历史示例的过程栏目不代表当前报告格式。完整第三方论文、原图和原始数据不随公开仓库分发。
+各版实际输出、语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)：v0.1.0 两篇真实论文与三份虚构短文；v0.2.0 语言／模式及附件更新；v0.3.0 逐图动作校验与全补图回归；v0.3.1 后续方法解释；v0.3.2 报告与过程记录分离。v0.3.3 为工程与结构修订（入口重写、规则去重、CI、示例重排），未重跑行为试读。局部试读不扩称为真实论文或视觉全流程重跑；完整第三方论文、原图和原始数据不随公开仓库分发。
 
-开发验收可执行 `python3 evals/validate_repo.py`；视觉夹具可用已有 Pillow 运行 `python3 evals/generate_visual_fixtures.py` 重建。Pillow 仅用于开发夹具，技能阅读不强制 Python 或任何库。模型行为由独立试读和逐项来源复核评估，不能只靠关键词、标题或静态脚本判通过。
+开发验证：`python3 evals/validate_repo.py` 检查本地链接与记录完整性，`python3 evals/test_reading_record.py` 运行记录回归；两者由 GitHub Actions 在每次推送时自动执行。要用自己的论文做行为评测，按 [PROTOCOL.md](evals/PROTOCOL.md) 进行。视觉夹具可用已有 Pillow 运行 `python3 evals/generate_visual_fixtures.py` 重建；Pillow 仅用于开发夹具，技能阅读不强制 Python 或任何库。
 
 ## 来源与许可
 

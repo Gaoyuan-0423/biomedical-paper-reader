@@ -32,3 +32,7 @@ assets/
 *.h5ad
 *.rds
 *.RData
+
+# Local session artifacts
+.mimosa/
+.v2c/

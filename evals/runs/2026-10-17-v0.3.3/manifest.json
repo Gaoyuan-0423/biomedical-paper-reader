@@ -1,0 +1,14 @@
+{
+  "version": "v0.3.3",
+  "date": "2026-10-17",
+  "instruction_sha256": {
+    "SKILL.md": "54092cd31724ebad857a1edc7ee08f2dca20b4bb133732ea9374fa386e9e5fd1",
+    "references/evidence-rules.md": "452aecdc472ed0fba422d8652b14fbb14db7eecf89274a6fb41d13f5c5c1da72",
+    "references/material-handling.md": "5e5eb9af8c6b5313e4a6bd9349f0291f996206b6765f420cfd5effa27f040d08",
+    "references/reading-modes.md": "fcb85c00e6f99a234ec6d88d9cc5b0ce22b89e4f9887e1db832022056bd1868b",
+    "references/reading-record.md": "d5ae7eefc857b8e9c7c704df630687e4b9b99d41251e51d1598e178ab10611e3",
+    "references/report-template.md": "981a3367e36d48f0d4c4c75ec2b8c0b4216ce4eb191f1bdb76645100f8b03834",
+    "references/study-checks.md": "867200858ea502720f40bd823a26bbe42877d10d4017dc294f9429b4ae219500"
+  },
+  "cases": []
+}

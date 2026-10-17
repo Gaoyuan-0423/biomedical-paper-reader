@@ -1,0 +1,20 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Link, anchor and recorded-artifact integrity
+        run: python3 evals/validate_repo.py
+      - name: Reading-record validator regression
+        run: python3 evals/test_reading_record.py -v
+      - name: Helper scripts compile
+        run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py
