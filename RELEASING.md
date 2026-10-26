@@ -6,20 +6,22 @@
 
 ### 为什么 README 比 Releases 新
 
-`main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。
+`main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 补发前核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。v0.3.3 现已正式发布。
 
-### 补发 v0.3.3
+### 发布新版本
 
-1. 将包含发布工作流的 PR 合并到 `main`。先审阅 [v0.3.3 中英文发布说明](releases/v0.3.3.md)，其中包含自 v0.2.0 以来的累计变化，以及后续加入当前源码的 App 和双语 README。
-2. 打开仓库 **Actions → Publish release → Run workflow**，选择 **main**，输入版本 **v0.3.3**。也可以在仓库目录运行：
+以下以 v0.3.4 为例；后续发布应替换为准备好的新版本号，不能重复发布已有版本。
+
+1. 审阅 [v0.3.4 中英文发布说明](releases/v0.3.4.md)，确认待发布改动、版本资料与验证记录一致，并将对应 PR 合并到 `main`。
+2. 打开仓库 **Actions → Publish release → Run workflow**，选择 **main**，输入版本 **v0.3.4**。也可以在仓库目录运行：
 
    ```bash
-   gh workflow run release.yml --ref main -f version=v0.3.3
+   gh workflow run release.yml --ref main -f version=v0.3.4
    ```
 
-3. 检查该次运行是否成功，再到 [Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 确认 v0.3.3 和 Latest 标记。标签绑定触发运行时的 `main` 提交；运行期间的新提交不包含在该版本中。
+3. 检查该次运行是否成功，再到 [Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 确认 v0.3.4 和 Latest 标记。标签绑定触发运行时的 `main` 提交；运行期间的新提交不包含在该版本中。
 
-合并 PR 本身不执行发布；其他分支上的运行会跳过发布任务。工作流只接受 `vX.Y.Z` 稳定版本，先检查 README 中英文、SKILL、CHANGELOG 与发布说明一致，再运行仓库完整性和记录回归检查，最后创建标签及正式 Release。此次补发使用现有 v0.3.3 版本号，不重写 v0.2.0，也不为未单独发布的中间版本补造历史发布日期。
+合并 PR 本身不执行发布；其他分支上的运行会跳过发布任务。工作流只接受 `vX.Y.Z` 稳定版本，先检查 README 中英文、SKILL、CHANGELOG 与发布说明一致，再运行仓库完整性和记录回归检查，最后创建标签及正式 Release。新发布使用新的稳定版本号，不覆盖已有发布，也不补造历史发布日期。
 
 ### 后续版本
 
@@ -28,13 +30,19 @@
 - 合并前执行以下检查（将示例版本替换为目标版本）；版本验证脚本只读取本地资料并输出发布说明，不联网、不创建标签。
 
   ```bash
-  python3 scripts/prepare_release.py v0.3.3 --output /tmp/biomedical-release-notes.md
+  python3 scripts/prepare_release.py v0.3.4 --output /tmp/biomedical-release-notes.md
   python3 evals/test_prepare_release.py -v
   python3 evals/validate_repo.py
   python3 evals/test_reading_record.py -v
   ```
 
 - 合并后按上述步骤手动发布。工作流使用 GitHub 提供的 `GITHUB_TOKEN` 和 `contents: write` 权限；通常无需另建个人令牌。若仓库规则禁止 Actions 创建标签或 Release，运行会失败并保留日志，需要维护者处理相应权限。
+
+### 自动维护 GitHub Actions
+
+[Dependabot 配置](.github/dependabot.yml)合并到默认分支后，GitHub 将按每周一北京时间 09:00 的计划检查工作流引用的 Action，发现新版后自动创建更新 PR，由现有 CI 检查，维护者审阅后合并。Action 继续使用完整提交 SHA 固定，并在行尾标注对应版本。这项服务在 GitHub 上运行，不需要 Codex 持续在线，也不会自动合并 PR 或发布新版本。
+
+此配置只维护 Action 引用；`runs-on` 的 Ubuntu 镜像和 `python-version` 不由它升级。CI 与发布任务固定使用 `ubuntu-24.04`，运行环境升级需另开 PR 验证。已发布的 v0.3.3 保留原标签快照，这类工作流维护不需要重复发布同一版本。
 
 ### 重试与现有标签
 
@@ -44,20 +52,22 @@
 
 ### Why the README can be newer than Releases
 
-README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. On 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow.
+README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. Before the catch-up release on 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow. v0.3.3 has since been published.
 
-### Publish the missing v0.3.3 release
+### Publish a new version
 
-1. Merge the PR containing the release workflow into `main`. Review the [bilingual v0.3.3 release notes](releases/v0.3.3.md), which cover cumulative changes since v0.2.0 and the App and bilingual README subsequently added to the current source.
-2. Open **Actions → Publish release → Run workflow**, select **main**, and enter **v0.3.3**. Alternatively, run this from the repository:
+The following example uses v0.3.4. For future releases, substitute the prepared new version; existing versions cannot be published again.
+
+1. Review the [bilingual v0.3.4 release notes](releases/v0.3.4.md), confirm that changes, version metadata, and validation records agree, and merge the corresponding PR into `main`.
+2. Open **Actions → Publish release → Run workflow**, select **main**, and enter **v0.3.4**. Alternatively, run this from the repository:
 
    ```bash
-   gh workflow run release.yml --ref main -f version=v0.3.3
+   gh workflow run release.yml --ref main -f version=v0.3.4
    ```
 
-3. Confirm that the run succeeds and that [Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) shows v0.3.3 as Latest. The tag points to the `main` commit captured when the run was triggered, excluding commits added during the run.
+3. Confirm that the run succeeds and that [Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) shows v0.3.4 as Latest. The tag points to the `main` commit captured when the run was triggered, excluding commits added during the run.
 
-Merging the PR does not publish a release. Runs on other branches skip the publishing job. The workflow accepts stable `vX.Y.Z` versions only, checks both README versions, SKILL, CHANGELOG, and release notes, then runs repository integrity and reading-record regression checks before creating the tag and public Release. This catch-up release uses the existing v0.3.3 version; it does not rewrite v0.2.0 or invent historical publication dates for intermediate versions.
+Merging the PR does not publish a release. Runs on other branches skip the publishing job. The workflow accepts stable `vX.Y.Z` versions only, checks both README versions, SKILL, CHANGELOG, and release notes, then runs repository integrity and reading-record regression checks before creating the tag and public Release. New releases use new stable version numbers; they do not overwrite existing releases or invent historical publication dates.
 
 ### Future versions
 
@@ -65,6 +75,12 @@ Merging the PR does not publish a release. Runs on other branches skip the publi
 - Use full GitHub URLs containing the target tag for repository files linked in release notes; relative file links may not resolve on the Release page.
 - Before merging, run the four commands in the Chinese section above, replacing the example version. The version checker only reads local files and outputs notes; it does not access the network or create tags.
 - After merging, publish manually as described above. The workflow uses GitHub's `GITHUB_TOKEN` with `contents: write`; a separate personal token is normally unnecessary. Repository rules that disallow tag or Release creation by Actions will cause the run to fail with logs for maintainers to investigate.
+
+### Automatic GitHub Actions maintenance
+
+Once the [Dependabot configuration](.github/dependabot.yml) is merged into the default branch, GitHub checks workflow Action references on a weekly schedule, Mondays at 09:00 Asia/Shanghai. It opens update PRs when newer versions are available; the existing CI checks them, and maintainers review and merge them. Actions remain pinned to full commit SHAs with corresponding version comments. This service runs on GitHub and does not require Codex to remain online. It does not automatically merge PRs or publish releases.
+
+This configuration updates Action references only, not the Ubuntu image in `runs-on` or `python-version`. CI and release jobs use `ubuntu-24.04`; runtime upgrades require a separate PR and validation. The published v0.3.3 tag remains its original snapshot; workflow maintenance does not require publishing the same version again.
 
 ### Retries and existing tags
 
