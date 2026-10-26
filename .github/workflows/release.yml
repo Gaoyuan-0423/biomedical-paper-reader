@@ -1,0 +1,77 @@
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable version to publish, for example v0.3.3'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Check version and prepare release notes
+        run: python3 scripts/prepare_release.py "$RELEASE_VERSION" --output "$RUNNER_TEMP/release-notes.md"
+      - name: Repository checks
+        run: |
+          python3 evals/validate_repo.py
+          python3 evals/test_reading_record.py -v
+          python3 evals/test_prepare_release.py -v
+          python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py
+      - name: Create tag and release at the checked commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A failed API request must stop publication, not mean "no release".
+          gh api --paginate "repos/$GH_REPO/releases" --jq '.[].tag_name' > "$RUNNER_TEMP/release-tags.txt"
+          if grep -Fxq -- "$RELEASE_VERSION" "$RUNNER_TEMP/release-tags.txt"; then
+            echo "Release $RELEASE_VERSION already exists; it will not be changed." >&2
+            exit 1
+          fi
+
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_VERSION"; then
+            tag_commit=$(git rev-parse "refs/tags/$RELEASE_VERSION^{commit}")
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "Tag $RELEASE_VERSION points to $tag_commit, not checked commit $GITHUB_SHA." >&2
+              exit 1
+            fi
+          else
+            # Creating the ref fails if another process already created it.
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f "ref=refs/tags/$RELEASE_VERSION" -f "sha=$GITHUB_SHA" > /dev/null
+          fi
+
+          # Recheck the remote ref after validation, including annotated tags.
+          remote_commit=$(gh api "repos/$GH_REPO/commits/$RELEASE_VERSION" --jq .sha)
+          if [[ "$remote_commit" != "$GITHUB_SHA" ]]; then
+            echo "Remote tag $RELEASE_VERSION no longer points to checked commit $GITHUB_SHA." >&2
+            exit 1
+          fi
+
+          gh release create "$RELEASE_VERSION" --verify-tag \
+            --title "$RELEASE_VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
