@@ -6,7 +6,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.3.3。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。
+版本：v0.3.4。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -98,7 +98,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 - [HCC 新辅助 nivolumab 多模态研究](https://doi.org/10.1186/s12943-026-02682-x)
 - [小鼠结肠炎突变与空间邻域研究](https://doi.org/10.1038/s41588-026-02673-0)
 
-各版实际输出、语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)：v0.1.0 两篇真实论文与三份虚构短文；v0.2.0 语言／模式及附件更新；v0.3.0 逐图动作校验与全补图回归；v0.3.1 后续方法解释；v0.3.2 报告与过程记录分离。v0.3.3 为工程与结构修订（入口重写、规则去重、CI、示例重排），未重跑行为试读。局部试读不扩称为真实论文或视觉全流程重跑；完整第三方论文、原图和原始数据不随公开仓库分发。
+各版实际输出、语义评分、失败和未运行项见 [验收记录](evals/RESULTS.md)：v0.1.0 两篇真实论文与三份虚构短文；v0.2.0 语言／模式及附件更新；v0.3.0 逐图动作校验与全补图回归；v0.3.1 后续方法解释；v0.3.2 报告与过程记录分离。v0.3.3 为工程与结构修订（入口重写、规则去重、CI、示例重排）；v0.3.4 为 Action、运行镜像和自动更新配置维护，两版均未重跑行为试读。局部试读不扩称为真实论文或视觉全流程重跑；完整第三方论文、原图和原始数据不随公开仓库分发。
 
 开发验证：`python3 evals/validate_repo.py` 检查本地链接与记录完整性，`python3 evals/test_reading_record.py` 运行记录回归；两者由 GitHub Actions 在每次推送时自动执行。要用自己的论文做行为评测，按 [PROTOCOL.md](evals/PROTOCOL.md) 进行。视觉夹具可用已有 Pillow 运行 `python3 evals/generate_visual_fixtures.py` 重建；Pillow 仅用于开发夹具，技能阅读不强制 Python 或任何库。
 
@@ -118,7 +118,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.3.3. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
+Version: v0.3.4. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -210,7 +210,7 @@ Two real papers were used to test different research approaches. The skill's ins
 - [Multimodal study of neoadjuvant nivolumab in HCC](https://doi.org/10.1186/s12943-026-02682-x)
 - [Study of mutations and spatial neighborhoods in mouse colitis](https://doi.org/10.1038/s41588-026-02673-0)
 
-See the [evaluation records](evals/RESULTS.md) for actual outputs, semantic scores, failures, and unrun cases: v0.1.0 covered two real papers and three fictional short texts; v0.2.0 covered language/mode selection and updates after supplements were added; v0.3.0 covered figure-viewing action validation and regression tests for coverage of all supplementary figures; v0.3.1 covered method explanations for later results; and v0.3.2 covered separation of reports from process records. v0.3.3 revised engineering and structure (entry-point rewrite, rule deduplication, CI, and example reorganization) without rerunning behavioral reading evaluations. Partial reading trials are not presented as full reruns on real papers or of the complete visual workflow. Full third-party papers, original figures, and raw data are not distributed with this public repository.
+See the [evaluation records](evals/RESULTS.md) for actual outputs, semantic scores, failures, and unrun cases: v0.1.0 covered two real papers and three fictional short texts; v0.2.0 covered language/mode selection and updates after supplements were added; v0.3.0 covered figure-viewing action validation and regression tests for coverage of all supplementary figures; v0.3.1 covered method explanations for later results; and v0.3.2 covered separation of reports from process records. v0.3.3 revised engineering and structure (entry-point rewrite, rule deduplication, CI, and example reorganization); v0.3.4 maintains Actions, runner images, and automatic update configuration. Neither version reran behavioral reading evaluations. Partial reading trials are not presented as full reruns on real papers or of the complete visual workflow. Full third-party papers, original figures, and raw data are not distributed with this public repository.
 
 For development validation, `python3 evals/validate_repo.py` checks local links and record integrity, and `python3 evals/test_reading_record.py` runs reading-record regression tests. GitHub Actions runs both on every push. To evaluate behavior using your own papers, follow [PROTOCOL.md](evals/PROTOCOL.md). Visual fixtures can be rebuilt with `python3 evals/generate_visual_fixtures.py` if Pillow is available. Pillow is only used for development fixtures; using the skill to read papers does not require Python or any particular library.
 
