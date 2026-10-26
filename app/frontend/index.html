@@ -3,147 +3,124 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>文献阅读 · Biomedical Paper Reader</title>
+  <meta name="theme-color" content="#f8f9f6">
+  <title>BioReader · 文献阅读工作台</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github.min.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261026-ui5">
 </head>
-<body>
+<body data-view="library">
+<svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Z"/><path d="M12 6v15"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol><symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4M8 15l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 9l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.9 1)"/></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></symbol><symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol><symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol><symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 3v13a2 2 0 0 0 2 2h13M3 6h13a2 2 0 0 1 2 2v13"/></symbol><symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4ZM20 2v4m-2-2h4"/></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol><symbol id="i-network" viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="18" r="3"/><circle cx="19" cy="18" r="3"/><path d="m10.5 8-4 7m7-7 4 7M8 18h8"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5.3 7a8 8 0 0 1 13-2L20 7M4 17l1.7 2a8 8 0 0 0 13-2"/></symbol><symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14ZM12 20h9"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol><symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20ZM12 9v5m0 3v.5"/></symbol></defs></svg>
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark">📚</span>
-      <span class="brand-name">文献阅读</span>
-      <span class="brand-sub">biomedical-paper-reader</span>
+      <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg></span>
+      <span class="brand-name">BioReader<span class="brand-sub">文献阅读工作台</span></span>
     </div>
+    <div class="topbar-context"><span class="local-dot"></span>本地文献库<span class="context-divider"></span>让阅读，沉淀为理解</div>
     <div class="topbar-actions">
-      <span id="status-pill" class="pill pill-warn">未设置 API Key</span>
-      <button id="btn-settings" class="btn">⚙ 设置</button>
+      <button id="status-pill" class="pill pill-warn" title="配置 AI 阅读助手">配置阅读助手</button>
+      <button id="btn-settings" class="btn btn-ghost" title="设置"><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg><span>设置</span></button>
     </div>
   </header>
 
+  <nav class="workspace-views" id="workspace-views" aria-label="工作区视图">
+    <button class="view-tab active" data-view="library" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg>文献库</button>
+    <button class="view-tab" data-view="pdf" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg>论文原文</button>
+    <button class="view-tab" data-view="notes" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg>阅读笔记</button>
+  </nav>
+
   <div class="layout">
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar" aria-label="文献库">
       <div class="sidebar-head">
+        <div class="section-heading"><h1>我的文献库</h1><span class="library-total" id="library-total">0</span></div>
         <div class="import-row">
-          <label class="btn btn-primary upload-btn" for="file-input">＋ 导入 PDF</label>
-          <button id="btn-doi-import" class="btn" title="按 DOI 从 CrossRef 拉取元数据入库">🔗 DOI</button>
+          <label class="btn btn-primary upload-btn" for="file-input" tabindex="0" role="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>导入 PDF</label>
+          <button id="btn-doi-import" class="btn" title="通过 DOI 导入文献信息"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg>DOI</button>
         </div>
         <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
         <input type="file" id="attach-input" accept="application/pdf,.pdf" hidden>
-        <div class="search-row">
-          <input id="search" type="search" placeholder="搜索标题 / 作者 / DOI / 标签">
-          <button id="btn-fav-filter" class="btn btn-icon" title="只看收藏">☆</button>
+        <div class="search-row"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="search" type="search" aria-label="搜索文献" placeholder="搜索标题、作者、标签…"><kbd title="快捷键">⌘ K</kbd></div>
+        <div class="library-filters" aria-label="文献筛选">
+          <button id="btn-all-filter" class="filter-btn active" aria-pressed="true">全部文献</button>
+          <button id="btn-fav-filter" class="filter-btn" aria-pressed="false" title="只看收藏"><svg class="icon" aria-hidden="true"><use href="#i-star"></use></svg>我的收藏 <span id="favorite-total">0</span></button>
         </div>
         <div id="tag-chips" class="tag-chips" hidden></div>
       </div>
-      <div class="drop-hint" id="drop-hint">把 PDF 拖到这里导入</div>
+      <div class="list-caption">文献列表<span>最近添加</span></div>
       <ul id="paper-list" class="paper-list"></ul>
-      <div class="sidebar-foot" id="library-count"></div>
+      <div class="drop-hint" id="drop-hint"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span>也可以把 PDF 拖到这里</span></div>
+      <div class="sidebar-foot"><span class="local-dot"></span><span id="library-count" role="status"></span></div>
     </aside>
 
     <main class="main" id="main">
-      <section class="pane pdf-pane" id="pdf-pane">
-        <div class="pane-toolbar">
-          <div class="toolbar-group">
-            <button id="pdf-prev" class="btn btn-icon" title="上一页">‹</button>
-            <span class="page-indicator">
-              <input id="pdf-page" type="number" min="1" value="1"> / <span id="pdf-total">0</span>
-            </span>
-            <button id="pdf-next" class="btn btn-icon" title="下一页">›</button>
+      <section class="pane pdf-pane" id="pdf-pane" aria-label="论文原文">
+        <div class="pane-heading">
+          <div class="heading-label"><button id="btn-toggle-library" class="btn btn-icon btn-ghost" title="展开或收起文献库" aria-label="展开或收起文献库" aria-expanded="true"><svg class="icon" aria-hidden="true"><use href="#i-panel"></use></svg></button><span>论文原文</span></div>
+          <span class="section-kicker">PDF READER</span>
+        </div>
+        <div class="pane-toolbar pdf-toolbar">
+          <div class="toolbar-group pagination">
+            <button id="pdf-prev" class="btn btn-icon btn-ghost" title="上一页" aria-label="上一页"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg></button>
+            <span class="page-indicator"><input id="pdf-page" type="number" min="1" value="1" aria-label="PDF 页码"><span>/</span><span id="pdf-total">0</span></span>
+            <button id="pdf-next" class="btn btn-icon btn-ghost" title="下一页" aria-label="下一页"><svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg></button>
           </div>
-          <div class="toolbar-group">
-            <button id="pdf-crop" class="btn" title="在页面上拖动框选，把图表截取进图库" disabled>✂ 取图</button>
-            <button id="pdf-zoom-out" class="btn btn-icon" title="缩小">−</button>
-            <span id="pdf-zoom" class="zoom-label">100%</span>
-            <button id="pdf-zoom-in" class="btn btn-icon" title="放大">＋</button>
-            <button id="pdf-fit" class="btn btn-icon" title="适应宽度">⤢</button>
+          <div class="toolbar-group zoom-tools">
+            <button id="pdf-zoom-out" class="btn btn-icon btn-ghost" title="缩小" aria-label="缩小"><svg class="icon" aria-hidden="true"><use href="#i-minus"></use></svg></button><span id="pdf-zoom" class="zoom-label">100%</span>
+            <button id="pdf-zoom-in" class="btn btn-icon btn-ghost" title="放大" aria-label="放大"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+            <button id="pdf-fit" class="btn btn-icon btn-ghost" title="适应宽度" aria-label="适应宽度"><svg class="icon" aria-hidden="true"><use href="#i-expand"></use></svg></button>
           </div>
+          <button id="pdf-crop" class="btn btn-ghost" title="框选页面中的图表并保存到图库" disabled><svg class="icon" aria-hidden="true"><use href="#i-crop"></use></svg>取图</button>
         </div>
         <div class="pdf-scroll" id="pdf-scroll">
           <div id="pdf-pages" class="pdf-pages"></div>
-          <div class="empty" id="pdf-empty">
-            <div class="empty-icon">📄</div>
-            <div id="pdf-empty-text">从左侧选择一篇文献，或导入新的 PDF</div>
-            <button id="btn-attach-pdf" class="btn btn-primary" hidden>📎 附加 PDF 文件</button>
+          <div class="empty pdf-welcome" id="pdf-empty">
+            <div class="paper-illustration" aria-hidden="true"><div class="illustration-back"></div><div class="illustration-page"><span class="illustration-label">RESEARCH PAPER</span><i></i><i></i><div class="illustration-chart"><span></span><span></span><span></span><span></span></div><div class="illustration-lines"><i></i><i></i><i></i></div></div><span class="illustration-seal"><svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg></span></div>
+            <span class="empty-eyebrow">你的下一次发现，从这里开始</span>
+            <h2 class="empty-title">留一点时间，读懂一篇好论文</h2>
+            <p class="empty-copy" id="pdf-empty-text">从文献库选择一篇论文，或导入新的 PDF。<br>原文、图表与思考，在这里并排展开。</p>
+            <div class="empty-actions"><button id="btn-empty-import" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>导入 PDF</button><button id="btn-empty-doi" class="btn btn-ghost">通过 DOI 导入 <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button></div>
+            <button id="btn-attach-pdf" class="btn btn-primary" hidden><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>附加 PDF 文件</button>
+            <div class="welcome-footnote">原文对照<span>·</span>图表精读<span>·</span>笔记沉淀</div>
           </div>
-          <div id="crop-hint" class="crop-hint" hidden>取图模式：在页面上拖动框选图表，Esc 退出</div>
+          <div id="crop-hint" class="crop-hint" hidden>拖动框选图表，按 Esc 退出取图</div>
         </div>
       </section>
-
-      <div class="splitter" id="splitter" title="拖动调整宽度"></div>
-
-      <section class="pane notes-pane">
+      <div class="splitter" id="splitter" title="拖动调整原文与笔记宽度" role="separator" aria-label="调整原文与笔记宽度" aria-orientation="vertical" tabindex="0"></div>
+      <section class="pane notes-pane" aria-label="阅读笔记">
+        <div class="pane-heading notes-heading"><div class="heading-label"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg><span>阅读笔记</span></div><span class="save-status" id="save-status" role="status">自动保存到本地</span></div>
         <div class="pane-toolbar notes-toolbar">
-          <div class="tabs" id="tabs">
-            <button class="tab active" data-tab="preview">预览</button>
-            <button class="tab" data-tab="edit">编辑</button>
-            <button class="tab" data-tab="figures">图库 <span id="fig-count" class="tab-count" hidden></span></button>
+          <div class="tabs" id="tabs" role="tablist" aria-label="笔记视图">
+            <button class="tab active" data-tab="preview" role="tab" id="view-preview" aria-controls="tab-preview" aria-selected="true">笔记</button>
+            <button class="tab" data-tab="edit" role="tab" id="view-edit" aria-controls="tab-edit" aria-selected="false">编辑</button>
+            <button class="tab" data-tab="figures" role="tab" id="view-figures" aria-controls="tab-figures" aria-selected="false">图库 <span id="fig-count" class="tab-count" hidden></span></button>
           </div>
-          <div class="toolbar-group">
-            <select id="read-mode" title="阅读模式">
-              <option value="deep">完整精读</option>
-              <option value="quick">速读筛选</option>
-            </select>
-            <button id="btn-generate" class="btn btn-primary" disabled>✨ 生成笔记</button>
-            <button id="btn-stop" class="btn btn-danger" hidden>■ 停止</button>
-          </div>
-          <div class="toolbar-group export-group">
-            <button id="btn-export-md" class="btn" disabled title="下载 Markdown">⬇ .md</button>
-            <button id="btn-export-word" class="btn" disabled title="下载 Word 文档（含图片）">⬇ Word</button>
-            <select id="wechat-theme" title="公众号主题"></select>
-            <button id="btn-copy-wechat" class="btn btn-wechat" disabled title="按主题排版并复制，直接粘贴到公众号编辑器">📋 复制</button>
-          </div>
+          <details id="export-menu" class="export-menu"><summary class="btn btn-ghost"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>导出</summary><div class="export-popover">
+            <div class="popover-label">保存笔记</div>
+            <button id="btn-export-md" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span>Markdown</span><small>.md</small></button>
+            <button id="btn-export-word" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span>Word 文档</span><small>.docx</small></button>
+            <div class="popover-divider"></div><label class="popover-label" for="wechat-theme">公众号排版</label><select id="wechat-theme" aria-label="公众号主题"></select>
+            <button id="btn-copy-wechat" class="btn btn-wechat" disabled><svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>复制到公众号</button>
+          </div></details>
         </div>
-
+        <div class="reading-actions"><div class="reading-mode"><span class="action-label">阅读方式</span><select id="read-mode" aria-label="阅读模式"><option value="deep">完整精读</option><option value="quick">速读筛选</option></select></div><button id="btn-generate" class="btn btn-primary" disabled><svg class="icon" aria-hidden="true"><use href="#i-sparkles"></use></svg>生成笔记</button><button id="btn-stop" class="btn btn-danger" hidden>停止生成</button></div>
         <div class="paper-head" id="paper-head" hidden>
-          <button class="star" id="head-star" title="收藏">☆</button>
-          <div class="paper-head-text">
-            <div class="paper-title" id="head-title"></div>
-            <div class="paper-meta" id="head-meta"></div>
-            <div class="paper-tags" id="head-tags"></div>
-          </div>
-          <div class="head-actions">
-            <button class="btn btn-icon btn-ghost" id="btn-related" title="相关文献（Semantic Scholar：参考文献 / 被引）">🕸</button>
-            <button class="btn btn-icon btn-ghost" id="btn-enrich" title="用 CrossRef 补全作者 / 年份 / 期刊">🧾</button>
-            <button class="btn btn-icon btn-ghost" id="btn-delete" title="删除文献">🗑</button>
-          </div>
+          <div class="paper-head-text"><div class="paper-title" id="head-title"></div><details class="paper-details"><summary id="head-summary">文献信息</summary><div class="paper-meta" id="head-meta"></div></details><div class="paper-tags" id="head-tags"></div></div>
+          <div class="head-actions"><button class="star" id="head-star" title="收藏" aria-label="收藏"><svg class="icon" aria-hidden="true"><use href="#i-star"></use></svg></button><button class="btn btn-icon btn-ghost" id="btn-related" title="查看参考文献与被引文献" aria-label="相关文献"><svg class="icon" aria-hidden="true"><use href="#i-network"></use></svg></button><button class="btn btn-icon btn-ghost" id="btn-enrich" title="补全文献信息" aria-label="补全文献信息"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg></button><button class="btn btn-icon btn-ghost danger-ghost" id="btn-delete" title="删除文献" aria-label="删除文献"><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg></button></div>
         </div>
-
-        <div class="gen-status" id="gen-status" hidden></div>
-
-        <div class="tab-body" id="tab-preview">
-          <article class="markdown-body" id="preview">
-            <div class="empty">
-              <div class="empty-icon">📝</div>
-              <div>选择文献后点击「生成笔记」，或在「编辑」中手写笔记</div>
-            </div>
-          </article>
-        </div>
-
-        <div class="tab-body" id="tab-edit" hidden>
-          <textarea id="editor" spellcheck="false" placeholder="在这里编辑 Markdown 笔记，会自动保存……"></textarea>
-        </div>
-
-        <div class="tab-body figures-body" id="tab-figures" hidden>
-          <div class="fig-toolbar">
-            <span class="hint" id="fig-hint">自动按图注锚定提取；矢量图或扫描件用 PDF 工具栏「✂ 取图」框选；裁完可立即 👁 追问</span>
-            <div class="spacer"></div>
-            <button id="btn-fig-read" class="btn" title="读图模型逐张观察主图（观察会写入笔记材料）">👁 全部读图</button>
-            <button id="btn-fig-extract" class="btn" title="重新自动提取">↻ 重新提取</button>
-          </div>
-          <div class="fig-grid" id="fig-grid"></div>
-        </div>
+        <div class="gen-status" id="gen-status" role="status" hidden></div>
+        <div class="tab-body" id="tab-preview" role="tabpanel" aria-labelledby="view-preview"><article class="markdown-body" id="preview"><div class="empty notes-empty"><div class="empty-symbol"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg></div><h2 class="empty-title">把阅读，变成自己的思考</h2><p class="empty-copy">选择文献后生成结构化阅读笔记，<br>也可以在「编辑」中记录你的想法。</p><div class="empty-steps"><span><b>01</b>理解研究问题</span><span><b>02</b>核对图表证据</span><span><b>03</b>留下你的判断</span></div></div></article></div>
+        <div class="tab-body" id="tab-edit" role="tabpanel" aria-labelledby="view-edit" hidden><textarea id="editor" aria-label="Markdown 笔记" spellcheck="false" placeholder="记下研究问题、关键证据，以及你的思考…&#10;&#10;支持 Markdown，编辑后自动保存。"></textarea></div>
+        <div class="tab-body figures-body" id="tab-figures" role="tabpanel" aria-labelledby="view-figures" hidden><div class="fig-toolbar"><span class="hint" id="fig-hint">自动提取论文图表，也可在原文中框选取图。</span><div class="fig-toolbar-actions"><button id="btn-fig-read" class="btn" title="逐张观察主图，将结果用于笔记"><svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>全部读图</button><button id="btn-fig-extract" class="btn" title="重新自动提取"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg>重新提取</button></div></div><div class="fig-grid" id="fig-grid"></div></div>
       </section>
     </main>
   </div>
-
-  <div class="modal-backdrop" id="settings-modal" hidden>
+  <div class="modal-backdrop" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="modal modal-wide">
       <div class="modal-head">
-        <h3>设置</h3>
-        <button class="btn btn-icon btn-ghost" id="settings-close">✕</button>
+        <div><span class="modal-eyebrow">个人工作台</span><h3 id="settings-title">阅读偏好与模型设置</h3></div>
+        <button class="btn btn-icon btn-ghost" id="settings-close" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
       </div>
       <div class="modal-body">
-        <div class="field-grid">
+        <p class="settings-intro">连接你常用的模型，让笔记更贴近你的研究。API Key 仅保存在本机；生成时，文献内容将发送至配置的模型服务。</p><div class="settings-section-label">模型连接</div><div class="field-grid">
           <label class="field">
             <span>API Base URL</span>
             <input id="set-base-url" type="url" placeholder="https://open.bigmodel.cn/api/paas/v4">
@@ -164,6 +141,7 @@
             <input id="set-vision-model" type="text" placeholder="glm-4.6v / gpt-4o / qwen-vl-max">
             <small>填写后生成精读时会先让它观察每张主图并把观察写入材料；留空则只用图注。</small>
           </label>
+        </div><details class="advanced-settings"><summary>生成参数与文献检索 <span>高级设置</span></summary><div class="field-grid">
           <label class="field">
             <span>送入模型的最大字符数</span>
             <input id="set-max-chars" type="number" min="5000" max="2000000" step="1000">
@@ -185,7 +163,7 @@
             <small id="set-s2-hint">相关文献检索用；免费申请 semanticscholar.org/product/api。</small>
           </label>
         </div>
-        <label class="field">
+        </details><label class="field">
           <span>我的研究方向（可选）</span>
           <input id="set-direction" type="text" placeholder="如：胃癌腹膜转移微环境、CAF–巨噬细胞互作、免疫治疗应答预测">
           <small>写入提示词，让「过滤结论 / 决策卡」按你的方向判断相关度。</small>
@@ -200,11 +178,11 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="doi-modal" hidden>
+  <div class="modal-backdrop" id="doi-modal" role="dialog" aria-modal="true" aria-labelledby="doi-title" hidden>
     <div class="modal">
       <div class="modal-head">
-        <h3>按 DOI 导入</h3>
-        <button class="btn btn-icon btn-ghost" id="doi-close">✕</button>
+        <div><span class="modal-eyebrow">添加到文献库</span><h3 id="doi-title">通过 DOI 导入文献</h3></div>
+        <button class="btn btn-icon btn-ghost" id="doi-close" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
       </div>
       <div class="modal-body">
         <label class="field">
@@ -221,25 +199,32 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="related-modal" hidden>
+  <div class="modal-backdrop" id="related-modal" role="dialog" aria-modal="true" aria-labelledby="related-title" hidden>
     <div class="modal modal-wide">
       <div class="modal-head">
-        <h3>相关文献 <span class="hint" id="related-sub"></span></h3>
+        <h3 id="related-title">相关文献 <span class="hint" id="related-sub"></span></h3>
         <div class="toolbar-group">
-          <button class="btn" id="related-refresh" title="忽略缓存重新检索">↻</button>
-          <button class="btn btn-icon btn-ghost" id="related-close">✕</button>
+          <button class="btn" id="related-refresh" title="忽略缓存重新检索" aria-label="刷新相关文献"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+          <button class="btn btn-icon btn-ghost" id="related-close" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
         </div>
       </div>
       <div class="modal-body related-body" id="related-body"></div>
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <div class="modal-backdrop" id="input-modal" role="dialog" aria-modal="true" aria-labelledby="input-title" aria-describedby="input-description" hidden>
+    <div class="modal"><div class="modal-head"><h3 id="input-title">图表观察</h3><button id="input-close" class="btn btn-icon btn-ghost" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
+      <div class="modal-body"><p class="hint" id="input-description"></p><textarea id="input-value" rows="6" aria-labelledby="input-title" aria-describedby="input-description"></textarea></div>
+      <div class="modal-foot"><div class="spacer"></div><button id="input-cancel" class="btn">取消</button><button id="input-submit" class="btn btn-primary">确认</button></div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
   <script src="export.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20261026-ui5"></script>
 </body>
 </html>
