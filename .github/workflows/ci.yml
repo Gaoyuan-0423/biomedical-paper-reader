@@ -16,5 +16,7 @@ jobs:
         run: python3 evals/validate_repo.py
       - name: Reading-record validator regression
         run: python3 evals/test_reading_record.py -v
+      - name: Release metadata regression
+        run: python3 evals/test_prepare_release.py -v
       - name: Helper scripts compile
-        run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py
+        run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py

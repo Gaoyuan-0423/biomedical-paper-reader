@@ -8,6 +8,8 @@
 
 版本：v0.3.3。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。
 
+这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
+
 [Skill 入口](SKILL.md) · [示例报告](examples/README.md) · [验收记录](evals/RESULTS.md) · [MIT 许可](LICENSE)
 
 ### 报告长什么样
@@ -117,6 +119,8 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
 Version: v0.3.3. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
+
+This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
 [Skill entry point](SKILL.md) · [Example reports](examples/README.md) · [Evaluation records](evals/RESULTS.md) · [MIT License](LICENSE)
 
