@@ -2,6 +2,9 @@
 
 ## 未发布 / Unreleased
 
+- CI 与发布工作流升级到原生 Node.js 24 的 `actions/checkout` v7.0.1 和 `actions/setup-python` v7.1.0，保留完整提交 SHA；运行镜像固定为 `ubuntu-24.04`。
+- 配置 Dependabot 每周一北京时间 09:00 检查 GitHub Actions 并自动提出更新 PR，由现有 CI 验证、维护者审阅合并；不启用自动合并或自动发布。
+
 - 补充明确触发的发布工作流：核对版本资料、运行仓库检查，再将标签与 Release 绑定到本次检查的提交；不覆盖已有发布或移动已有标签。
 - 准备自 v0.2.0 以来的 [v0.3.3 累计发布说明](releases/v0.3.3.md)，并在中英文 README 与[发布维护指引](RELEASING.md)中区分源码版本和正式 Release。合并修复后仍需运行发布流程，不能将 PR 合并视为已经发布。
 

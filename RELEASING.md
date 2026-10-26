@@ -36,6 +36,12 @@
 
 - 合并后按上述步骤手动发布。工作流使用 GitHub 提供的 `GITHUB_TOKEN` 和 `contents: write` 权限；通常无需另建个人令牌。若仓库规则禁止 Actions 创建标签或 Release，运行会失败并保留日志，需要维护者处理相应权限。
 
+### 自动维护 GitHub Actions
+
+[Dependabot 配置](.github/dependabot.yml)合并到默认分支后，GitHub 将按每周一北京时间 09:00 的计划检查工作流引用的 Action，发现新版后自动创建更新 PR，由现有 CI 检查，维护者审阅后合并。Action 继续使用完整提交 SHA 固定，并在行尾标注对应版本。这项服务在 GitHub 上运行，不需要 Codex 持续在线，也不会自动合并 PR 或发布新版本。
+
+此配置只维护 Action 引用；`runs-on` 的 Ubuntu 镜像和 `python-version` 不由它升级。CI 与发布任务固定使用 `ubuntu-24.04`，运行环境升级需另开 PR 验证。已发布的 v0.3.3 保留原标签快照，这类工作流维护不需要重复发布同一版本。
+
 ### 重试与现有标签
 
 已有 Release（包括草稿）不会被覆盖；已有标签仅在其最终指向的提交与此次检查的提交相同时允许继续，注释标签同样适用。若创建标签后发布失败，使用原运行的 **Re-run failed jobs**，以保留同一个提交。若从新的 `main` 提交另起运行而旧标签已经存在，工作流会拒绝目标不一致；不要移动已发布标签来规避此检查，应核实原运行或准备新版本。所有发布运行串行执行。
@@ -65,6 +71,12 @@ Merging the PR does not publish a release. Runs on other branches skip the publi
 - Use full GitHub URLs containing the target tag for repository files linked in release notes; relative file links may not resolve on the Release page.
 - Before merging, run the four commands in the Chinese section above, replacing the example version. The version checker only reads local files and outputs notes; it does not access the network or create tags.
 - After merging, publish manually as described above. The workflow uses GitHub's `GITHUB_TOKEN` with `contents: write`; a separate personal token is normally unnecessary. Repository rules that disallow tag or Release creation by Actions will cause the run to fail with logs for maintainers to investigate.
+
+### Automatic GitHub Actions maintenance
+
+Once the [Dependabot configuration](.github/dependabot.yml) is merged into the default branch, GitHub checks workflow Action references on a weekly schedule, Mondays at 09:00 Asia/Shanghai. It opens update PRs when newer versions are available; the existing CI checks them, and maintainers review and merge them. Actions remain pinned to full commit SHAs with corresponding version comments. This service runs on GitHub and does not require Codex to remain online. It does not automatically merge PRs or publish releases.
+
+This configuration updates Action references only, not the Ubuntu image in `runs-on` or `python-version`. CI and release jobs use `ubuntu-24.04`; runtime upgrades require a separate PR and validation. The published v0.3.3 tag remains its original snapshot; workflow maintenance does not require publishing the same version again.
 
 ### Retries and existing tags
 
