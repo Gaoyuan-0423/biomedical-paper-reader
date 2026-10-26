@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn>=0.27
+pypdf>=4.0
+httpx>=0.27
+python-multipart>=0.0.9
+pdfplumber>=0.11
+pypdfium2>=4.30
+Pillow>=10.0

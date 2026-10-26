@@ -80,6 +80,7 @@ Clone the repo and point any file-capable assistant at `SKILL.md`, or drop the f
 - `references/`：[报告模板](references/report-template.md)、[模式与语言](references/reading-modes.md)、[证据规则](references/evidence-rules.md)、[研究检查点](references/study-checks.md)、[材料处理](references/material-handling.md)、[逐图记录](references/reading-record.md)。
 - `scripts/check_reading_record.py`：逐图记录与声明一致性的标准库校验器。
 - `scripts/render_pdf_page.py`：可选 PDF 页渲染辅助（需 pypdfium2 或 PyMuPDF，非运行依赖）。
+- `app/`：[BioReader App](app/README.md)——按本 skill 方法论实现的本地文献阅读应用（FastAPI + 原生 JS；PDF 双栏解析与图注锚定取图、精读/速读流式笔记、读图模型、DOI 导入与相关文献、Markdown/Word/公众号一键复制导出），与 skill 本体相互独立，`./app/run.sh` 即用。
 - `agents/openai.yaml`：可选的 Codex 界面元数据。
 - `evals/cases.md`、`evals/fixtures/`：行为验收设计和原创虚构材料。
 - `evals/PROTOCOL.md`：用自备论文复现行为评测的协议。

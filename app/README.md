@@ -1,0 +1,106 @@
+# BioReader App — 本地文献精读 + 图库 + 笔记 + 公众号导出
+
+基于 [biomedical-paper-reader](../SKILL.md) skill 方法论打造的本地单用户文献阅读应用。
+功能思路融合了作者的另外两个项目：**ReadBox**（几何解析取图、读图模型、证据溯源、长文预算、错误分类）与 **CiteBox**（DOI 导入、Semantic Scholar 相关文献、标签）。
+
+PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔记 → 图库插图 → Markdown / Word / 公众号导出。
+
+零构建步骤：后端 FastAPI + 前端原生 JS（pdf.js / marked / highlight.js / docx 走 CDN），`./app/run.sh` 即用。
+
+## 快速开始
+
+```bash
+./app/run.sh          # 默认 http://127.0.0.1:8765，可用 PORT=9000 ./app/run.sh 改端口
+```
+
+Python 依赖见 `backend/requirements.txt`（fastapi、uvicorn、pypdf、httpx、python-multipart、
+pdfplumber、pypdfium2、Pillow）。
+
+## 配置 API（右上角 设置）
+
+| 字段 | 说明 |
+|---|---|
+| Base URL / API Key | 任意 OpenAI 兼容接口（BigModel / DeepSeek / OpenAI…），不允许 localhost / 内网地址 |
+| 文本模型 | 写笔记、长文分段整理用 |
+| 读图模型（可选） | 填视觉模型（如 `glm-4.6v`）后，生成精读笔记前会先让模型逐张观察主图，观察结果随图注一起进入提示词；图库中「读这张图 / 全部读图」可单独触发 |
+| 送入模型的最大字符数 | 超出时**不再粗暴截断**：自动按页分段整理成带页码的要点笔记（并发压缩、进度可见），再写报告 |
+| 单次输出上限 | 0 = 接口默认；精读报告较长，建议 16384+ |
+| 最多读图张数 | 按页码顺序取前 N 张主图送视觉模型 |
+| Semantic Scholar Key（可选） | 相关文献检索用；匿名额度较慢，可免费申请 |
+| 我的研究方向（可选） | 写入提示词，让「过滤结论 / 决策卡」按你的方向判断相关度 |
+
+## 功能
+
+### 文献库
+- **导入 PDF**：点击或拖拽（≤80MB）；几何解析器自动产出**双栏正确阅读顺序**的全文（含章节标题识别），
+  并按图注锚定**提取全部主图与子图**（图注合并整理、期刊页眉页脚过滤、面板字母切分）。
+- **DOI 导入**：贴 DOI / doi.org 链接 → CrossRef 拉取标题、作者、期刊、年份、摘要建条目 →
+  中间面板「附加 PDF」补文件（附加不会覆盖 CrossRef 元数据）。
+- **元数据补全**：🧾 按钮用 CrossRef 补作者/年份/期刊（已有字段不覆盖）。
+- **收藏 / 搜索 / 标签**：标题下方回车加标签，侧栏点标签筛选。
+
+### 阅读与图片（取图思路来自 skill 的问题驱动核查）
+- 左侧 pdf.js 渲染（翻页/缩放/适宽/分隔条）。
+- **图库标签页**：全部图片卡片（缩略图/图注/页码/来源），点缩略图放大，
+  「改图注」「删」「插图」；「↻ 重新提取」保留手动图与已有读图观察（ReadBox 合并规则）。
+- **✂ 手动取图**：PDF 工具栏进入取图模式，在页面上拖框截取任意区域（矢量图、扫描件、跨页图的兜底），
+  手动裁图以 3 倍分辨率渲染，保证面板标签与统计标注可读。
+- **👁 读这张图（问题驱动）**：任何一张图（含刚裁的）都可以立刻让读图模型观察，
+  并可带具体追问（如「F 面板两组的差别和显著性？」）；配置了读图模型时，裁图完成后自动弹出追问。
+  观察结果缓存在卡片上，随图注一起进入笔记生成材料。
+
+### 笔记生成（SSE 流式）
+- **完整精读**：skill 报告模板（开篇导读 → 逐图精读 → 课题借鉴 → 复现入口）。
+- **速读筛选**：一分钟判断值不值得精读。
+- 引用遵循 skill 的自然引用原则：图号／面板／小节定位（如「Fig. 3B–D 展示……」），不逐句标页码；图片清单（图注 + 视觉观察）随提示词注入。
+- 生成中显示分阶段进度（读图 x/y、长文整理 x/y），可随时停止并保留已生成部分。
+- 上游错误分类为可操作建议（上下文超限/输出超限/图片被拒/模型名错/鉴权/限流），不回显原始报文。
+
+### 相关文献（CiteBox 思路）
+- 🕸 按钮 → Semantic Scholar 该文的**参考文献**与**引用本文**（按被引排序），
+  逐条「导入」按钮直接按 DOI 入库；结果缓存 7 天，↻ 强制刷新。
+
+### 导出
+- **⬇ .md**：Markdown 源文件。
+- **⬇ Word**：docx 文档（标题层级、表格、代码、图片内嵌），按需从 CDN 加载 docx 库。
+- **📋 复制公众号**：笔记工具栏一键复制（无需切标签页）——按所选主题排版（4 套主题，工具栏小下拉切换），
+  mdnice 同款管线（CSS 全内联、伪元素转 span、代码 `<br>`+NBSP 加固、外链转脚注）；
+  笔记里 `![Figure X](figure:xxx)` 的图片自动内嵌 base64，粘贴进公众号编辑器不丢图。
+
+## 数据位置
+
+```
+app/data/
+├── settings.json          # API 配置
+└── papers/<id>/           # 每篇一个目录
+    ├── paper.pdf / text.txt / meta.json
+    ├── figures.json       # 图片清单（bbox、图注、读图观察）
+    └── figures/*.png      # 裁取的图片
+```
+
+`app/data/` 已 gitignore。API Key 明文存于本地 settings.json，仅用于向你配置的接口发起请求。
+
+## HTTP API（节选）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET/POST | `/api/papers` | 列表 / 上传 PDF |
+| POST | `/api/import/doi` | CrossRef 元数据入库（重复 DOI 409） |
+| POST | `/api/papers/{id}/file` | 附加/替换 PDF（保留已有元数据与手动图） |
+| POST | `/api/papers/{id}/enrich` | CrossRef 补全元数据 |
+| GET | `/api/papers/{id}/related` | S2 参考文献/被引（缓存 7 天） |
+| GET/POST | `/api/papers/{id}/figures` `/extract` `/crop` | 图库 / 重提取 / 手动裁图 |
+| PATCH/DELETE | `/api/papers/{id}/figures/{fid}` | 改图注、观察 / 删除（子图级联） |
+| POST | `/api/papers/{id}/figures/{fid}/read` | 单图读图（可带追问，观察缓存） |
+| POST | `/api/papers/{id}/figures/read` | 批量读图（SSE，观察缓存） |
+| POST | `/api/papers/{id}/read?mode=deep\|quick` | SSE 流式生成笔记 |
+
+出站请求仅限三类：你配置的 LLM 接口（SSRF 校验 + 重定向逐跳复检）、`api.crossref.org`、
+`api.semanticscholar.org`（主机白名单）。
+
+## 已知边界
+
+- 图注锚定取图依赖 PDF 内嵌文本/对象几何；纯扫描件走 pypdf 文本兜底 + 手动取图。
+- Semantic Scholar 匿名额度有限（约 1 请求/秒，共享池），频繁使用建议填免费 API Key。
+- OCR 未内置（ReadBox 有 Tesseract 管线，本应用为保持轻量暂未移植）。
+- 公众号粘贴对代码块已加固；数学公式仍建议截图插入。

@@ -36,3 +36,6 @@ assets/
 # Local session artifacts
 .mimosa/
 .v2c/
+
+# Local paper-reader app data (PDF library, notes, API key)
+app/data/

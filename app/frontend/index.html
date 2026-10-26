@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文献阅读 · Biomedical Paper Reader</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">📚</span>
+      <span class="brand-name">文献阅读</span>
+      <span class="brand-sub">biomedical-paper-reader</span>
+    </div>
+    <div class="topbar-actions">
+      <span id="status-pill" class="pill pill-warn">未设置 API Key</span>
+      <button id="btn-settings" class="btn">⚙ 设置</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div class="import-row">
+          <label class="btn btn-primary upload-btn" for="file-input">＋ 导入 PDF</label>
+          <button id="btn-doi-import" class="btn" title="按 DOI 从 CrossRef 拉取元数据入库">🔗 DOI</button>
+        </div>
+        <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
+        <input type="file" id="attach-input" accept="application/pdf,.pdf" hidden>
+        <div class="search-row">
+          <input id="search" type="search" placeholder="搜索标题 / 作者 / DOI / 标签">
+          <button id="btn-fav-filter" class="btn btn-icon" title="只看收藏">☆</button>
+        </div>
+        <div id="tag-chips" class="tag-chips" hidden></div>
+      </div>
+      <div class="drop-hint" id="drop-hint">把 PDF 拖到这里导入</div>
+      <ul id="paper-list" class="paper-list"></ul>
+      <div class="sidebar-foot" id="library-count"></div>
+    </aside>
+
+    <main class="main" id="main">
+      <section class="pane pdf-pane" id="pdf-pane">
+        <div class="pane-toolbar">
+          <div class="toolbar-group">
+            <button id="pdf-prev" class="btn btn-icon" title="上一页">‹</button>
+            <span class="page-indicator">
+              <input id="pdf-page" type="number" min="1" value="1"> / <span id="pdf-total">0</span>
+            </span>
+            <button id="pdf-next" class="btn btn-icon" title="下一页">›</button>
+          </div>
+          <div class="toolbar-group">
+            <button id="pdf-crop" class="btn" title="在页面上拖动框选，把图表截取进图库" disabled>✂ 取图</button>
+            <button id="pdf-zoom-out" class="btn btn-icon" title="缩小">−</button>
+            <span id="pdf-zoom" class="zoom-label">100%</span>
+            <button id="pdf-zoom-in" class="btn btn-icon" title="放大">＋</button>
+            <button id="pdf-fit" class="btn btn-icon" title="适应宽度">⤢</button>
+          </div>
+        </div>
+        <div class="pdf-scroll" id="pdf-scroll">
+          <div id="pdf-pages" class="pdf-pages"></div>
+          <div class="empty" id="pdf-empty">
+            <div class="empty-icon">📄</div>
+            <div id="pdf-empty-text">从左侧选择一篇文献，或导入新的 PDF</div>
+            <button id="btn-attach-pdf" class="btn btn-primary" hidden>📎 附加 PDF 文件</button>
+          </div>
+          <div id="crop-hint" class="crop-hint" hidden>取图模式：在页面上拖动框选图表，Esc 退出</div>
+        </div>
+      </section>
+
+      <div class="splitter" id="splitter" title="拖动调整宽度"></div>
+
+      <section class="pane notes-pane">
+        <div class="pane-toolbar notes-toolbar">
+          <div class="tabs" id="tabs">
+            <button class="tab active" data-tab="preview">预览</button>
+            <button class="tab" data-tab="edit">编辑</button>
+            <button class="tab" data-tab="figures">图库 <span id="fig-count" class="tab-count" hidden></span></button>
+          </div>
+          <div class="toolbar-group">
+            <select id="read-mode" title="阅读模式">
+              <option value="deep">完整精读</option>
+              <option value="quick">速读筛选</option>
+            </select>
+            <button id="btn-generate" class="btn btn-primary" disabled>✨ 生成笔记</button>
+            <button id="btn-stop" class="btn btn-danger" hidden>■ 停止</button>
+          </div>
+          <div class="toolbar-group export-group">
+            <button id="btn-export-md" class="btn" disabled title="下载 Markdown">⬇ .md</button>
+            <button id="btn-export-word" class="btn" disabled title="下载 Word 文档（含图片）">⬇ Word</button>
+            <select id="wechat-theme" title="公众号主题"></select>
+            <button id="btn-copy-wechat" class="btn btn-wechat" disabled title="按主题排版并复制，直接粘贴到公众号编辑器">📋 复制</button>
+          </div>
+        </div>
+
+        <div class="paper-head" id="paper-head" hidden>
+          <button class="star" id="head-star" title="收藏">☆</button>
+          <div class="paper-head-text">
+            <div class="paper-title" id="head-title"></div>
+            <div class="paper-meta" id="head-meta"></div>
+            <div class="paper-tags" id="head-tags"></div>
+          </div>
+          <div class="head-actions">
+            <button class="btn btn-icon btn-ghost" id="btn-related" title="相关文献（Semantic Scholar：参考文献 / 被引）">🕸</button>
+            <button class="btn btn-icon btn-ghost" id="btn-enrich" title="用 CrossRef 补全作者 / 年份 / 期刊">🧾</button>
+            <button class="btn btn-icon btn-ghost" id="btn-delete" title="删除文献">🗑</button>
+          </div>
+        </div>
+
+        <div class="gen-status" id="gen-status" hidden></div>
+
+        <div class="tab-body" id="tab-preview">
+          <article class="markdown-body" id="preview">
+            <div class="empty">
+              <div class="empty-icon">📝</div>
+              <div>选择文献后点击「生成笔记」，或在「编辑」中手写笔记</div>
+            </div>
+          </article>
+        </div>
+
+        <div class="tab-body" id="tab-edit" hidden>
+          <textarea id="editor" spellcheck="false" placeholder="在这里编辑 Markdown 笔记，会自动保存……"></textarea>
+        </div>
+
+        <div class="tab-body figures-body" id="tab-figures" hidden>
+          <div class="fig-toolbar">
+            <span class="hint" id="fig-hint">自动按图注锚定提取；矢量图或扫描件用 PDF 工具栏「✂ 取图」框选；裁完可立即 👁 追问</span>
+            <div class="spacer"></div>
+            <button id="btn-fig-read" class="btn" title="读图模型逐张观察主图（观察会写入笔记材料）">👁 全部读图</button>
+            <button id="btn-fig-extract" class="btn" title="重新自动提取">↻ 重新提取</button>
+          </div>
+          <div class="fig-grid" id="fig-grid"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="settings-modal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h3>设置</h3>
+        <button class="btn btn-icon btn-ghost" id="settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-grid">
+          <label class="field">
+            <span>API Base URL</span>
+            <input id="set-base-url" type="url" placeholder="https://open.bigmodel.cn/api/paas/v4">
+            <small>任何 OpenAI 兼容接口（智谱 BigModel、DeepSeek、OpenAI……）。不允许 localhost / 内网地址。</small>
+          </label>
+          <label class="field">
+            <span>API Key</span>
+            <input id="set-api-key" type="password" placeholder="留空则保持不变" autocomplete="off">
+            <small id="set-key-hint"></small>
+          </label>
+          <label class="field">
+            <span>文本模型</span>
+            <input id="set-model" type="text" placeholder="glm-4.6">
+            <small>写笔记、分段整理长文用。</small>
+          </label>
+          <label class="field">
+            <span>读图模型（可选）</span>
+            <input id="set-vision-model" type="text" placeholder="glm-4.6v / gpt-4o / qwen-vl-max">
+            <small>填写后生成精读时会先让它观察每张主图并把观察写入材料；留空则只用图注。</small>
+          </label>
+          <label class="field">
+            <span>送入模型的最大字符数</span>
+            <input id="set-max-chars" type="number" min="5000" max="2000000" step="1000">
+            <small>超过时自动按页分段整理成要点（保留页码）再写报告，不再粗暴截断。128k 上下文建议 90000–150000。</small>
+          </label>
+          <label class="field">
+            <span>单次输出上限（tokens，0 = 接口默认）</span>
+            <input id="set-max-tokens" type="number" min="0" max="1048576" step="1024">
+            <small>精读报告较长，接口默认输出不够时填 16384 或更大；被接口拒绝时会提示。</small>
+          </label>
+          <label class="field">
+            <span>最多读图张数</span>
+            <input id="set-max-figures" type="number" min="0" max="40">
+            <small>按页码顺序取前 N 张主图送读图模型，0 关闭。</small>
+          </label>
+          <label class="field">
+            <span>Semantic Scholar API Key（可选）</span>
+            <input id="set-s2-key" type="password" placeholder="留空用匿名额度（较慢）" autocomplete="off">
+            <small id="set-s2-hint">相关文献检索用；免费申请 semanticscholar.org/product/api。</small>
+          </label>
+        </div>
+        <label class="field">
+          <span>我的研究方向（可选）</span>
+          <input id="set-direction" type="text" placeholder="如：胃癌腹膜转移微环境、CAF–巨噬细胞互作、免疫治疗应答预测">
+          <small>写入提示词，让「过滤结论 / 决策卡」按你的方向判断相关度。</small>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" id="settings-clear-key">清除 Key</button>
+        <div class="spacer"></div>
+        <button class="btn" id="settings-cancel">取消</button>
+        <button class="btn btn-primary" id="settings-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="doi-modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3>按 DOI 导入</h3>
+        <button class="btn btn-icon btn-ghost" id="doi-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>DOI 或 doi.org 链接</span>
+          <input id="doi-input" type="text" placeholder="10.1136/gutjnl-2024-333617" autocomplete="off">
+          <small>从 CrossRef 拉取标题、作者、期刊、年份、摘要建立条目；随后可在中间面板「附加 PDF」。</small>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <div class="spacer"></div>
+        <button class="btn" id="doi-cancel">取消</button>
+        <button class="btn btn-primary" id="doi-submit">导入</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="related-modal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h3>相关文献 <span class="hint" id="related-sub"></span></h3>
+        <div class="toolbar-group">
+          <button class="btn" id="related-refresh" title="忽略缓存重新检索">↻</button>
+          <button class="btn btn-icon btn-ghost" id="related-close">✕</button>
+        </div>
+      </div>
+      <div class="modal-body related-body" id="related-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+  <script src="export.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
