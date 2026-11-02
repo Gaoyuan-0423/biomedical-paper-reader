@@ -43,6 +43,11 @@
 
 ### 使用
 
+#### Mac 桌面版（预览）
+
+可将 BioReader 构建为双击打开的 `BioReader.app`，无需手动运行浏览器或终端。构建命令为 `./app/build-macos.sh`；数据独立保存在用户目录。安装、构建和当前验证范围见 [Mac 桌面版说明](app/DESKTOP.md)。AI 模型、DOI 和相关文献查询仍需联网。
+
+
 #### 直接使用
 
 ```bash
@@ -194,7 +199,7 @@ For the selected mode, the skill builds and reuses an index of the paper's secti
 - `references/`: [report template](references/report-template.md), [modes and languages](references/reading-modes.md), [evidence rules](references/evidence-rules.md), [study checks](references/study-checks.md), [material handling](references/material-handling.md), and [figure reading record](references/reading-record.md).
 - `scripts/check_reading_record.py`: a Python standard-library validator for consistency between figure reading records and claims about what was read.
 - `scripts/render_pdf_page.py`: an optional PDF page-rendering helper; it requires pypdfium2 or PyMuPDF, neither of which is a required dependency for using the skill.
-- `app/`: [BioReader App](app/README.md), a local paper-reading application based on this skill's methodology (FastAPI + vanilla JavaScript). It supports two-column PDF parsing, figure extraction anchored to captions, streaming notes for close reading and quick screening, a vision model for figure interpretation, DOI import and related papers, and one-click copying/export for Markdown, Word, and WeChat Official Accounts. The app and the skill are independent; start the app with `./app/run.sh`.
+- `app/`: [BioReader App](app/README.md), a local paper-reading application based on this skill's methodology (FastAPI + vanilla JavaScript). It supports two-column PDF parsing, figure extraction anchored to captions, streaming notes for close reading and quick screening, a vision model for figure interpretation, DOI import and related papers, and one-click copying/export for Markdown, Word, and WeChat Official Accounts. The app and the skill are independent; start the app with `./app/run.sh`. A macOS desktop preview can be built with `./app/build-macos.sh`; see the [desktop guide](app/DESKTOP.md) for storage, build instructions, and validation limits.
 - `agents/openai.yaml`: optional Codex interface metadata.
 - `evals/cases.md`, `evals/fixtures/`: behavioral evaluation cases and original fictional materials.
 - `evals/PROTOCOL.md`: a protocol for reproducing behavioral evaluations with your own papers.

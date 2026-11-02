@@ -5,7 +5,7 @@
 
 PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔记 → 图库插图 → Markdown / Word / 公众号导出。
 
-零构建步骤：后端 FastAPI + 前端原生 JS（pdf.js / marked / highlight.js / docx 走 CDN），`./app/run.sh` 即用。
+零构建步骤：后端 FastAPI + 前端原生 JS（pdf.js / marked / highlight.js / docx 随应用提供），`./app/run.sh` 即用。
 
 ## 快速开始
 
@@ -72,7 +72,7 @@ pdfplumber、pypdfium2、Pillow）。
 
 ### 导出
 - **Markdown**：Markdown 源文件。
-- **Word 文档**：docx 文档（标题层级、表格、代码、图片内嵌），按需从 CDN 加载 docx 库。
+- **Word 文档**：docx 文档（标题层级、表格、代码、图片内嵌），按需加载本地 docx 库。
 - **复制到公众号**：「导出」菜单中按所选主题排版并复制（4 套主题，菜单内下拉切换），
   mdnice 同款管线（CSS 全内联、伪元素转 span、代码 `<br>`+NBSP 加固、外链转脚注）；
   笔记里 `![Figure X](figure:xxx)` 的图片自动内嵌 base64，粘贴进公众号编辑器不丢图。

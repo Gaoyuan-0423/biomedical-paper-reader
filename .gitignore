@@ -39,3 +39,9 @@ assets/
 
 # Local paper-reader app data (PDF library, notes, API key)
 app/data/
+
+# Desktop build environments and generated bundles
+app/.desktop-venv/
+app/build/
+app/dist/
+app/*.spec

@@ -1,5 +1,12 @@
 # 更新记录
 
+## 未发布 — Mac 桌面版预览
+
+- 新增独立 macOS 窗口、应用图标和 PyInstaller 构建脚本；Python 与前端资源随应用打包。
+- 桌面数据保存在用户目录，源码模式继续使用 `app/data/`；新增本机请求会话与来源限制，以及多窗口隔离回归测试。
+- PDF.js、Marked、Highlight.js、docx 及字体、CMap 和许可证改为本地资源；启用桌面文件导出。
+- 构建和后台接口检查通过；实际 macOS PDF 显示、保存对话框、Word 导出和 AI 生成尚未完成端到端验证。预览包未做 Apple 开发者签名或公证，不作为正式 Release。
+
 ## v0.3.4 — 2026-10-26
 
 - CI 与发布工作流升级到原生 Node.js 24 的 `actions/checkout` v7.0.1 和 `actions/setup-python` v7.1.0，保留完整提交 SHA；运行镜像固定为 `ubuntu-24.04`。

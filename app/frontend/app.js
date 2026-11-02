@@ -2,8 +2,8 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
-  const PDF_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-  const DOCX_CDN = 'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js';
+  const PDF_WORKER = 'vendor/pdf.worker.min.js';
+  const DOCX_SCRIPT = 'vendor/docx.umd.js';
   const MODE_NAMES = { deep: '精读', quick: '速读' };
 
   // ---------- API ----------
@@ -197,7 +197,7 @@
     if (window.docx) return Promise.resolve(true);
     return new Promise((resolve) => {
       const s = document.createElement('script');
-      s.src = DOCX_CDN;
+      s.src = DOCX_SCRIPT;
       s.onload = () => resolve(!!window.docx);
       s.onerror = () => resolve(false);
       document.head.appendChild(s);
@@ -870,7 +870,7 @@
     if (!md.trim()) { toast('还没有笔记可导出'); return; }
     toast('正在生成 Word …');
     const ok = await ensureDocx();
-    if (!ok || !window.docx) { toast('Word 导出组件加载失败（检查网络）', 'error'); return; }
+    if (!ok || !window.docx) { toast('Word 导出组件加载失败，请重新启动应用', 'error'); return; }
     const D = window.docx;
     try {
       const figRefs = figureMarkdownRefs(md);
@@ -1264,7 +1264,7 @@
       const resp = await fetch(paperPath(paper.id, '/file'));
       if (!resp.ok) throw new Error('PDF 下载失败 HTTP ' + resp.status);
       const data = await resp.arrayBuffer();
-      const doc = await pdfjsLib.getDocument({ data }).promise;
+      const doc = await pdfjsLib.getDocument({ data, cMapUrl: 'vendor/cmaps/', cMapPacked: true, standardFontDataUrl: 'vendor/standard_fonts/' }).promise;
       if (token !== state.renderToken) { doc.destroy(); return; }
       state.pdf = doc;
       $('pdf-empty').hidden = true;
