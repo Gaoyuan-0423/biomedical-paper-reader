@@ -8,7 +8,15 @@
 
 `main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 补发前核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。v0.3.3 现已正式发布。
 
-### 发布新版本
+### 桌面预览版 v0.4.0
+
+v0.4.0 的桌面包按 GitHub **Pre-release** 发布，稳定版 v0.3.4 保留。当前 `Publish release` 工作流只创建正式版本并设置 Latest，不能用于这次桌面预览发布。
+
+准备好[双语发布说明](releases/v0.4.0.md)和一致的版本资料后，执行 `python3 scripts/prepare_release.py v0.4.0` 及下述回归检查，将文档合并到 `main`。在 GitHub Releases 手动创建指向该次已检查提交的新标签 `v0.4.0`，勾选 **Set as a pre-release**，使用已验证的发布说明，附上 `BioReader-v0.4.0-macos-arm64.zip` 和 `SHA256SUMS.txt`；发布后核对标签提交、预发布标记和两份附件。不要运行稳定版工作流，也不要覆盖已有标签或 Release。
+
+ZIP 应保留 `BioReader.app` 的目录、权限和符号链接，解压后复核应用包完整性与 arm64 可执行文件。预览包不包含用户数据、API Key 或虚拟环境；说明须保留未做 Apple 开发者签名／公证以及尚未完成 GUI 验收的限制。发布前可以保留草稿，附件上传和核验完成后再公开。
+
+### 发布稳定版本
 
 以下以 v0.3.4 为例；后续发布应替换为准备好的新版本号，不能重复发布已有版本。
 
@@ -54,7 +62,15 @@
 
 README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. Before the catch-up release on 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow. v0.3.3 has since been published.
 
-### Publish a new version
+### Desktop preview v0.4.0
+
+The v0.4.0 desktop bundle is a GitHub **Pre-release**; the stable v0.3.4 remains available. The current `Publish release` workflow creates a stable release and marks it Latest, so it must not be used for this desktop preview.
+
+Prepare the [bilingual notes](releases/v0.4.0.md) and matching version metadata, run `python3 scripts/prepare_release.py v0.4.0` and the regression checks below, and merge the documentation into `main`. In GitHub Releases, manually create a new `v0.4.0` tag pointing to that checked commit, select **Set as a pre-release**, use the validated notes, and attach `BioReader-v0.4.0-macos-arm64.zip` and `SHA256SUMS.txt`. After publication, verify the tag commit, pre-release flag, and both assets. Do not run the stable-release workflow or overwrite an existing tag or Release.
+
+The ZIP must preserve the `BioReader.app` directory, permissions, and symlinks. After extraction, recheck bundle integrity and the arm64 executable. Exclude user data, API keys, and virtual environments, and retain the notes about absent Apple Developer ID signing/notarization and outstanding GUI acceptance tests. A draft can hold the assets until upload and verification are complete.
+
+### Publish a stable version
 
 The following example uses v0.3.4. For future releases, substitute the prepared new version; existing versions cannot be published again.
 

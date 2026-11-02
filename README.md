@@ -6,7 +6,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.3.4。默认中文完整精读，支持英文及明确要求的中英双语；另有速读和指定图／方法解析。
+版本：v0.4.0。新增桌面预览版；默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -45,7 +45,9 @@
 
 #### Mac 桌面版（预览）
 
-可将 BioReader 构建为双击打开的 `BioReader.app`，无需手动运行浏览器或终端。构建命令为 `./app/build-macos.sh`；数据独立保存在用户目录。安装、构建和当前验证范围见 [Mac 桌面版说明](app/DESKTOP.md)。AI 模型、DOI 和相关文献查询仍需联网。
+下载入口：[v0.4.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.4.0)，其中 `BioReader-v0.4.0-macos-arm64.zip` 适用于 Apple 芯片 Mac。解压后打开 `BioReader.app`，无需手动运行浏览器、终端或安装 Python。该包未做 Apple 开发者签名和公证，窗口内 PDF 显示与文件导出仍待完整验收。
+
+也可运行 `./app/build-macos.sh` 自行构建；数据独立保存在用户目录。安装、构建和当前验证范围见 [Mac 桌面版说明](app/DESKTOP.md)。AI 模型、DOI 和相关文献查询仍需联网。
 
 
 #### 直接使用
@@ -123,7 +125,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.3.4. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
+Version: v0.4.0. This version includes a desktop preview. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -159,6 +161,12 @@ A full close-reading report follows this structure: opening guide → article in
 - **Follow the user's requested output language.** An English-language paper does not automatically trigger English output. Both versions of a bilingual report share the same evidence records, numbers, and strength of judgment.
 
 ### English quick start
+
+#### macOS desktop preview
+
+Download page: [v0.4.0 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.4.0). The `BioReader-v0.4.0-macos-arm64.zip` asset targets Apple silicon Macs. Extract it and open `BioReader.app`; launching it does not require a browser, terminal, or Python installation. The bundle has no Apple Developer ID signature or notarization, and in-window PDF rendering and file exports still need full acceptance testing.
+
+Build from source with `./app/build-macos.sh` if preferred. See the [desktop guide](app/DESKTOP.md) for installation, storage, and validation limits. AI, DOI lookup, and related-paper searches still require network access.
 
 #### Direct use
 
