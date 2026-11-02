@@ -13,6 +13,7 @@ import asyncio
 import base64
 import io
 import json
+import os
 import re
 import shutil
 import uuid
@@ -38,8 +39,10 @@ from llm import (
     stream_chat,
 )
 
-APP_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = APP_DIR / "data"
+APP_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+# Packaged applications keep mutable user files outside the application bundle.
+# Source installations retain their existing data location unless explicitly set.
+DATA_DIR = Path(os.environ["BIOREADER_DATA_DIR"]).expanduser() if os.environ.get("BIOREADER_DATA_DIR") else APP_DIR / "data"
 PAPERS_DIR = DATA_DIR / "papers"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 FRONTEND_DIR = APP_DIR / "frontend"
