@@ -19,6 +19,7 @@ import shutil
 import tempfile
 import hashlib
 import uuid
+import httpx
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
@@ -41,6 +42,7 @@ from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourcePatch,
                              load_resources, normalize_resource, public_resource, public_resources,
                              related_resources, resource_summary, source_revision, validate_source)
 from research_export import append_research_appendix
+from resource_extraction import extract_resources, identity_keys
 from paper_tags import TEXT_LIMIT, TagFormatError, merge_tags, parse_tags, tag_messages, tag_snapshot
 from llm import (
     UnsafeURLError,
@@ -63,7 +65,8 @@ MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 DOI_RE = re.compile(r"\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)")
 RELATED_TTL_SECONDS = 7 * 24 * 3600
 VISION_MAX_SIDE = 1400
-TAG_TIMEOUT_SECONDS = 20.0
+TAG_TIMEOUT_SECONDS = 60.0
+TAG_RETRY_DELAY_SECONDS = 1.0
 
 DEFAULT_SETTINGS = {
     "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -564,6 +567,53 @@ def add_paper_resource(paper_id: str, body: ResourceIn):
         return public_resource(d, meta, record)
 
 
+@app.post('/api/papers/{paper_id}/resources/extract')
+def extract_paper_resources(paper_id: str):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        records = load_resources(d)  # Corruption must never look like an empty list.
+        existing_count = len(records)
+        if meta.get('notes_mode') != 'deep' or not meta.get('notes', '').strip():
+            raise HTTPException(400, '请先生成并保存精读笔记，再整理数据与代码')
+        if meta.get('notes_incomplete'):
+            raise HTTPException(409, '精读笔记尚未完成，请完成精读后再整理数据与代码')
+        if meta.get('notes_stale'):
+            raise HTTPException(409, '论文材料已变化，请先核对或重新生成精读笔记')
+        candidates = extract_resources(meta['notes'])
+        known = set().union(*(identity_keys(record) for record in records))
+        added, skipped = 0, 0
+        now = _now()
+        for record in candidates:
+            keys = identity_keys(record)
+            if known.intersection(keys):
+                skipped += 1
+                continue
+            record.update(id=uuid.uuid4().hex, created_at=now, updated_at=now,
+                          source_revision='')
+            records.append(record)
+            known.update(keys)
+            added += 1
+        if added:
+            # Validation may supply defaults/normalization for old libraries.
+            # Append to their original records without rewriting human fields.
+            path = d / 'resources.json'
+            original = json.loads(path.read_text(encoding='utf-8')) if path.exists() else []
+            atomic_json(path, original + records[existing_count:])
+        if added:
+            message = f'已从精读笔记整理 {added} 条数据与代码，均待核查原文'
+        elif candidates:
+            message = '精读笔记中的资源已记录，已有内容保持不变'
+        else:
+            message = '精读笔记中未找到明确的数据库编号或数据与代码链接'
+        if skipped:
+            message += f'；已跳过 {skipped} 条重复记录'
+        latest = read_meta(d)
+        return {'paper': summary_of(latest), 'added_count': added, 'skipped_count': skipped,
+                'resources': [public_resource(d, latest, record) for record in records],
+                'message': message}
+
+
 @app.patch('/api/papers/{paper_id}/resources/{resource_id}')
 def patch_paper_resource(paper_id: str, resource_id: str, body: ResourcePatch):
     with storage_lock:
@@ -790,18 +840,32 @@ async def auto_tag_paper(paper_id: str):
             messages = tag_messages(meta, text)
         except TagFormatError as exc:
             raise HTTPException(400, str(exc)) from exc
-    try:
-        output = await asyncio.wait_for(chat_once(
-            settings['base_url'], settings['api_key'], settings['model'], messages,
-            temperature=0.1, max_tokens=700, timeout=TAG_TIMEOUT_SECONDS,
-        ), timeout=TAG_TIMEOUT_SECONDS)
-        proposed = parse_tags(output)
-    except asyncio.TimeoutError as exc:
-        raise HTTPException(504, '识别标签超过20秒，已有标签与笔记已保留，可稍后重试') from exc
-    except (UnsafeURLError, UpstreamError, TagFormatError) as exc:
-        raise HTTPException(502, str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(502, '自动识别标签失败，已有标签与笔记已保留，请稍后重试') from exc
+    for attempt in range(2):
+        # Do not spend another request on a snapshot already invalidated by an edit.
+        with storage_lock:
+            if tag_snapshot(read_meta(paper_dir(paper_id))) != snapshot:
+                raise HTTPException(409, '识别期间标签、论文材料或笔记已变化，本次结果未写入，请重试')
+        try:
+            output = await asyncio.wait_for(chat_once(
+                settings['base_url'], settings['api_key'], settings['model'], messages,
+                temperature=0.1, max_tokens=2048, timeout=TAG_TIMEOUT_SECONDS,
+            ), timeout=TAG_TIMEOUT_SECONDS)
+            proposed = parse_tags(output)
+            break
+        except Exception as exc:
+            timed_out = isinstance(exc, (asyncio.TimeoutError, httpx.TimeoutException))
+            transient = (timed_out or isinstance(exc, (httpx.NetworkError, httpx.RemoteProtocolError, TagFormatError))
+                         or isinstance(exc, UpstreamError) and exc.status_code in (429, 500, 502, 503, 504))
+            if attempt == 0 and transient:
+                if isinstance(exc, TagFormatError):
+                    messages = messages + [{'role': 'user', 'content': '请重新整理为合法 JSON 字符串数组。最多6个，只保留材料中有依据的标签；无依据则返回 []，不要解释或补充其他字段。'}]
+                await asyncio.sleep(TAG_RETRY_DELAY_SECONDS)
+                continue
+            if timed_out:
+                raise HTTPException(504, f'标签识别等待超时（每次最多{TAG_TIMEOUT_SECONDS:g}秒，已尝试{attempt + 1}次），已有标签与笔记已保留，可稍后重试') from exc
+            if isinstance(exc, (UnsafeURLError, UpstreamError, TagFormatError)):
+                raise HTTPException(502, str(exc)) from exc
+            raise HTTPException(502, '自动识别标签失败，已有标签与笔记已保留，请稍后重试') from exc
     with storage_lock:
         d = paper_dir(paper_id)
         latest = read_meta(d)

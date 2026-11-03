@@ -4,7 +4,7 @@
   const KINDS = { dataset: '数据集', code: '代码', other: '其他资源' };
   const ROLES = { generated: '本文产生', reused: '复用已有资源', implementation: '代码实现', unknown: '待确认' };
   let hooks, panel, paper = null, records = [], mode = 'current', query = '', draft = null;
-  let epoch = 0, busy = false, loading = false, error = '';
+  let epoch = 0, busy = false, loading = false, extracting = false, opened = false, refreshPending = false, error = '';
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const current = token => token === epoch;
   const key = record => (record.paper_id || paper?.id || '') + ':' + record.id;
@@ -21,6 +21,9 @@
   function documents() {
     return paper ? (paper.has_file ? [{ id: 'main', name: '正文', pages: paper.pages }] : [])
       .concat((paper.supplements || []).map(d => ({ id: d.id, name: d.filename, pages: d.pages }))) : [];
+  }
+  function extractable() {
+    return paper && paper.notes_mode === 'deep' && !!String(paper.notes || '').trim() && !paper.notes_incomplete && !paper.notes_stale;
   }
   function textField(name, label, value, limit = 1000, type = 'text') {
     return '<label>' + label + '<input data-resource-field="' + name + '" type="' + type + '" maxlength="' + limit + '" value="' + esc(value) + '"' + (busy ? ' disabled' : '') + (name === 'title' ? ' required' : '') + '></label>';
@@ -74,7 +77,9 @@
     if (!panel) return;
     const visible = mode === 'current' && query ? records.filter(r => [r.title, r.repository, r.accession, r.url, r.organism, r.tissue, r.modality, r.notes].some(v => String(v || '').toLowerCase().includes(query.toLowerCase()))) : records;
     panel.innerHTML = '<div class="resource-toolbar"><div><strong>数据与代码</strong><p class="hint">积累可复用资源，追踪它们来自哪些论文。</p></div>' +
-      '<button class="btn btn-primary" type="button" data-resource-action="add"' + (!paper || mode !== 'current' || loading || busy || draft ? ' disabled' : '') + '>添加资源</button></div>' +
+      '<div class="resource-toolbar-actions"><button class="btn" type="button" data-resource-action="extract" aria-busy="' + extracting + '" title="仅整理已保存且材料未变更的完整精读笔记中的明确资源"' + (!paper || mode !== 'current' || loading || busy || draft || !extractable() ? ' disabled' : '') + '>' + (extracting ? '正在整理…' : '从精读笔记整理') + '</button>' +
+      '<button class="btn btn-primary" type="button" data-resource-action="add"' + (!paper || mode !== 'current' || loading || busy || draft ? ' disabled' : '') + '>添加资源</button></div></div>' +
+      (paper && mode === 'current' ? '<p class="hint resource-extract-hint">' + (extractable() ? '整理笔记中明确写出的数据编号与代码链接，结果仍需核对原文。' : '完整精读笔记保存并核对材料后，可在这里整理数据编号与代码链接。') + '</p>' : '') +
       '<div class="resource-modes" role="group" aria-label="资源范围"><button class="btn' + (mode === 'current' ? ' active' : '') + '" type="button" data-resource-mode="current" aria-pressed="' + (mode === 'current') + '"' + (!paper || busy || draft ? ' disabled' : '') + '>当前论文</button><button class="btn' + (mode === 'all' ? ' active' : '') + '" type="button" data-resource-mode="all" aria-pressed="' + (mode === 'all') + '"' + (busy || draft ? ' disabled' : '') + '>全部论文</button></div>' +
       '<form class="resource-search" id="resource-search"><input type="search" aria-label="搜索数据与代码" placeholder="搜索编号、技术、研究对象…" value="' + esc(query) + '" maxlength="500"' + (busy || draft ? ' disabled' : '') + '><button class="btn" type="submit"' + (busy || draft ? ' disabled' : '') + '>搜索</button></form>' +
       (!paper ? '<p class="hint">在全库中搜索资源；打开一篇论文后可添加与编辑它的资源。</p>' : '') +
@@ -91,23 +96,47 @@
     finally { if (current(token)) { loading = false; render(); } }
   }
   async function open(nextPaper) {
+    opened = true;
     const next = nextPaper && ID.test(nextPaper.id) ? nextPaper : null;
     const same = (paper?.id || '') === (next?.id || '');
     if (same && (draft || busy)) { paper = next; return; }
-    if (!same) { draft = null; records = []; query = ''; mode = next ? 'current' : 'all'; }
+    if (!same) { draft = null; records = []; query = ''; extracting = false; refreshPending = false; mode = next ? 'current' : 'all'; }
     if (!next) mode = 'all';
     paper = next; busy = false;
     await load();
   }
   function clear() {
-    ++epoch; paper = null; records = []; query = ''; mode = 'all'; draft = null; busy = false; loading = false; error = '';
+    ++epoch; paper = null; records = []; query = ''; mode = 'all'; draft = null; busy = false; loading = false; extracting = false; opened = false; refreshPending = false; error = '';
     if (panel) panel.innerHTML = '';
   }
   async function showAll() {
     if (!canLeave()) return false;
-    draft = null; mode = 'all'; query = '';
+    opened = true; draft = null; mode = 'all'; query = '';
     await load();
     return true;
+  }
+  async function refreshAfterExtraction(paperId) {
+    if (!opened || (mode !== 'all' && paper?.id !== paperId)) return;
+    if (draft || busy) { refreshPending = true; return; }
+    refreshPending = false;
+    await load();
+  }
+  async function extract() {
+    if (!paper || mode !== 'current' || busy || loading || draft || !extractable()) return;
+    const token = epoch, target = paper;
+    let success = false;
+    busy = true; extracting = true; error = ''; render();
+    try {
+      if (!hooks.extract) throw new Error('资源整理功能未能加载，请重新打开应用。');
+      success = await hooks.extract(target);
+      if (current(token) && success === false) error = '本次未完成整理，原有资源仍保留。可稍后重试。';
+    } catch (err) { if (current(token)) { error = '整理失败：' + err.message; hooks.toast?.(error, 'error'); } }
+    finally {
+      if (current(token)) {
+        busy = false; extracting = false;
+        if (success) { refreshPending = false; await load(); } else render();
+      }
+    }
   }
   function start(record = {}) {
     if (!paper || mode !== 'current' || busy || loading || draft) return;
@@ -133,7 +162,12 @@
       if (draft && (method === 'POST' || draft.id === id)) draft = null;
       hooks.toast?.(method === 'DELETE' ? '资源已删除' : '资源已保存');
     } catch (err) { if (current(token)) { error = '保存失败：' + err.message; hooks.toast?.(error, 'error'); } }
-    finally { if (current(token)) { busy = false; render(); } }
+    finally {
+      if (current(token)) {
+        busy = false; render();
+        if (refreshPending && !draft) { refreshPending = false; await load(); }
+      }
+    }
   }
   function input(event) {
     if (event.target.matches?.('#resource-search input')) { query = event.target.value; return; }
@@ -178,8 +212,9 @@
     const button = event.target.closest('[data-resource-action]');
     if (!button || button.disabled || busy) return;
     const action = button.dataset.resourceAction;
-    if (action === 'cancel') { draft = null; error = ''; render(); return; }
+    if (action === 'cancel') { draft = null; error = ''; render(); if (refreshPending) { refreshPending = false; await load(); } return; }
     if (action === 'add') { start(); return; }
+    if (action === 'extract') { await extract(); return; }
     if (action === 'reload') { if (!draft) await load(); return; }
     if (action === 'paper') {
       if (!canLeave() || !ID.test(button.dataset.resourcePaper || '')) return;
@@ -200,6 +235,7 @@
     }
   }
   function canLeave() {
+    if (extracting) { hooks.toast?.('正在整理资源，请稍后再切换。', 'error'); return false; }
     if (busy) { hooks.toast?.('正在保存资源，请稍后再切换。', 'error'); return false; }
     if (draft && (draft.id || ['title', 'repository', 'accession', 'url', 'organism', 'tissue', 'modality', 'notes', 'quote', 'document_id'].some(k => String(draft[k] || '').trim()) || draft.kind !== 'dataset' || draft.role !== 'unknown')) {
       hooks.toast?.('资源尚未保存，请先在「数据与代码」页保存或取消编辑。', 'error'); return false;
@@ -216,5 +252,5 @@
     panel.addEventListener('toggle', event => { if (draft && event.target.classList.contains('resource-details')) draft.detailsOpen = event.target.open; }, true);
     render();
   }
-  window.BioResources = { init, open, clear, canLeave, showAll };
+  window.BioResources = { init, open, clear, canLeave, showAll, refreshAfterExtraction };
 })();

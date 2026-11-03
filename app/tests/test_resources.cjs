@@ -162,3 +162,52 @@ test('empty draft can be left while meaningful unsaved changes block navigation'
   await h.click('paper', { resourcePaper: B }); assert.equal(h.navigation.length, 0);
   await h.click('cancel'); assert.equal(h.ui.canLeave(), true);
 });
+
+test('manual extraction shares the app helper, shows busy state, and reloads saved records once complete', async () => {
+  const h = harness(), pending = deferred();
+  const p = { ...paper(), notes: '# 精读\n\n数据编号 GSE12345', notes_mode: 'deep', notes_incomplete: false, notes_stale: false };
+  await h.ui.open(p); let calls = 0;
+  h.hooks.extract = async selected => { calls++; assert.equal(selected.id, A); await pending.promise; await h.ui.refreshAfterExtraction(A); return true; };
+  h.hooks.request = async () => [record({ notes: '从精读笔记自动整理，待核对。' })];
+  const extracting = h.click('extract'); await h.click('extract');
+  assert.equal(calls, 1); assert.match(h.panel.innerHTML, /正在整理…/); assert.equal(h.ui.canLeave(), false);
+  pending.resolve(); await extracting;
+  assert.match(h.panel.innerHTML, /GSE12345/); assert.match(h.panel.innerHTML, /从精读笔记自动整理/);
+  assert.equal(h.ui.canLeave(), true); assert.equal(p.notes, '# 精读\n\n数据编号 GSE12345');
+});
+
+test('failed extraction preserves records and can retry without overwriting them', async () => {
+  const h = harness(); h.hooks.request = async () => [record({ title: 'Manually verified record', status: 'verified' })];
+  await h.ui.open({ ...paper(), notes: '# 精读', notes_mode: 'deep' });
+  h.hooks.extract = async () => false; await h.click('extract');
+  assert.match(h.panel.innerHTML, /Manually verified record/); assert.match(h.panel.innerHTML, /原有资源仍保留/);
+  assert.equal(h.ui.canLeave(), true);
+  h.hooks.extract = async () => true; await h.click('extract');
+  assert.doesNotMatch(h.panel.innerHTML, /本次未完成整理/); assert.match(h.panel.innerHTML, /Manually verified record/);
+});
+
+test('quick, incomplete, stale or missing notes do not invoke extraction', async () => {
+  const h = harness(); let calls = 0; h.hooks.extract = async () => { calls++; return true; };
+  for (const extra of [{ notes: '' }, { notes_mode: 'quick' }, { notes_incomplete: true }, { notes_stale: true }]) {
+    await h.ui.open({ ...paper(), notes: '# 精读', notes_mode: 'deep', ...extra }); await h.click('extract');
+    assert.match(h.panel.innerHTML, /data-resource-action="extract"[^>]+ disabled/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('automatic extraction refresh waits for an unsaved resource draft to be resolved', async () => {
+  const h = harness(); await h.ui.open(paper()); await h.click('add'); h.input('title', 'Unsaved draft');
+  const before = h.calls.length; await h.ui.refreshAfterExtraction(A);
+  assert.equal(h.calls.length, before); assert.equal(h.ui.canLeave(), false);
+  h.hooks.request = async () => [record({ title: 'Fresh extracted record' })];
+  await h.click('cancel');
+  assert.match(h.panel.innerHTML, /Fresh extracted record/); assert.equal(h.ui.canLeave(), true);
+});
+
+test('late extraction completion cannot render resources into a different paper', async () => {
+  const h = harness(), pending = deferred(); await h.ui.open({ ...paper(), notes: '# 精读', notes_mode: 'deep' });
+  h.hooks.extract = () => pending.promise; const extracting = h.click('extract');
+  h.ui.clear(); h.hooks.request = async () => [record({ title: 'Current paper resource' })]; await h.ui.open(paper(B));
+  await h.ui.refreshAfterExtraction(A); pending.resolve(true); await extracting;
+  assert.match(h.panel.innerHTML, /Current paper resource/); assert.doesNotMatch(h.panel.innerHTML, /正在整理…/);
+});

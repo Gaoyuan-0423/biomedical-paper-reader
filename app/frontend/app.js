@@ -69,6 +69,7 @@
     related: (id, refresh) => api.json(paperPath(id, '/related') + (refresh ? '?refresh=1' : '')),
     patch: (id, body) => api.jsonBody('PATCH', paperPath(id), body),
     autoTags: (id) => api.json(paperPath(id, '/tags/auto'), { method: 'POST' }),
+    extractResources: (id) => api.json(paperPath(id, '/resources/extract'), { method: 'POST' }),
     remove: (id) => api.json(paperPath(id), { method: 'DELETE' }),
     figures: (id) => api.json(paperPath(id, '/figures')),
     reextract: (id, doc) => api.json(paperPath(id, '/figures/extract?document_id=' + encodeURIComponent(doc || 'main')), { method: 'POST' }),
@@ -91,6 +92,8 @@
     tagWrites: new Map(),
     autoTagging: new Map(),
     autoTagRefresh: new Set(),
+    extractingResources: new Map(),
+    resourceExtractionRefresh: new Set(),
     query: '',
     readingFilter: '',
     decisionFilter: '',
@@ -388,7 +391,7 @@
     $('clear-library-filters').hidden = ![state.query, state.favOnly, state.activeTag, state.readingFilter, state.decisionFilter, state.taskFilter].some(Boolean);
     if (!items.length) {
       list.innerHTML = '<li class="library-empty">' + (state.papers.length
-        ? emptyState('search', '没有符合条件的文献', '试试其他关键词，或点击上方「清除筛选」。')
+        ? emptyState('search', '没有符合条件的文献', '试试其他关键词，或展开下方「筛选与待办」并点击「清除筛选」。')
         : emptyState('book', '从第一篇文献开始', '导入 PDF，或通过 DOI 添加文献。')) + '</li>';
     }
     renderTagChips();
@@ -417,17 +420,18 @@
 
   async function saveWorkflow(patch) {
     const paper = state.current;
-    if (!paper || state.workflowSaving || state.generating || state.materialBusy) { renderWorkflow(); return; }
+    if (!paper || state.workflowSaving || state.generating || state.materialBusy) { renderWorkflow(); return false; }
     state.workflowSaving = true;
     state.workflowVersion++;
     renderWorkflow();
     try {
-      if (!await flushSave() || state.current !== paper) return;
+      if (!await flushSave() || state.current !== paper) return false;
       const updated = await api.patch(paper.id, patch);
       updateListItem(updated);
       if (state.current === paper) mergeWorkflow(paper, updated);
       toast('阅读记录已保存', 'ok');
-    } catch (e) { toast('阅读记录保存失败：' + e.message, 'error'); }
+      return true;
+    } catch (e) { toast('阅读记录保存失败：' + e.message, 'error'); return false; }
     finally { state.workflowSaving = false; renderWorkflow(); }
   }
 
@@ -454,8 +458,47 @@
     if (task === 'resources') { switchTab('resources'); return; }
     if (task === 'notes_incomplete') { switchTab('edit'); return; }
     switchTab('preview');
-    if (task === 'decision') $('paper-decision').focus();
+    if (task === 'decision') openDecision();
     if (task === 'notes_stale') toast('材料已变化，请核对笔记后点击「已核对新材料」，或重新生成笔记');
+  }
+
+  function openDecision() {
+    const paper = state.current;
+    if (!paper) return;
+    $('decision-modal').dataset.paperId = paper.id;
+    $('decision-paper-title').textContent = paper.title;
+    $('decision-value').value = paper.reading_decision || 'pending';
+    $('decision-status').textContent = '';
+    $('decision-save').disabled = false;
+    $('decision-value').disabled = false;
+    openModal('decision-modal', 'decision-value');
+  }
+
+  async function submitDecision() {
+    const modal = $('decision-modal');
+    const id = modal.dataset.paperId;
+    const decision = $('decision-value').value;
+    if (!state.current || state.current.id !== id) {
+      closeModal('decision-modal');
+      toast('当前文献已变化，请重新打开阅读价值判断', 'error');
+      return false;
+    }
+    if (!Object.prototype.hasOwnProperty.call(DECISION_NAMES, decision)) return false;
+    if (state.workflowSaving || state.generating || state.materialBusy) {
+      $('decision-status').textContent = '请等待当前操作完成后再保存判断。';
+      return false;
+    }
+    $('decision-save').disabled = true;
+    $('decision-value').disabled = true;
+    $('decision-status').textContent = '正在保存…';
+    const saved = await saveWorkflow({ reading_decision: decision });
+    if (modal.dataset.paperId === id) {
+      $('decision-save').disabled = false;
+      $('decision-value').disabled = false;
+      $('decision-status').textContent = saved ? '' : '尚未保存。选择已保留，请重试。';
+      if (saved) closeModal('decision-modal');
+    }
+    return saved;
   }
 
   async function loadPapers() {
@@ -804,7 +847,7 @@
           const result = await api.autoTags(id);
           if (!state.autoTagRefresh.has(id)) {
             mergeTags(paper, result.paper);
-            toast(result.message || ((result.added_tags || []).length ? '标签已识别' : '没有发现新的标签'), 'ok');
+            if (!generated) toast(result.message || ((result.added_tags || []).length ? '标签已识别' : '没有发现新的标签'), 'ok');
           }
           succeeded = true;
         } catch (e) {
@@ -1229,7 +1272,10 @@
       renderDocuments(); updateNoteActions(); renderWorkflow();
       setGenerating(false);
     }
-    if (completed && saved) void autoTags(paper, true);
+    if (completed && saved) {
+      void autoTags(paper, true);
+      if (mode === 'deep') void extractResources(paper, { automatic: true });
+    }
   }
 
   function stopGenerating() {
@@ -1417,6 +1463,70 @@
 
   function openResources() {
     if (window.BioResources) window.BioResources.open(state.current);
+  }
+
+  function mergeResourceSummary(paper, updated) {
+    if (!updated || updated.id !== paper.id) throw new Error('资源整理响应无效');
+    const current = state.current && state.current.id === paper.id ? state.current : null;
+    const listed = state.papers.find(p => p.id === paper.id);
+    for (const target of [paper, current, listed].filter(Boolean)) {
+      for (const key of ['resources_count', 'resources_pending']) {
+        if (Object.prototype.hasOwnProperty.call(updated, key)) target[key] = updated[key];
+      }
+      if (Array.isArray(updated.tasks)) target.tasks = (target.tasks || []).filter(t => t.id !== 'resources')
+        .concat(updated.tasks.filter(t => t.id === 'resources'));
+    }
+    state.workflowVersion++;
+    renderList();
+    if (current) { renderWorkflow(); updateNoteActions(); }
+  }
+
+  function extractResources(paper = state.current, { automatic = false } = {}) {
+    if (!paper) return Promise.resolve(false);
+    if (automatic && (paper.notes_mode !== 'deep' || paper.notes_incomplete || paper.notes_stale || !(paper.notes || '').trim())) return Promise.resolve(false);
+    const id = paper.id;
+    if (state.extractingResources.has(id)) {
+      if (automatic) state.resourceExtractionRefresh.add(id);
+      return state.extractingResources.get(id);
+    }
+    if (!automatic && (state.generating || state.materialBusy)) {
+      toast('请等待当前操作完成后再整理数据与代码', 'error');
+      return Promise.resolve(false);
+    }
+    const extracting = Promise.resolve().then(async () => {
+      let generated = automatic;
+      for (;;) {
+        let succeeded = false;
+        try {
+          if (!generated && state.current && state.current.id === id && (state.pendingSave || state.saveInFlight)) {
+            if (!await flushSave()) {
+              toast('笔记尚未保存，已暂停整理资源；请先重试保存，草稿仍保留在编辑器中', 'error');
+              return false;
+            }
+          }
+          const version = state.workflowVersion;
+          const result = await api.extractResources(id);
+          if (!state.resourceExtractionRefresh.has(id)) {
+            // A later workflow mutation wins over the extraction snapshot.
+            if (version === state.workflowVersion) mergeResourceSummary(paper, result.paper);
+            else await refreshWorkflow(id);
+            if (state.tab === 'resources' && window.BioResources?.refreshAfterExtraction) await window.BioResources.refreshAfterExtraction(id);
+            if (!generated) toast(result.message || '已从精读笔记整理数据与代码，请核对来源和用途', 'ok');
+          }
+          succeeded = true;
+        } catch (e) {
+          if (!state.resourceExtractionRefresh.has(id)) toast((generated ? '笔记已保存；自动整理数据与代码失败：' : '整理数据与代码失败：') + e.message + '。可在「数据与代码」中重试', 'error');
+        }
+        if (!state.resourceExtractionRefresh.delete(id)) return succeeded;
+        generated = true;
+      }
+    });
+    state.extractingResources.set(id, extracting);
+    extracting.then(() => {
+      if (state.extractingResources.get(id) === extracting) state.extractingResources.delete(id);
+      state.resourceExtractionRefresh.delete(id);
+    });
+    return extracting;
   }
 
   function hasResearchRecords(paper) {
@@ -2143,9 +2253,15 @@
     });
     $('paper-reading').addEventListener('change', e => saveWorkflow({ reading_status: e.target.value }));
     $('paper-decision').addEventListener('change', e => saveWorkflow({ reading_decision: e.target.value }));
+    $('decision-save').addEventListener('click', submitDecision);
+    $('decision-close').addEventListener('click', () => closeModal('decision-modal'));
+    $('decision-cancel').addEventListener('click', () => closeModal('decision-modal'));
+    $('decision-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal('decision-modal'); });
+    $('decision-value').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); void submitDecision(); } });
     $('notes-complete').addEventListener('click', () => saveWorkflow({ notes_incomplete: false }));
     $('btn-library-resources').addEventListener('click', async () => {
       if (window.BioResources && !window.BioResources.canLeave()) return;
+      $('library-refine').open = false;
       switchTab('resources');
       if (window.BioResources) await window.BioResources.showAll();
     });
@@ -2199,6 +2315,7 @@
           e.preventDefault();
           if (modal.id === 'input-modal') finishInput(null); else closeModal(modal.id);
         }
+        if (!modal && $('library-refine').open) { $('library-refine').open = false; $('library-refine').querySelector('summary').focus(); }
         if (exportMenu.open) { exportMenu.open = false; exportMenu.querySelector('summary').focus(); }
       }
       if (modal && e.key === 'Tab') {
@@ -2392,6 +2509,7 @@
   async function init() {
     if (window.BioResources) window.BioResources.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
+      extract: paper => extractResources(paper),
       jump: async (documentId, page) => { setWorkspaceView('pdf'); await switchDocument(documentId, page); },
       openPaper: async (id) => {
         const paper = state.papers.find(p => p.id === id);
