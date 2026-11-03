@@ -256,7 +256,9 @@ def describe_http_error(status: int, body: str, *, output_tokens: int, input_cha
 
 
 class UpstreamError(RuntimeError):
-    pass
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 async def _request_stream(payload: dict, base_url: str, api_key: str, timeout: float) -> AsyncIterator[str]:
@@ -284,7 +286,7 @@ async def _request_stream(payload: dict, base_url: str, api_key: str, timeout: f
                         input_chars=len(json.dumps(payload.get("messages", ""), ensure_ascii=False)),
                         images=sum(1 for m in payload["messages"] if isinstance(m.get("content"), list)
                                    for p in m["content"] if p.get("type") == "image_url"),
-                    ))
+                    ), status_code=resp.status_code)
                 if not payload.get("stream"):
                     data = json.loads((await resp.aread()).decode("utf-8", "replace"))
                     content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content")

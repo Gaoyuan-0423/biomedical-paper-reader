@@ -34,7 +34,7 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, addTag, removeTag, autoTags, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, openTask, openDecision, submitDecision, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -44,6 +44,7 @@ function harness() {
   app.api.prepareExport = (id, notes) => app.api.illustrate(id, notes);
   app.api.saveReading = async () => ({});
   app.api.autoTags = async id => ({ paper: { id, tags: app.state.current?.id === id ? app.state.current.tags || [] : [] }, added_tags: [] });
+  app.api.extractResources = async id => ({ paper: { id, resources_count: 0, resources_pending: 0, tasks: [] }, resources: [], added_count: 0, skipped_count: 0 });
   $('read-mode').value = 'deep';
   return { ...app, $, context };
 }
@@ -772,6 +773,200 @@ test('late workflow refresh cannot undo a newer manual reading decision', async 
   await h.saveWorkflow({ reading_decision: 'priority' });
   request.resolve({ id: A, reading_decision: 'pending' }); await refresh;
   assert.equal(h.state.current.reading_decision, 'priority');
+});
+
+test('the decision task opens an explicit chooser and saves only the reading decision', async () => {
+  const h = harness(), writes = [];
+  h.state.current.reading_status = 'unread';
+  h.state.current.reading_decision = 'pending';
+  h.state.current.notes = 'existing note';
+  h.state.papers = [{ ...h.state.current, tasks: [{ id: 'decision' }] }];
+  h.$('decision-modal').hidden = true;
+  h.api.patch = async (id, body) => { writes.push({ id, ...body }); return { id, ...body, tasks: [] }; };
+  await h.openTask(A, 'decision');
+  assert.equal(h.$('decision-modal').hidden, false);
+  assert.equal(h.$('decision-modal').dataset.paperId, A);
+  assert.equal(h.$('decision-paper-title').textContent, 'Synthetic paper');
+  assert.equal(h.$('decision-value').value, 'pending');
+  assert.deepEqual(writes, []);
+  h.$('decision-value').value = 'priority';
+  assert.equal(await h.submitDecision(), true);
+  assert.deepEqual(writes, [{ id: A, reading_decision: 'priority' }]);
+  assert.equal(h.state.current.reading_status, 'unread');
+  assert.equal(h.state.current.notes, 'existing note');
+  assert.equal(h.state.current.reading_decision, 'priority');
+  assert.equal(h.$('decision-modal').hidden, true);
+});
+
+test('failed decision saving retains the selection and can be retried without duplicate requests', async () => {
+  const h = harness(), response = deferred(); let writes = 0;
+  h.openDecision(); h.$('decision-value').value = 'reference';
+  h.api.patch = () => { writes++; return response.promise; };
+  const saving = h.submitDecision();
+  await new Promise(setImmediate);
+  assert.equal(h.$('decision-save').disabled, true);
+  assert.equal(await h.submitDecision(), false);
+  assert.equal(writes, 1);
+  response.reject(new Error('offline'));
+  assert.equal(await saving, false);
+  assert.equal(h.$('decision-modal').hidden, false);
+  assert.equal(h.$('decision-value').value, 'reference');
+  assert.match(h.$('decision-status').textContent, /选择已保留/);
+  assert.equal(h.$('decision-save').disabled, false);
+  h.api.patch = async (id, body) => ({ id, ...body });
+  assert.equal(await h.submitDecision(), true);
+  assert.equal(h.state.current.reading_decision, 'reference');
+});
+
+test('a decision dialog for another paper cannot modify the currently selected paper', async () => {
+  const h = harness(); let writes = 0;
+  h.openDecision(); h.$('decision-value').value = 'irrelevant';
+  h.state.current = { id: B, reading_decision: 'pending', reading_status: 'unread' };
+  h.api.patch = async () => { writes++; };
+  assert.equal(await h.submitDecision(), false);
+  assert.equal(writes, 0);
+  assert.equal(h.state.current.reading_decision, 'pending');
+  assert.equal(h.$('decision-modal').hidden, true);
+});
+
+test('saved deep notes extract resources independently of automatic tag failures', async () => {
+  const h = harness(), response = deferred(); let calls = 0;
+  h.api.autoTags = async () => { throw new Error('tag timeout'); };
+  h.api.extractResources = () => { calls++; return response.promise; };
+  stream(h, [{ type: 'done', notes: 'Data availability: GSE12345', paper: { id: A, notes_stale: false } }]);
+  await h.generateNotes();
+  assert.equal(calls, 1);
+  assert.equal(h.$('save-status').textContent, '已保存');
+  assert.equal(h.state.generating, null);
+  const extracting = h.state.extractingResources.get(A);
+  response.resolve({ paper: { id: A, resources_count: 1, resources_pending: 1, tasks: [{ id: 'resources' }] }, resources: [{ accession: 'GSE12345' }], added_count: 1 });
+  assert.equal(await extracting, true);
+  assert.equal(h.state.current.resources_count, 1);
+  assert.equal(h.state.current.notes, 'Data availability: GSE12345');
+  assert.equal(h.$('save-status').textContent, '已保存');
+});
+
+test('quick, incomplete, stopped and stale notes never automatically extract resources', async () => {
+  for (const scenario of ['quick', 'partial', 'stopped', 'stale']) {
+    const h = harness(); let calls = 0;
+    h.api.extractResources = async () => { calls++; throw new Error('unexpected extraction'); };
+    h.api.patch = async (id, body) => ({ id, ...body });
+    if (scenario === 'quick') h.$('read-mode').value = 'quick';
+    const events = scenario === 'partial' || scenario === 'stopped' ? [{ type: 'chunk', text: 'Partial note' }]
+      : [{ type: 'done', notes: 'Saved note', paper: { notes_stale: scenario === 'stale' } }];
+    stream(h, events, scenario === 'stopped' ? Object.assign(new Error('stop'), { name: 'AbortError' }) : undefined);
+    await h.generateNotes();
+    assert.equal(calls, 0, scenario);
+  }
+});
+
+test('resource extraction merges only its fields and never replaces another paper or clears a draft', async () => {
+  const h = harness(), response = deferred(), refreshed = [];
+  const paperA = h.state.current;
+  paperA.notes = 'new note'; paperA.tags = ['manual']; paperA.reading_status = 'reading'; paperA.tasks = [{ id: 'decision' }];
+  h.state.papers = [{ ...paperA }]; h.state.tab = 'resources';
+  h.context.window.BioResources = { refreshAfterExtraction: async id => refreshed.push(id), clear: () => { throw new Error('draft must not be cleared'); } };
+  h.api.extractResources = () => response.promise;
+  const extracting = h.extractResources();
+  await new Promise(setImmediate);
+  h.state.current = { id: B, notes: 'B note', tags: ['B'], reading_status: 'completed', resources_count: 9 };
+  response.resolve({ paper: { id: A, notes: 'old', tags: ['old'], reading_status: 'unread', resources_count: 2, resources_pending: 2, tasks: [{ id: 'resources' }, { id: 'notes_stale' }] } });
+  assert.equal(await extracting, true);
+  assert.equal(h.state.current.notes, 'B note');
+  assert.equal(h.state.current.resources_count, 9);
+  assert.equal(paperA.notes, 'new note');
+  assert.deepEqual(paperA.tags, ['manual']);
+  assert.equal(paperA.reading_status, 'reading');
+  assert.equal(paperA.resources_count, 2);
+  assert.deepEqual([...paperA.tasks].map(t => t.id), ['decision', 'resources']);
+  assert.deepEqual(refreshed, [A]);
+});
+
+test('resource extraction failure leaves notes saved and permits an independent manual retry', async () => {
+  const h = harness(), response = deferred();
+  h.api.extractResources = () => response.promise;
+  stream(h, [{ type: 'done', notes: 'Saved deep note' }]);
+  await h.generateNotes();
+  const extracting = h.state.extractingResources.get(A);
+  response.reject(new Error('storage unavailable'));
+  assert.equal(await extracting, false);
+  assert.equal(h.state.current.notes, 'Saved deep note');
+  assert.equal(h.$('save-status').textContent, '已保存');
+  assert.equal(h.state.pendingSave, null);
+  assert.match(h.$('toast').textContent, /笔记已保存.*数据与代码.*重试/);
+  h.api.extractResources = async id => ({ paper: { id, resources_count: 1, resources_pending: 1, tasks: [{ id: 'resources' }] } });
+  assert.equal(await h.extractResources(), true);
+  assert.equal(h.state.current.resources_count, 1);
+});
+
+test('automatic tag and resource success cannot hide the other operation failure', async () => {
+  for (const failed of ['tags', 'resources']) {
+    const h = harness(), tags = deferred(), resources = deferred();
+    h.api.autoTags = () => tags.promise;
+    h.api.extractResources = () => resources.promise;
+    stream(h, [{ type: 'done', notes: 'Saved complete deep note' }]);
+    await h.generateNotes();
+    const tagging = h.state.autoTagging.get(A), extracting = h.state.extractingResources.get(A);
+    if (failed === 'tags') {
+      tags.reject(new Error('tag service unavailable'));
+      await tagging;
+    } else {
+      resources.reject(new Error('resource storage unavailable'));
+      await extracting;
+    }
+    const failure = h.$('toast').textContent;
+    assert.match(failure, /笔记已保存.*失败/);
+    if (failed === 'tags') {
+      resources.resolve({ paper: { id: A, resources_count: 1, resources_pending: 1, tasks: [{ id: 'resources' }] } });
+      await extracting;
+    } else {
+      tags.resolve({ paper: { id: A, tags: ['topic'], tags_revision: 1 }, added_tags: ['topic'] });
+      await tagging;
+    }
+    assert.equal(h.$('toast').textContent, failure, failed);
+    assert.equal(h.$('save-status').textContent, '已保存');
+    assert.equal(h.state.current.notes, 'Saved complete deep note');
+  }
+});
+
+test('resource extraction coalesces repeated completions and refreshes changed workflow authoritatively', async () => {
+  const h = harness(), old = deferred(), latest = deferred(); let calls = 0, reads = 0;
+  Object.assign(h.state.current, { notes_mode: 'deep', notes: 'latest deep note', reading_decision: 'priority' });
+  h.api.extractResources = () => ++calls === 1 ? old.promise : latest.promise;
+  const extracting = h.extractResources();
+  assert.equal(h.extractResources(h.state.current, { automatic: true }), extracting);
+  assert.equal(h.extractResources(h.state.current, { automatic: true }), extracting);
+  await new Promise(setImmediate);
+  old.reject(Object.assign(new Error('notes changed'), { status: 409 }));
+  await new Promise(setImmediate);
+  assert.equal(calls, 2);
+  h.state.workflowVersion++;
+  h.api.paper = async id => { reads++; return { id, reading_decision: 'priority', resources_count: 3, resources_pending: 3, tasks: [{ id: 'resources' }] }; };
+  latest.resolve({ paper: { id: A, reading_decision: 'pending', resources_count: 1, resources_pending: 1, tasks: [] } });
+  assert.equal(await extracting, true);
+  assert.equal(reads, 1);
+  assert.equal(h.state.current.reading_decision, 'priority');
+  assert.equal(h.state.current.resources_count, 3);
+  assert.equal(h.state.extractingResources.size, 0);
+});
+
+test('manual resource extraction waits for note saving and keeps a failed-save draft', async () => {
+  const h = harness(), saved = deferred(); let calls = 0;
+  h.api.patch = () => saved.promise;
+  h.api.extractResources = async id => { calls++; return { paper: { id, resources_count: 0, tasks: [] } }; };
+  edit(h, 'latest editable note');
+  const extracting = h.extractResources();
+  await new Promise(setImmediate);
+  assert.equal(calls, 0);
+  saved.resolve({ id: A });
+  assert.equal(await extracting, true);
+  assert.equal(calls, 1);
+  h.api.patch = async () => { throw new Error('save offline'); };
+  edit(h, 'keep draft');
+  assert.equal(await h.extractResources(), false);
+  assert.equal(calls, 1);
+  assert.equal(h.$('editor').value, 'keep draft');
+  assert.equal(h.state.pendingSave.notes, 'keep draft');
 });
 
 test('partial-generation marker survives retry edits and report generation never marks reading complete', async () => {

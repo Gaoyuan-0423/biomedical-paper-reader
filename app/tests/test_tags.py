@@ -16,7 +16,8 @@ class AutoTagTests(unittest.TestCase):
         root = Path(self.temp.name)
         self.patchers = [patch.object(main, 'DATA_DIR', root),
                          patch.object(main, 'PAPERS_DIR', root / 'papers'),
-                         patch.object(main, 'SETTINGS_FILE', root / 'settings.json')]
+                         patch.object(main, 'SETTINGS_FILE', root / 'settings.json'),
+                         patch.object(main, 'TAG_RETRY_DELAY_SECONDS', 0)]
         for patcher in self.patchers:
             patcher.start()
         self.client = TestClient(main.app)
@@ -72,7 +73,7 @@ class AutoTagTests(unittest.TestCase):
 
     def test_invalid_model_output_never_mutates_the_paper(self):
         before = (self.directory / 'meta.json').read_bytes()
-        invalid = ['not JSON', '{"tags":["A"]}', '[1, "A"]', '[""]', '["<script>alert(1)</script>"]',
+        invalid = ['not JSON', '{"tags":["A"],"other":true}', '[1, "A"]', '[""]', '["<script>alert(1)</script>"]',
                    '["https://example.org"]', json.dumps(['x' * 41]), json.dumps(['A', 'B', 'C', 'D', 'E', 'F', 'G']),
                    '```python\n["A"]\n```', '["line\\nbreak"]']
         for output in invalid:
@@ -108,7 +109,7 @@ class AutoTagTests(unittest.TestCase):
         with patch.object(main, 'TAG_TIMEOUT_SECONDS', 0.01), patch.object(main, 'chat_once', never_finishes):
             result = self.client.post(self.url + '/tags/auto')
         self.assertEqual(result.status_code, 504)
-        self.assertTrue(cancelled)
+        self.assertEqual(len(cancelled), 2)
         self.assertEqual((self.directory / 'meta.json').read_bytes(), before)
 
     def test_human_edit_then_restore_tags_rejects_result_without_locking_await(self):
@@ -167,7 +168,67 @@ class AutoTagTests(unittest.TestCase):
         self.assertNotIn('SECRET_TAIL', messages[1]['content'])
         self.assertNotIn('SECRET_NOTE_TAIL', messages[1]['content'])
         self.assertNotIn('UNRELATED_PRIVATE_PAPER', messages[1]['content'])
-        self.assertEqual(model.await_args.kwargs['timeout'], 20.0)
+        self.assertEqual(model.await_args.kwargs['timeout'], 60.0)
+        self.assertEqual(model.await_args.kwargs['max_tokens'], 2048)
+
+    def test_transient_failure_retries_once_and_preserves_notes(self):
+        before = self.client.get(self.url).json()['notes']
+        for error in (asyncio.TimeoutError(), main.httpx.ConnectError('temporary network failure'),
+                      main.httpx.RemoteProtocolError('server disconnected early'),
+                      main.UpstreamError('触发限流', status_code=429),
+                      main.UpstreamError('上游故障', status_code=503)):
+            with self.subTest(error=type(error).__name__):
+                model = AsyncMock(side_effect=[error, '["免疫微环境"]'])
+                with patch.object(main, 'chat_once', model):
+                    response = self.client.post(self.url + '/tags/auto')
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(model.await_count, 2)
+                self.assertEqual(self.client.get(self.url).json()['notes'], before)
+
+    def test_format_retry_and_unambiguous_wrapped_json(self):
+        model = AsyncMock(side_effect=['标签如下：免疫微环境', '```json\n{"tags": ["免疫微环境"]}\n```'])
+        with patch.object(main, 'chat_once', model):
+            response = self.client.post(self.url + '/tags/auto')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['added_tags'], ['免疫微环境'])
+        self.assertEqual(model.await_count, 2)
+        self.assertIn('合法 JSON', model.await_args.args[3][-1]['content'])
+
+    def test_permanent_auth_error_is_not_retried(self):
+        model = AsyncMock(side_effect=main.UpstreamError('鉴权失败', status_code=401))
+        before = (self.directory / 'meta.json').read_bytes()
+        with patch.object(main, 'chat_once', model):
+            response = self.client.post(self.url + '/tags/auto')
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(model.await_count, 1)
+        self.assertEqual((self.directory / 'meta.json').read_bytes(), before)
+
+    def test_transport_preserves_http_status_for_retry_decisions(self):
+        import llm
+        import httpx
+        client_type = httpx.AsyncClient
+        for status in (401, 429, 503):
+            with self.subTest(status=status):
+                transport = httpx.MockTransport(lambda request: httpx.Response(
+                    status, json={'error': {'message': 'synthetic upstream response'}}))
+                def client(**kwargs):
+                    return client_type(transport=transport, **kwargs)
+                with patch.object(llm, 'assert_safe_external_url'), patch.object(llm.httpx, 'AsyncClient', client):
+                    with self.assertRaises(main.UpstreamError) as raised:
+                        asyncio.run(llm.chat_once('https://example.org/v1', 'test-key', 'test-model',
+                                                  [{'role': 'user', 'content': 'Synthetic material'}]))
+                self.assertEqual(raised.exception.status_code, status)
+
+    def test_changed_notes_prevent_wasted_retry_after_transient_failure(self):
+        async def changed(*args, **kwargs):
+            main.patch_paper(self.paper['id'], main.PaperPatch(notes='Updated while identifying'))
+            raise main.UpstreamError('暂时限流', status_code=429)
+        model = AsyncMock(side_effect=changed)
+        with patch.object(main, 'chat_once', model):
+            response = self.client.post(self.url + '/tags/auto')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(model.await_count, 1)
+        self.assertEqual(self.client.get(self.url).json()['notes'], 'Updated while identifying')
 
     def test_tag_limit_and_legacy_revision_do_not_drop_existing_labels(self):
         tags = ['人工标签' + str(i) for i in range(29)]

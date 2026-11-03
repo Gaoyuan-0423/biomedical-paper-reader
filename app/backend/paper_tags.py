@@ -5,8 +5,8 @@ import re
 import unicodedata
 
 
-TEXT_LIMIT = 10000
-NOTES_LIMIT = 8000
+TEXT_LIMIT = 4000
+NOTES_LIMIT = 6000
 TAG_LIMIT = 6
 TOTAL_LIMIT = 30
 
@@ -37,6 +37,10 @@ def parse_tags(output):
         tags = json.loads(content)
     except (ValueError, TypeError):
         raise TagFormatError('标签返回格式不正确，请重试') from None
+    # Some compatible models wrap the requested array in a single tags field.
+    # Accept that unambiguous JSON shape, never extract arrays from free prose.
+    if isinstance(tags, dict) and set(tags) == {'tags'}:
+        tags = tags['tags']
     if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
         raise TagFormatError('标签必须是JSON字符串数组，请重试')
     normalized, seen = [], set()
@@ -82,7 +86,7 @@ def tag_snapshot(meta):
 def tag_messages(meta, text):
     material = {
         'title': (meta.get('title') or '')[:500],
-        'abstract': (meta.get('abstract') or '')[:5000],
+        'abstract': (meta.get('abstract') or '')[:2500],
         'paper_excerpt': text[:TEXT_LIMIT],
         'saved_notes': (meta.get('notes') or '')[:NOTES_LIMIT],
     }
