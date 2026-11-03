@@ -68,6 +68,7 @@
     enrich: (id, body) => api.jsonBody('POST', paperPath(id, '/enrich'), body),
     related: (id, refresh) => api.json(paperPath(id, '/related') + (refresh ? '?refresh=1' : '')),
     patch: (id, body) => api.jsonBody('PATCH', paperPath(id), body),
+    autoTags: (id) => api.json(paperPath(id, '/tags/auto'), { method: 'POST' }),
     remove: (id) => api.json(paperPath(id), { method: 'DELETE' }),
     figures: (id) => api.json(paperPath(id, '/figures')),
     reextract: (id, doc) => api.json(paperPath(id, '/figures/extract?document_id=' + encodeURIComponent(doc || 'main')), { method: 'POST' }),
@@ -87,6 +88,9 @@
     materialBusy: false,
     favOnly: false,
     activeTag: '',
+    tagWrites: new Map(),
+    autoTagging: new Map(),
+    autoTagRefresh: new Set(),
     query: '',
     readingFilter: '',
     decisionFilter: '',
@@ -468,6 +472,7 @@
     state.workflowVersion++;
     const idx = state.papers.findIndex((p) => p.id === paper.id);
     const summary = Object.assign({}, paper);
+    preserveNewerTags(summary);
     delete summary.notes;
     delete summary.abstract;
     if (idx >= 0) state.papers[idx] = summary; else state.papers.unshift(summary);
@@ -573,6 +578,7 @@
     try {
       const meta = await api.attach(paper.id, file);
       if (state.current !== paper) { updateListItem(meta); return; }
+      preserveNewerTags(meta);
       state.current = meta;
       state.documentId = 'main';
       updateListItem(meta);
@@ -601,6 +607,8 @@
     toast('正在查询 CrossRef …');
     try {
       const meta = await api.enrich(paper.id, { overwrite: false });
+      preserveNewerTags(meta);
+      if (state.current !== paper) { updateListItem(meta); return; }
       state.current = meta;
       updateListItem(meta);
       renderHead();
@@ -686,42 +694,136 @@
     if (paper.notes_updated_at) bits.push('笔记 ' + formatDate(paper.notes_updated_at) + (paper.notes_mode ? '（' + (MODE_NAMES[paper.notes_mode] || paper.notes_mode) + '）' : ''));
     $('head-meta').textContent = bits.filter(Boolean).join(' · ');
     $('head-summary').textContent = [paper.journal, paper.year, paper.pages ? paper.pages + ' 页' : ''].filter(Boolean).join(' · ') || '文献信息';
-    $('head-tags').innerHTML = (paper.tags || []).map((t) =>
-      '<span class="chip on" data-tag="' + escapeHtml(t) + '">' + escapeHtml(t) + '<button class="x" data-x="' + escapeHtml(t) + '" aria-label="移除标签 ' + escapeHtml(t) + '">' + icon('close') + '</button></span>').join('') +
-      '<input id="tag-input" placeholder="+ 标签" aria-label="添加文献标签" maxlength="40">';
+    renderHeadTags();
     updateFigCount(paper.figures_count || 0);
   }
 
-  async function addTag(tag) {
+  function renderHeadTags(preserveInput = true) {
     const paper = state.current;
-    tag = (tag || '').trim();
-    if (!paper || !tag) return;
-    const tags = (paper.tags || []).slice();
-    if (tags.includes(tag)) return;
-    tags.push(tag);
-    try {
-      const updated = await api.patch(paper.id, { tags });
-      state.current.tags = updated.tags;
-      updateListItem(updated);
-      renderHead();
-    } catch (e) {
-      toast('添加标签失败：' + e.message, 'error');
+    if (!paper) return;
+    const box = $('head-tags');
+    const draft = preserveInput && box.dataset.paperId === paper.id && $('tag-input') ? $('tag-input').value : '';
+    const busy = state.autoTagging.has(paper.id);
+    box.dataset.paperId = paper.id;
+    box.innerHTML = '<div class="head-tag-list">' + (paper.tags || []).map((t) =>
+      '<span class="chip on" data-tag="' + escapeHtml(t) + '">' + escapeHtml(t) + '<button class="x" data-x="' + escapeHtml(t) + '" aria-label="移除标签 ' + escapeHtml(t) + '">' + icon('close') + '</button></span>').join('') + '</div>' +
+      '<input id="tag-input" placeholder="+ 标签" aria-label="添加文献标签" maxlength="40">' +
+      '<button id="btn-auto-tags" class="btn btn-ghost btn-auto-tags" type="button" title="使用当前文本模型，根据已保存的论文内容识别标签，保留已有标签"' +
+      (busy || state.generating ? ' disabled' : '') + ' aria-busy="' + busy + '">' + (busy ? '正在识别…' : '识别标签') + '</button>';
+    if ($('tag-input')) $('tag-input').value = draft;
+  }
+
+  function preserveNewerTags(updated) {
+    const current = state.current && state.current.id === updated.id ? state.current : null;
+    const listed = state.papers.find(p => p.id === updated.id);
+    for (const known of [current, listed]) {
+      if (known && Number.isInteger(known.tags_revision) && known.tags_revision > (updated.tags_revision || 0)) {
+        updated.tags = (known.tags || []).slice();
+        updated.tags_revision = known.tags_revision;
+      }
     }
   }
 
-  async function removeTag(tag) {
-    const paper = state.current;
-    if (!paper) return;
-    const tags = (paper.tags || []).filter((t) => t !== tag);
-    try {
-      const updated = await api.patch(paper.id, { tags });
-      state.current.tags = updated.tags;
-      updateListItem(updated);
-      renderHead();
-      if (state.activeTag === tag) { state.activeTag = ''; renderList(); }
-    } catch (e) {
-      toast('删除标签失败：' + e.message, 'error');
+  function mergeTags(paper, updated) {
+    if (!updated || !Array.isArray(updated.tags) || (updated.id && updated.id !== paper.id)) throw new Error('标签响应无效');
+    const current = state.current && state.current.id === paper.id ? state.current : null;
+    const listed = state.papers.find(p => p.id === paper.id);
+    const targets = [paper, listed, current].filter(Boolean);
+    const revision = updated.tags_revision;
+    if (Number.isInteger(revision) && targets.some(p => Number.isInteger(p.tags_revision) && p.tags_revision > revision)) return;
+    for (const target of targets) {
+      target.tags = updated.tags.slice();
+      if (Number.isInteger(revision)) target.tags_revision = revision;
     }
+    if (current) renderHeadTags(true);
+    renderList();
+  }
+
+  function changeTag(tag, remove) {
+    const paper = state.current;
+    tag = (tag || '').trim();
+    if (!paper || !tag) return Promise.resolve(false);
+    const id = paper.id;
+    // Each operation starts from the last acknowledged tag list. Requests for
+    // another paper are independent, and tag responses never replace its notes.
+    const previous = state.tagWrites.get(id) || Promise.resolve();
+    const writing = previous.then(async () => {
+      const current = state.current && state.current.id === id ? state.current : null;
+      const summary = state.papers.find(p => p.id === id);
+      const tags = ((current || summary || paper).tags || []).slice();
+      if (remove ? !tags.includes(tag) : tags.includes(tag)) return true;
+      const next = remove ? tags.filter(t => t !== tag) : [...tags, tag];
+      try {
+        const updated = await api.patch(id, { tags: next });
+        mergeTags(paper, updated);
+        if (remove && state.activeTag === tag) state.activeTag = '';
+        renderList();
+        return true;
+      } catch (e) {
+        if (!remove && state.current && state.current.id === id && $('tag-input') && !$('tag-input').value) $('tag-input').value = tag;
+        toast((remove ? '删除' : '添加') + '标签失败：' + e.message, 'error');
+        return false;
+      }
+    });
+    state.tagWrites.set(id, writing);
+    writing.then(() => { if (state.tagWrites.get(id) === writing) state.tagWrites.delete(id); });
+    return writing;
+  }
+
+  function addTag(tag) { return changeTag(tag, false); }
+  function removeTag(tag) { return changeTag(tag, true); }
+
+  function autoTags(paper = state.current, afterGeneration = false) {
+    if (!paper || (!afterGeneration && state.generating)) return Promise.resolve(false);
+    if (state.autoTagging.has(paper.id)) {
+      // A completed newer note invalidates the request already in flight. Keep
+      // one queued refresh for the latest saved note without delaying reading.
+      if (afterGeneration) state.autoTagRefresh.add(paper.id);
+      return state.autoTagging.get(paper.id);
+    }
+    if (!state.settings || !state.settings.has_api_key) {
+      toast(afterGeneration ? '笔记已保存；请设置 API Key 后点击「识别标签」重试' : '请先在「设置」中填写 API Key，再识别标签', 'error');
+      if (!afterGeneration) openSettings();
+      return Promise.resolve(false);
+    }
+    const id = paper.id;
+    // Share the per-paper queue with manual edits so a later manual addition
+    // includes new automatic tags, and recognition sees earlier manual edits.
+    const previous = state.tagWrites.get(id) || Promise.resolve();
+    const identifying = previous.then(async () => {
+      let generated = afterGeneration;
+      for (;;) {
+        let succeeded = false;
+        try {
+          if (!generated && state.current && state.current.id === id && (state.pendingSave || state.saveInFlight)) {
+            if (!await flushSave()) {
+              toast('笔记尚未保存，已暂停识别标签；请先重试保存，草稿仍保留在编辑器中', 'error');
+              return false;
+            }
+          }
+          const result = await api.autoTags(id);
+          if (!state.autoTagRefresh.has(id)) {
+            mergeTags(paper, result.paper);
+            toast(result.message || ((result.added_tags || []).length ? '标签已识别' : '没有发现新的标签'), 'ok');
+          }
+          succeeded = true;
+        } catch (e) {
+          if (!state.autoTagRefresh.has(id)) toast((generated ? '笔记已保存；自动识别标签失败：' : '识别标签失败：') + e.message + '。可点击「识别标签」重试', 'error');
+        }
+        if (!state.autoTagRefresh.delete(id)) return succeeded;
+        generated = true;
+      }
+    });
+    state.autoTagging.set(id, identifying);
+    state.tagWrites.set(id, identifying);
+    if (state.current && state.current.id === id) renderHeadTags(true);
+    identifying.then(() => {
+      if (state.autoTagging.get(id) === identifying) state.autoTagging.delete(id);
+      state.autoTagRefresh.delete(id);
+      if (state.tagWrites.get(id) === identifying) state.tagWrites.delete(id);
+      if (state.current && state.current.id === id) renderHeadTags(true);
+    });
+    return identifying;
   }
 
   function updateFigCount(n) {
@@ -772,6 +874,7 @@
       // The reader may have continued typing while the new paper loaded.
       if (!await flushSave() || token !== state.openToken) return;
       rememberReadingPosition();
+      preserveNewerTags(full);
       state.current = full;
       if (window.BioEvidence) window.BioEvidence.clear();
       if (window.BioResources) window.BioResources.clear();
@@ -835,12 +938,16 @@
     renderDocuments();
     try {
       if (remove) {
-        state.current = await api.removeSupplement(paper.id, state.documentId);
+        const meta = await api.removeSupplement(paper.id, state.documentId);
+        preserveNewerTags(meta);
+        state.current = meta;
         state.documentId = 'main';
       } else {
         for (const file of files) {
           toast('正在解析补充材料 ' + file.name + ' …');
-          state.current = await api.supplement(paper.id, file);
+          const meta = await api.supplement(paper.id, file);
+          preserveNewerTags(meta);
+          state.current = meta;
           state.documentId = state.current.supplements.at(-1).id;
         }
       }
@@ -987,6 +1094,7 @@
     $('btn-generate').hidden = on;
     $('btn-stop').hidden = !on;
     renderWorkflow();
+    renderHeadTags(true);
     $('read-mode').disabled = on;
     $('editor').readOnly = on;
   }
@@ -1031,6 +1139,7 @@
     let buffer = '';
     let lastRender = 0;
     let completed = false;
+    let saved = false;
     let donePaper = null;
     let sourceRevision = paper.material_revision;
     try {
@@ -1085,6 +1194,7 @@
       paper.notes_stale = false;
       paper.tasks = (paper.tasks || []).filter(t => !['notes_incomplete', 'notes_stale'].includes(t.id));
       if (donePaper) mergeWorkflow(paper, donePaper);
+      if (donePaper && Array.isArray(donePaper.tags)) mergeTags(paper, donePaper);
       editor.value = acc;
       renderPreview(acc);
       $('btn-export-md').disabled = !acc;
@@ -1094,6 +1204,7 @@
       renderHead();
       setSaveStatus('已保存', 'saved');
       toast('笔记生成完成', 'ok');
+      saved = true;
     } catch (e) {
       const stopped = e.name === 'AbortError';
       // A failed request must not erase the previous note. Partial output is
@@ -1118,6 +1229,7 @@
       renderDocuments(); updateNoteActions(); renderWorkflow();
       setGenerating(false);
     }
+    if (completed && saved) void autoTags(paper, true);
   }
 
   function stopGenerating() {
@@ -2132,6 +2244,7 @@
       if (chip) { state.activeTag = state.activeTag === chip.dataset.tag ? '' : chip.dataset.tag; renderList(); }
     });
     $('head-tags').addEventListener('click', (e) => {
+      if (e.target.closest('#btn-auto-tags')) { void autoTags(); return; }
       const x = e.target.closest('[data-x]');
       if (x) removeTag(x.dataset.x);
     });

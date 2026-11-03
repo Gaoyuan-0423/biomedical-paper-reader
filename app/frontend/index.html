@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f8f9f6">
   <title>BioReader · 文献阅读工作台</title>
   <link rel="stylesheet" href="vendor/github.min.css">
-  <link rel="stylesheet" href="styles.css?v=20261103-bluewhite">
+  <link rel="stylesheet" href="styles.css?v=20261103-tags">
   <link rel="stylesheet" href="evidence.css?v=20261103">
   <link rel="stylesheet" href="resources.css?v=20261103-bluewhite">
 </head>
@@ -46,10 +46,10 @@
           <button id="btn-all-filter" class="filter-btn active" aria-pressed="true">全部文献</button>
           <button id="btn-fav-filter" class="filter-btn" aria-pressed="false" title="只看收藏"><svg class="icon" aria-hidden="true"><use href="#i-star"></use></svg>我的收藏 <span id="favorite-total">0</span></button>
         </div>
+        <div id="tag-chips" class="tag-chips" hidden></div>
         <details id="library-refine" class="library-refine">
           <summary>筛选与待办 <span id="active-filter-count"></span></summary>
           <div class="refine-fields">
-        <div id="tag-chips" class="tag-chips" hidden></div>
         <div class="workflow-filters">
           <label>阅读进度<select id="filter-reading"><option value="">全部进度</option><option value="unread">未读</option><option value="skimmed">已速读</option><option value="reading">精读中</option><option value="completed">已完成</option></select></label>
           <label>阅读决策<select id="filter-decision"><option value="">全部决策</option><option value="pending">待判断</option><option value="priority">优先精读</option><option value="reference">留作参考</option><option value="irrelevant">暂不相关</option></select></label>
@@ -259,6 +259,6 @@
   <script src="export.js"></script>
   <script src="evidence.js?v=20261103"></script>
   <script src="resources.js?v=20261103-bluewhite"></script>
-  <script src="app.js?v=20261103-bluewhite"></script>
+  <script src="app.js?v=20261103-tags"></script>
 </body>
 </html>

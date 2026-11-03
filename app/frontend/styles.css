@@ -115,9 +115,10 @@ select { cursor: pointer; }
 .filter-btn .icon { width: 13px; height: 13px; }
 .filter-btn span { font-weight: 400; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.chip { border: 1px solid var(--border); background: transparent; border-radius: 5px; padding: 2px 7px; font-size: 11px; color: var(--muted); cursor: pointer; line-height: 1.6; display: inline-flex; align-items: center; gap: 3px; }
+#tag-chips { max-height: 88px; overflow-y: auto; overflow-x: hidden; align-content: flex-start; padding-right: 3px; scrollbar-gutter: stable; }
+.chip { max-width: 100%; border: 1px solid var(--border); background: transparent; border-radius: 5px; padding: 2px 7px; font-size: 11px; color: var(--muted); cursor: pointer; line-height: 1.6; display: inline-flex; align-items: center; gap: 3px; overflow-wrap: anywhere; }
 .chip:hover, .chip.on { color: var(--primary); background: var(--primary-soft); border-color: var(--primary-border); }
-.chip .x { border: none; background: transparent; padding: 0; color: inherit; cursor: pointer; display: inline-flex; opacity: .6; }
+.chip .x { border: none; background: transparent; padding: 0; color: inherit; cursor: pointer; display: inline-flex; flex: 0 0 auto; opacity: .6; }
 .chip .x .icon { width: 11px; height: 11px; }
 .chip .x:hover { color: var(--danger); opacity: 1; }
 .list-caption { display: flex; justify-content: space-between; padding: 5px 20px 10px; font-size: 11px; color: var(--muted); letter-spacing: .5px; }
@@ -248,8 +249,13 @@ select { cursor: pointer; }
 .paper-details[open] summary { color: var(--primary); }
 .paper-meta { margin-top: 9px; font-size: 11px; color: var(--muted); line-height: 1.8; overflow-wrap: anywhere; }
 .paper-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.head-tag-list { display: flex; flex-wrap: wrap; align-content: flex-start; flex: 1 0 100%; gap: 4px; max-height: 88px; overflow-y: auto; overflow-x: hidden; padding-right: 3px; scrollbar-gutter: stable; }
+.head-tag-list:empty { display: none; }
 .paper-tags input { width: 70px; border-style: dashed; padding: 3px 6px; font-size: 11px; background: transparent; }
 .paper-tags input:focus { width: 115px; border-style: solid; }
+.paper-tags .btn-auto-tags { min-height: 26px; padding: 4px 7px; border: 1px solid var(--primary-border); color: var(--primary-ink); background: var(--primary-soft); font-size: 11px; }
+.paper-tags .btn-auto-tags:hover:not(:disabled) { background: var(--primary-tint); border-color: var(--primary-border); }
+.paper-tags .btn-auto-tags:disabled { opacity: .7; cursor: progress; }
 .head-actions { display: grid; grid-template-columns: repeat(2, 26px); align-items: center; gap: 3px; margin-top: -2px; }
 .head-actions .btn { width: 26px; min-width: 26px; height: 26px; min-height: 26px; padding: 5px; }
 .head-actions .icon { width: 14px; height: 14px; }
