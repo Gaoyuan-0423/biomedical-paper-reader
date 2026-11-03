@@ -42,8 +42,10 @@ from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourcePatch,
                              load_resources, normalize_resource, public_resource, public_resources,
                              related_resources, resource_summary, source_revision, validate_source)
 from research_export import append_research_appendix
-from resource_extraction import extract_resources, identity_keys
+from resource_extraction import extract_resources, plan_resource_update
 from paper_tags import TEXT_LIMIT, TagFormatError, merge_tags, parse_tags, tag_messages, tag_snapshot
+from geo_metadata import GeoError, cache_fresh, fetch_geo_metadata, load_geo_cache, save_geo_cache, validate_accession
+from paper_resources import resource_accessions
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -167,7 +169,7 @@ def annotate_paper(d: Path, meta: dict) -> dict:
         meta['resources_count'] = meta['resources_pending'] = None
         meta['storage_warnings'].append({'kind': exc.kind, 'message': exc.message})
     if meta['resources_pending']:
-        meta['tasks'].append({'id': 'resources', 'label': '核对数据与代码', 'count': meta['resources_pending']})
+        meta['tasks'].append({'id': 'resources', 'label': '核对数据与复现', 'count': meta['resources_pending']})
     if meta['storage_warnings']:
         meta['tasks'].append({'id': 'storage', 'label': '检查本地记录'})
     return meta
@@ -573,44 +575,41 @@ def extract_paper_resources(paper_id: str):
         d = paper_dir(paper_id)
         meta = read_meta(d)
         records = load_resources(d)  # Corruption must never look like an empty list.
-        existing_count = len(records)
         if meta.get('notes_mode') != 'deep' or not meta.get('notes', '').strip():
-            raise HTTPException(400, '请先生成并保存精读笔记，再整理数据与代码')
+            raise HTTPException(400, '请先生成并保存精读笔记，再整理数据与复现')
         if meta.get('notes_incomplete'):
-            raise HTTPException(409, '精读笔记尚未完成，请完成精读后再整理数据与代码')
+            raise HTTPException(409, '精读笔记尚未完成，请完成精读后再整理数据与复现')
         if meta.get('notes_stale'):
             raise HTTPException(409, '论文材料已变化，请先核对或重新生成精读笔记')
         candidates = extract_resources(meta['notes'])
-        known = set().union(*(identity_keys(record) for record in records))
-        added, skipped = 0, 0
+        additions, replaced_ids, skipped = plan_resource_update(records, candidates)
+        added, updated = len(additions), len(replaced_ids)
         now = _now()
-        for record in candidates:
-            keys = identity_keys(record)
-            if known.intersection(keys):
-                skipped += 1
-                continue
+        for record in additions:
             record.update(id=uuid.uuid4().hex, created_at=now, updated_at=now,
                           source_revision='')
-            records.append(record)
-            known.update(keys)
-            added += 1
-        if added:
+        if added or updated:
             # Validation may supply defaults/normalization for old libraries.
             # Append to their original records without rewriting human fields.
             path = d / 'resources.json'
             original = json.loads(path.read_text(encoding='utf-8')) if path.exists() else []
-            atomic_json(path, original + records[existing_count:])
+            if updated:
+                atomic_json(d / ('resources.backup-' + uuid.uuid4().hex + '.json'), original)
+            atomic_json(path, [record for record in original if record['id'] not in replaced_ids] + additions)
         if added:
-            message = f'已从精读笔记整理 {added} 条数据与代码，均待核查原文'
+            message = f'已从精读笔记整理 {added} 条资源记录，均待核查原文'
         elif candidates:
             message = '精读笔记中的资源已记录，已有内容保持不变'
         else:
-            message = '精读笔记中未找到明确的数据库编号或数据与代码链接'
+            message = '精读笔记中未找到明确的资源表、数据库编号或数据／代码链接'
         if skipped:
             message += f'；已跳过 {skipped} 条重复记录'
+        if updated:
+            message += f'；已备份并更新 {updated} 条未人工修改的旧自动记录'
         latest = read_meta(d)
         return {'paper': summary_of(latest), 'added_count': added, 'skipped_count': skipped,
-                'resources': [public_resource(d, latest, record) for record in records],
+                'updated_count': updated, 'backup_created': bool(updated),
+                'resources': public_resources(d, latest),
                 'message': message}
 
 
@@ -627,6 +626,8 @@ def patch_paper_resource(paper_id: str, resource_id: str, body: ResourcePatch):
         updates = body.model_dump(exclude_unset=True)
         record = normalize_resource({**old, **updates})
         content_changed = any(record.get(k) != old.get(k) for k in ResourceIn.model_fields if k != 'status')
+        if content_changed or 'status' in updates:
+            record.pop('auto_extraction', None)
         source_changed = any(record[k] != old[k] for k in ('document_id', 'page'))
         if content_changed and 'status' not in updates:
             record['status'] = 'pending'
@@ -662,6 +663,56 @@ def get_library_resources(q: str = ''):
                     meta = read_meta(d)
                     entries.extend({**r, 'paper_id': meta['id'], 'paper_title': meta['title']} for r in public_resources(d, meta))
         return related_resources(entries, q)
+
+
+# ---------- optional public GEO metadata ----------
+
+def _paper_geo_accessions(directory):
+    return {accession for record in load_resources(directory) for accession in resource_accessions(record)
+            if accession.startswith('GSE')}
+
+
+@app.get('/api/papers/{paper_id}/resources/geo')
+def get_paper_geo_metadata(paper_id: str):
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        accessions = _paper_geo_accessions(directory)
+        return {'records': {key: value for key, value in load_geo_cache(directory).items() if key in accessions}}
+
+
+@app.post('/api/papers/{paper_id}/resources/geo/{accession}')
+async def supplement_geo_metadata(paper_id: str, accession: str, refresh: bool = False):
+    try:
+        accession = validate_accession(accession)
+    except GeoError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        if accession not in _paper_geo_accessions(directory):
+            raise HTTPException(404, '本篇文献的资源记录中没有该 GEO 编号')
+        cached = load_geo_cache(directory).get(accession)
+        if cached and not refresh and cache_fresh(cached):
+            return {'metadata': cached, 'cached': True}
+    try:
+        metadata = await fetch_geo_metadata(accession)
+    except GeoError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        if accession not in _paper_geo_accessions(directory):
+            raise HTTPException(409, '资源编号已修改，请重新打开资源表')
+        records = load_geo_cache(directory)
+        previous = records.get(accession)
+        # A slower request must not overwrite a fresh result committed by a
+        # concurrent refresh while this request was awaiting the public server.
+        if previous != cached and previous and cache_fresh(previous):
+            return {'metadata': previous, 'cached': True}
+        # A partial refresh must not discard more complete cached sample details.
+        if previous and metadata.get('warnings') and len(previous.get('samples', [])) > len(metadata.get('samples', [])):
+            return {'metadata': {**previous, 'warnings': metadata['warnings']}, 'cached': True}
+        records[accession] = metadata
+        save_geo_cache(directory, records)
+    return {'metadata': metadata, 'cached': False}
 
 
 # ---------- settings ----------

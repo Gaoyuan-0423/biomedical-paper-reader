@@ -6,7 +6,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.5.2。蓝白阅读工作台，支持阅读待办、证据与数据资源整理，以及生成笔记后的自动标签；默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
+版本：v0.5.3。蓝白阅读工作台，支持星标、阅读待办、证据与结构化数据资源整理，以及生成笔记后的自动标签；默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -45,13 +45,13 @@
 
 #### Mac 桌面版（预览）
 
-下载入口：[v0.5.2 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.5.2)，其中 `BioReader-v0.5.2-macos-arm64.zip` 适用于 Apple 芯片 Mac。解压后打开 `BioReader.app`，无需手动运行浏览器、终端或安装 Python。该包未做 Apple 开发者签名和公证，已完成隔离数据下的浏览器交互与导出检查；本版蓝白界面尚未单独复验原生 WebKit 窗口。
+下载入口：[v0.5.3 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.5.3)，其中 `BioReader-v0.5.3-macos-arm64.zip` 适用于 Apple 芯片 Mac。解压后打开 `BioReader.app`，无需手动运行浏览器、终端或安装 Python。该包未做 Apple 开发者签名和公证，已完成隔离数据下的浏览器交互与导出检查；本版蓝白界面尚未单独复验原生 WebKit 窗口。
 
 也可运行 `./app/build-macos.sh` 自行构建；数据独立保存在用户目录。安装、构建和当前验证范围见 [Mac 桌面版说明](app/DESKTOP.md)。AI 模型、DOI 和相关文献查询仍需联网。
 
 ![BioReader v0.5.0 蓝白阅读工作台：文献库、补充 PDF 与数据资源记录](docs/screenshots/bioreader-v0.5.0-bluewhite.png)
 
-蓝白工作台 v0.5.0 实测截图（1440px，v0.5.2 沿用此布局）：左侧筛选与待办，中间正文／补充材料阅读，右侧资源记录与原文定位。截图使用原创合成 PDF 和虚构记录。
+蓝白工作台 v0.5.0 实测截图（1440px，当前版已简化阅读状态并更新资源表格）：左侧筛选与待办，中间正文／补充材料阅读，右侧资源记录与原文定位。截图使用原创合成 PDF 和虚构记录。
 
 #### 直接使用
 
@@ -128,7 +128,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.5.2. This desktop preview provides a blue-and-white workspace, reading tasks, evidence cards, research resources, and automatic tags after note generation. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
+Version: v0.5.3. This desktop preview provides a blue-and-white workspace, favorites, reading tasks, evidence cards, structured research resources, and automatic tags after note generation. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -167,7 +167,7 @@ A full close-reading report follows this structure: opening guide → article in
 
 #### macOS desktop preview
 
-Download page: [v0.5.2 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.5.2). The `BioReader-v0.5.2-macos-arm64.zip` asset targets Apple silicon Macs. Extract it and open `BioReader.app`; launching it does not require a browser, terminal, or Python installation. The bundle has no Apple Developer ID signature or notarization, and browser interaction and export checks used isolated synthetic data; the new interface has not been separately rechecked in the native WebKit window.
+Download page: [v0.5.3 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.5.3). The `BioReader-v0.5.3-macos-arm64.zip` asset targets Apple silicon Macs. Extract it and open `BioReader.app`; launching it does not require a browser, terminal, or Python installation. The bundle has no Apple Developer ID signature or notarization, and browser interaction and export checks used isolated synthetic data; the new interface has not been separately rechecked in the native WebKit window.
 
 Build from source with `./app/build-macos.sh` if preferred. See the [desktop guide](app/DESKTOP.md) for installation, storage, and validation limits. AI, DOI lookup, and related-paper searches still require network access.
 

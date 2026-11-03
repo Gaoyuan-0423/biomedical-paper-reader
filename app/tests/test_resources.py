@@ -92,6 +92,27 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(record['role'], 'implementation')
 
+    def test_structured_rows_keep_legacy_accession_and_url_in_duplicate_identity(self):
+        first = self.add(title='Validation cohorts', purpose='External validation', accession='GSE123')
+        second = self.add(title='Validation cohorts', purpose='External validation', accession='GSE456')
+        self.assertNotEqual(first['id'], second['id'])
+        duplicate = self.client.post(self.url + '/resources', json={
+            'title': 'Validation cohorts', 'purpose': 'Updated use', 'accession': 'gse123'})
+        self.assertEqual(duplicate.status_code, 409)
+        one = self.add(title='Analysis code', kind='code', repository='GitHub', accession='',
+                       purpose='Reproduce analysis', url='https://example.org/code-a#readme')
+        two = self.add(title='Analysis code', kind='code', repository='GitHub', accession='',
+                       purpose='Reproduce analysis', url='https://example.org/code-b')
+        self.assertNotEqual(one['id'], two['id'])
+        duplicate_url = self.client.post(self.url + '/resources', json={
+            'title': 'Analysis code', 'purpose': 'Reproduce analysis',
+            'url': 'HTTPS://EXAMPLE.ORG:443/code-a#install'})
+        self.assertEqual(duplicate_url.status_code, 409)
+        different_path = self.add(title='Analysis code', kind='code', repository='GitHub', accession='',
+                                  purpose='Reproduce analysis', url='https://example.org/Code-a')
+        self.assertNotEqual(one['id'], different_path['id'])
+        self.assertEqual(len(self.client.get(self.url + '/resources').json()), 5)
+
     def test_invalid_fields_links_and_sources_never_write(self):
         bad_fields = [
             {'title': ' '}, {'accession': '', 'url': ''}, {'kind': 'auto'}, {'role': 'invented'},

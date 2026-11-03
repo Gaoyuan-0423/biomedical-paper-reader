@@ -3,19 +3,19 @@
 Candidates are suggestions, never evidence of an accession's existence. Nothing
 here fetches URLs, invents repository links, or assigns PDF provenance.
 """
+import hashlib
+import json
 import re
 import unicodedata
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from fastapi import HTTPException
 
-from paper_resources import ResourceIn, normalize_resource, resource_key, safe_url
+from paper_resources import (ACCESSION_TOKEN, ResourceIn, normalize_resource, resource_accessions,
+                             resource_key, resource_link_keys, resource_repository, resource_urls, safe_url)
 
 
-ACCESSION = re.compile(
-    r'(?<![A-Za-z0-9_])(?:GS[EM]\d+|SR[APRSX]\d+|ER[APRSX]\d+|'
-    r'PRJ(?:NA|EB|DB|CA)\d+|[CH]RA\d+|E-(?:MTAB|MEXP|GEOD|TABM|MEXP)-\d+|'
-    r'phs\d+(?:\.v\d+\.p\d+)?)(?![A-Za-z0-9_]|-[A-Za-z0-9]|\.[A-Za-z0-9])', re.I)
+ACCESSION = ACCESSION_TOKEN
 URL = re.compile(r'https?://[^\s<>"`\[\]{}|\u3000-\u303f\uff00-\uffef]+', re.I)
 SKIP = re.compile(
     r'示例|例如|比如|占位|假设|可能的|未来|建议使用|建议下载|未提供|未报告|未披露|'
@@ -23,23 +23,11 @@ SKIP = re.compile(
 SKIP_HEADING = re.compile(r'未来|展望|建议|假设|示例|参考文献|阅读核查与资源记录|\b(?:references|future|recommendations|examples)\b', re.I)
 PREFERRED_HEADING = re.compile(r'数据|方法|代码|资源|\b(?:data|methods?|code|resources?|availability)\b', re.I)
 NOTICE = '来自精读笔记自动整理，尚未核对原文。笔记片段：\n'
+AUTO_NOTICE = '来自精读笔记自动整理，尚未核对原文。'
 
 
 def accession_repository(accession):
-    value = accession.upper()
-    if value.startswith(('GSE', 'GSM')):
-        return 'GEO'
-    if value.startswith('SR'):
-        return 'SRA'
-    if value.startswith('ER'):
-        return 'ENA'
-    if value.startswith('PRJ'):
-        return 'BioProject'
-    if value.startswith(('CRA', 'HRA')):
-        return 'GSA'
-    if value.startswith('E-'):
-        return 'ArrayExpress'
-    return 'dbGaP'
+    return resource_repository('', accession)
 
 
 def _url_info(value):
@@ -137,8 +125,8 @@ def _lines(notes):
     return sorted(entries)
 
 
-def extract_resources(notes):
-    """Return normalized pending suggestions, with duplicates coalesced."""
+def _identifier_resources(notes, legacy=False):
+    """Conservative fallback when no dedicated resource table is present."""
     candidates = {}
     for _, _, raw, line in _lines(notes):
         items, spans = [], []
@@ -162,7 +150,7 @@ def extract_resources(notes):
                               repository=repository, accession=accession, url=''))
         for info in items:
             record = normalize_resource(ResourceIn(**info, role=_role(line, info['kind']),
-                notes=NOTICE + raw.strip()[:600]).model_dump())
+                notes=NOTICE + raw.strip()[:600] if legacy else AUTO_NOTICE).model_dump())
             key = resource_key(record)
             if key not in candidates:
                 candidates[key] = record
@@ -174,7 +162,7 @@ def extract_resources(notes):
 
 def identity_keys(record):
     """Also match an existing URL-only record to its explicit accession URL."""
-    keys = {resource_key(record)}
+    keys = {resource_key(record), *resource_link_keys(record)}
     info = _url_info(record.get('url', ''))
     if info:
         keys.add(resource_key(info))
@@ -182,3 +170,190 @@ def identity_keys(record):
     if not record.get('repository') and ACCESSION.fullmatch(accession):
         keys.add(resource_key({**record, 'repository': accession_repository(accession)}))
     return keys
+
+
+HEADERS = {
+    'title': ('资源', '资源名称', '数据代码资源', '资源条目', 'resource', 'resources', 'resourcename'),
+    'purpose': ('用途', '使用目的', '本文用途', 'purpose', 'use', 'usage'),
+    'identifiers': ('编号链接', '编号或链接', '编号', '链接', '入口', 'identifierlink', 'identifierslinks',
+                    'accessionlink', 'accessionurl', 'accession', 'identifier', 'identifiers', 'link', 'url'),
+    'conditions': ('影响使用的条件', '使用条件', '访问条件', '获取条件', '限制条件', '条件',
+                   'conditions', 'conditionsforuse', 'conditionsaffectinguse', 'accessconditions', 'usageconditions', 'restrictions'),
+    'sample_details': ('样本', '样品', '材料', '样本材料', '样品材料', '使用样品', '样本类型', '样品类型', '使用样本',
+                       'sample', 'samples', 'sampledetails', 'samplematerial', 'sampletype', 'specimen'),
+}
+
+
+def _cells(line):
+    """Split Markdown cells, respecting escaped pipes and inline code spans."""
+    value = line.strip()
+    if '|' not in value:
+        return []
+    if value.startswith('|'):
+        value = value[1:]
+    if value.endswith('|') and not value.endswith('\\|'):
+        value = value[:-1]
+    cells, part, code, index = [], [], 0, 0
+    while index < len(value):
+        char = value[index]
+        if char == '\\' and index + 1 < len(value) and value[index + 1] == '|':
+            part.append('|')
+            index += 2
+            continue
+        if char == '`':
+            end = index + 1
+            while end < len(value) and value[end] == '`':
+                end += 1
+            length = end - index
+            code = 0 if code == length else length if not code else code
+            part.append(value[index:end])
+            index = end
+            continue
+        if char == '|' and not code:
+            cells.append(''.join(part).strip())
+            part = []
+        else:
+            part.append(char)
+        index += 1
+    cells.append(''.join(part).strip())
+    return cells
+
+
+def _header(cell):
+    cell = unicodedata.normalize('NFKC', cell)
+    cell = re.sub(r'\([^)]*\)', '', cell)
+    return re.sub(r'[\W_]+', '', cell).casefold()
+
+
+def _resource_tables(notes):
+    """Return (found, rows). Conditions never use the speculative-text filter."""
+    lines = notes.splitlines()
+    found, rows, headings, fenced, index = False, [], [], False, 0
+    while index < len(lines):
+        line = lines[index]
+        if line.lstrip().startswith(('```', '~~~')):
+            fenced = not fenced
+            index += 1
+            continue
+        heading = re.match(r'^\s*(#{1,6})\s+(.+)', line)
+        if heading and not fenced:
+            level = len(heading[1])
+            headings = [(n, text) for n, text in headings if n < level] + [(level, heading[2])]
+        skip = fenced or SKIP_HEADING.search(' '.join(text for _, text in headings))
+        cells = _cells(line) if not skip else []
+        mapping, duplicate_header = {}, False
+        for column, cell in enumerate(cells):
+            for field, aliases in HEADERS.items():
+                if _header(cell) in aliases:
+                    duplicate_header = duplicate_header or field in mapping
+                    mapping[field] = column
+        separator = _cells(lines[index + 1]) if index + 1 < len(lines) else []
+        if (duplicate_header or not all(field in mapping for field in ('title', 'purpose', 'identifiers', 'conditions')) or
+                len(separator) != len(cells) or not all(re.fullmatch(r':?-{3,}:?', cell.replace(' ', '')) for cell in separator)):
+            index += 1
+            continue
+        found = True
+        index += 2
+        while index < len(lines):
+            values = _cells(lines[index])
+            if len(values) != len(cells):
+                break
+            fields = {field: re.sub(r'<br\s*/?>', '\n', values[column], flags=re.I).strip()
+                      for field, column in mapping.items()}
+            fields['title'] = fields['title'].strip('*` ')
+            if fields['title'] and any(fields.get(field) for field in ('purpose', 'identifiers', 'conditions', 'sample_details')):
+                rows.append(fields)
+            index += 1
+    return found, rows
+
+
+def _table_resource(fields):
+    accessions = resource_accessions(fields)
+    links = resource_urls(fields.get('identifiers', ''))
+    repository = {accession_repository(value) for value in accessions}
+    known_links = [info for link in links if (info := _url_info(link))]
+    repository.update(info['repository'] for info in known_links)
+    kind = 'other'
+    if re.search(r'细胞系|抗体|试剂|cell lines?|reagents?', fields['title'], re.I):
+        kind = 'other'
+    elif accessions or re.search(r'数据|队列|TCGA|IMvigor|dataset|cohort', fields['title'], re.I):
+        kind = 'dataset'
+    elif re.search(r'代码|软件|code|software', fields['title'], re.I) or known_links and all(item['kind'] == 'code' for item in known_links):
+        kind = 'code'
+    return normalize_resource(ResourceIn(**fields, kind=kind,
+        repository=next(iter(repository)) if len(repository) == 1 else '',
+        accession=accessions[0] if len(accessions) == 1 else '',
+        url=links[0] if len(links) == 1 else '',
+        role=_role(fields.get('purpose', ''), kind), notes=AUTO_NOTICE).model_dump())
+
+
+def resource_fingerprint(record):
+    fields = {field: record.get(field, ResourceIn.model_fields[field].default) for field in ResourceIn.model_fields}
+    return hashlib.sha256(json.dumps(fields, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+def extract_resources(notes):
+    """Prefer whole table rows; fall back to explicit identifiers only."""
+    found, rows = _resource_tables(notes)
+    candidates = [_table_resource(row) for row in rows] if found else _identifier_resources(notes)
+    output, seen = [], set()
+    for record in candidates:
+        fingerprint = resource_fingerprint(record)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        record['auto_extraction'] = {'version': 2, 'fingerprint': fingerprint,
+                                     'source': 'resource_table' if found else 'identifier_fallback'}
+        output.append(record)
+    return output
+
+
+def untouched_auto(record):
+    """Only records still identical to our output may be replaced automatically."""
+    if record.get('status') != 'pending':
+        return False
+    if set(record) - set(ResourceIn.model_fields) - {'id', 'created_at', 'updated_at', 'source_revision', 'auto_extraction'}:
+        return False
+    marker = record.get('auto_extraction')
+    if isinstance(marker, dict) and marker.get('version') == 2:
+        return marker.get('fingerprint') == resource_fingerprint(record)
+    if (not record.get('notes', '').startswith(NOTICE) or not record.get('created_at') or
+            record.get('created_at') != record.get('updated_at') or record.get('source_revision') or
+            any(record.get(field) for field in ('purpose', 'identifiers', 'conditions', 'sample_details'))):
+        return False
+    # Recreate the legacy record from its own bounded snippet; customized title,
+    # role, notes, provenance, or supplemental fields will not match.
+    for expected in _identifier_resources(record['notes'][len(NOTICE):], legacy=True):
+        if not expected['url'] and record.get('url'):
+            info = _url_info(record['url'])
+            if info and info['accession'] == expected['accession']:
+                expected['url'] = record['url']
+        if all(record.get(field, '') == value for field, value in expected.items()):
+            return True
+    return False
+
+
+def plan_resource_update(records, candidates):
+    """Return new candidates, IDs to replace, and count of unchanged candidates."""
+    table = any(item.get('auto_extraction', {}).get('source') == 'resource_table' for item in candidates)
+    candidate_keys = set().union(*(identity_keys(item) for item in candidates))
+    eligible = {record['id'] for record in records if untouched_auto(record) and
+                (table or identity_keys(record).intersection(candidate_keys))}
+    retained, removed, new, skipped = [record for record in records if record['id'] not in eligible], set(eligible), [], 0
+    for candidate in candidates:
+        matching = next((record for record in records if record['id'] in removed and
+                         resource_fingerprint(record) == resource_fingerprint(candidate)), None)
+        if matching:
+            removed.remove(matching['id'])
+            retained.append(matching)
+            skipped += 1
+            continue
+        if table:
+            duplicate = any(resource_key(record) == resource_key(candidate) for record in retained + new)
+        else:
+            duplicate = any(identity_keys(record).intersection(identity_keys(candidate)) for record in retained + new)
+        if duplicate:
+            skipped += 1
+        else:
+            new.append(candidate)
+    return new, removed, skipped

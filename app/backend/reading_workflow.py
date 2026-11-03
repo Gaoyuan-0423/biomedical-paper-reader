@@ -1,4 +1,4 @@
-"""Human reading decisions, derived tasks, and source-bound evidence records."""
+"""Actionable reading tasks and source-bound evidence records."""
 import json
 import os
 import re
@@ -60,6 +60,7 @@ def atomic_json(path, value):
 
 
 def defaults(meta):
+    # Keep legacy values readable without using them to derive tasks.
     if meta.get('reading_status') not in READING_STATUSES:
         meta['reading_status'] = 'unread'
     if meta.get('reading_decision') not in READING_DECISIONS:
@@ -129,13 +130,8 @@ def annotate(directory, meta):
     tasks = []
     def task(id, label, count=None):
         tasks.append({'id': id, 'label': label, **({'count': count} if count is not None else {})})
-    if meta['reading_decision'] == 'pending':
-        task('decision', '判断阅读价值')
-    if meta['reading_decision'] != 'irrelevant':
-        if not meta.get('has_file'):
-            task('fulltext', '补充正文 PDF')
-        if meta['reading_status'] == 'reading':
-            task('resume', '继续精读')
+    if not meta.get('has_file'):
+        task('fulltext', '补充正文 PDF')
     if meta.get('notes_incomplete'):
         task('notes_incomplete', '完成未完成的笔记')
     if meta['notes_stale']:
