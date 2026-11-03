@@ -26,7 +26,7 @@
       if (!resp.ok) {
         let msg = resp.statusText;
         try { const body = await resp.json(); msg = body.detail || JSON.stringify(body); } catch (e) { /* keep statusText */ }
-        throw new Error(msg);
+        const error = new Error(msg); error.status = resp.status; throw error;
       }
       return resp.json();
     },
@@ -38,6 +38,9 @@
     clearKey: () => api.json('/api/settings/api-key', { method: 'DELETE' }),
     papers: () => api.json('/api/papers'),
     paper: (id) => api.json(paperPath(id)),
+    saveReading: (id, doc, position) => api.json(paperPath(id, '/reading-position?document_id=' + encodeURIComponent(doc)), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(position), keepalive: true,
+    }),
     upload(file) {
       const fd = new FormData();
       fd.append('file', file);
@@ -93,6 +96,14 @@
     saveInFlight: null,
     openToken: 0,
     pdfRenderTasks: new Set(),
+    pdfView: null,
+    pdfContext: null,
+    pdfFetch: null,
+    pdfDeferredPage: 1,
+    readingCache: new Map(),
+    readingPending: new Map(),
+    readingSaving: null,
+    readingTimer: null,
     figures: [],
     figDataUrls: {},
     figReading: false,
@@ -129,13 +140,18 @@
   }
 
   function setWorkspaceView(view) {
+    const wasHidden = !$('pdf-scroll').clientWidth;
+    const token = state.renderToken;
     document.body.dataset.view = view;
     document.querySelectorAll('#workspace-views [data-view]').forEach((button) => {
       const active = button.dataset.view === view;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
-    if (view === 'pdf' && state.fitWidth && state.pdf) requestAnimationFrame(rerenderPdf);
+    if (view === 'pdf' && state.pdf) requestAnimationFrame(() => {
+      if (token !== state.renderToken) return;
+      if (wasHidden || !state.pdfView) rerenderPdf(); else paintVisiblePages();
+    });
   }
 
   const modalFocus = new Map();
@@ -651,8 +667,11 @@
       if (token !== state.openToken) return;
       // The reader may have continued typing while the new paper loaded.
       if (!await flushSave() || token !== state.openToken) return;
+      rememberReadingPosition();
       state.current = full;
-      state.documentId = 'main';
+      if (!state.readingCache.has(full.id)) state.readingCache.set(full.id, full.reading_position || { documents: {} });
+      const active = state.readingCache.get(full.id).active_document;
+      state.documentId = (full.supplements || []).some(d => d.id === active) ? active : 'main';
     } catch (e) {
       if (token === state.openToken) toast('打开失败：' + e.message, 'error');
       return;
@@ -677,7 +696,7 @@
     renderDocuments();
     updateNoteActions();
     if (window.matchMedia('(max-width: 900px)').matches) setWorkspaceView('pdf');
-    if (hasFile) loadPdf(); else clearPdf();
+    if (hasFile || state.documentId !== 'main') loadPdf(); else clearPdf();
     fetchFigures();
   }
 
@@ -689,8 +708,10 @@
       ...(paper.supplements || []).map(d => ({ ...d, filename: '补充 · ' + d.filename }))];
     $('document-select').innerHTML = docs.map(d => '<option value="' + d.id + '">' + escapeHtml(d.filename) + '（' + d.pages + ' 页）</option>').join('');
     $('document-select').value = state.documentId;
+    $('document-select').disabled = state.materialBusy;
     $('btn-remove-supplement').hidden = state.documentId === 'main';
     $('btn-supplement').disabled = state.materialBusy || !!state.generating;
+    $('btn-remove-supplement').disabled = state.materialBusy || !!state.generating;
   }
 
   async function changeSupplements(files, remove) {
@@ -732,7 +753,7 @@
       if (state.current !== paper || $('editor').value !== original) { toast('笔记已变化，请再次点击自动配图'); return; }
       $('editor').value = result.notes;
       scheduleSave(); renderPreview();
-      await flushSave();
+      if (!await flushSave()) return;
       toast(result.notes === original ? '没有需要补入的图片；可先检查图库' : '已自动补入原文图片', 'ok');
     } catch (e) { toast('自动配图失败：' + e.message, 'error'); }
   }
@@ -1194,6 +1215,7 @@
         '<div class="fig-label">' + escapeHtml(f.label) + '<span class="badge">' + escapeHtml(f.document_name || '正文') + '</span><span class="badge">' + (f.source === 'manual' ? '手动' : '自动') + '</span><span class="badge">p.' + f.page + '</span></div>' +
         '<div class="fig-caption" data-caption="' + f.id + '" title="点击展开 / 收起" role="button" tabindex="0" aria-expanded="false">' + escapeHtml(f.caption || '（无图注）') + '</div>' + obs +
         '<div class="fig-actions">' +
+        '<button class="btn" data-source-fig="' + f.id + '" title="打开这张图所在的 PDF 页面">' + icon('file') + ' 查看原文</button>' +
         '<button class="btn btn-read" data-read-fig="' + f.id + '" title="让读图模型观察这张图，可带追问">' + icon('eye') + ' 读图</button>' +
         '<button class="btn" data-insert="' + f.id + '">' + icon('plus') + ' 插入笔记</button>' +
         '<button class="btn" data-edit-caption="' + f.id + '">' + icon('edit') + ' 图注</button>' +
@@ -1296,10 +1318,12 @@
   }
 
   async function reextractFigures() {
-    if (!state.current) return;
+    const paper = state.current;
+    if (!paper || state.materialBusy || state.generating) return;
     toast('正在重新提取图片 …');
     try {
-      const res = await api.reextract(state.current.id, state.documentId);
+      const res = await api.reextract(paper.id, state.documentId);
+      if (!state.current || state.current.id !== paper.id) return;
       state.figures = res.figures;
       state.figDataUrls = {};
       renderFigures();
@@ -1390,110 +1414,234 @@
     retry.hidden = mode !== 'error' || !window.pdfjsLib;
   }
 
+  function rememberReadingPosition() {
+    const context = state.pdfContext;
+    if (!context || !state.pdfView || !$('pdf-scroll').clientHeight || !$('pdf-scroll').clientWidth) return;
+    const position = { page: currentPage(), scale: state.scale, fit_width: state.fitWidth };
+    const cached = state.readingCache.get(context.paperId) || { documents: {} };
+    const changed = cached.active_document !== context.documentId || JSON.stringify(cached.documents[context.documentId]) !== JSON.stringify(position);
+    cached.active_document = context.documentId;
+    cached.documents[context.documentId] = position;
+    state.readingCache.set(context.paperId, cached);
+    if (changed) {
+      const key = context.paperId + ':' + context.documentId;
+      state.readingPending.delete(key);
+      state.readingPending.set(key, { ...context, position });
+    }
+    if (!state.readingPending.size) return;
+    clearTimeout(state.readingTimer);
+    state.readingTimer = setTimeout(flushReadingPositions, 250);
+  }
+
+  async function flushReadingPositions() {
+    clearTimeout(state.readingTimer);
+    if (state.readingSaving) return state.readingSaving;
+    state.readingSaving = (async () => {
+      while (state.readingPending.size) {
+        const [key, item] = state.readingPending.entries().next().value;
+        try { await api.saveReading(item.paperId, item.documentId, item.position); }
+        catch (e) {
+          if (e.status !== 404) return; // Keep failures for the next reading action to retry.
+          // Deleted papers/supplements must not block other documents' positions.
+        }
+        if (state.readingPending.get(key) === item) state.readingPending.delete(key);
+      }
+    })();
+    try { await state.readingSaving; } finally { state.readingSaving = null; }
+  }
+
+  async function switchDocument(id, page) {
+    const paper = state.current;
+    if (!paper || state.materialBusy) return;
+    if (id !== 'main' && !(paper.supplements || []).some(d => d.id === id)) return;
+    if (id === state.documentId && state.pdfView) {
+      if (page) goToPage(page, false);
+      return;
+    }
+    state.documentId = id;
+    renderDocuments();
+    return loadPdf(page);
+  }
+
+  async function showFigureSource(fid) {
+    const figure = state.figures.find(f => f.id === fid);
+    if (!figure || state.materialBusy) return;
+    setWorkspaceView('pdf');
+    return switchDocument(figure.document_id || 'main', figure.page);
+  }
+
   function clearPdf() {
+    rememberReadingPosition();
+    flushReadingPositions();
     state.renderToken++;
+    if (state.pdfFetch) state.pdfFetch.abort();
+    state.pdfFetch = null;
     cancelPdfRenders();
+    state.pdfView = null;
+    state.pdfContext = null;
+    state.pdfDeferredPage = 1;
     if (state.pdf) { try { state.pdf.destroy(); } catch (e) { /* ignore */ } }
     state.pdf = null;
     state.pageWrappers = [];
     $('pdf-pages').innerHTML = '';
     $('pdf-total').textContent = '0';
     $('pdf-page').value = 1;
+    $('pdf-scroll').scrollTop = 0;
     showPdfEmpty(!state.current ? 'welcome' : state.current.has_file ? 'loading' : 'missing');
     $('pdf-crop').disabled = true;
     setCropping(false);
   }
 
-  async function loadPdf() {
+  async function loadPdf(targetPage) {
     const paper = state.current;
     if (!paper) return;
+    const documentId = state.documentId;
     clearPdf();
     const token = state.renderToken;
+    const position = state.readingCache.get(paper.id)?.documents[documentId];
+    state.fitWidth = position ? position.fit_width : true;
+    state.scale = position ? position.scale : 1;
+    if (documentId === 'main' && !paper.has_file) { showPdfEmpty('missing'); return; }
     if (!window.pdfjsLib) {
       showPdfEmpty('error', 'PDF 阅读组件未能加载。请重新启动应用；若仍失败，请重新安装完整应用包。');
       toast('PDF 阅读组件未能加载，请重新启动应用', 'error');
       return;
     }
     pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
+    const controller = new AbortController();
+    state.pdfFetch = controller;
     try {
       // Fetch the bytes through the validated path helper, then hand pdf.js a
       // buffer — no dynamically built URL is ever passed to getDocument().
-      const resp = await fetch(paperPath(paper.id, '/file?document_id=' + encodeURIComponent(state.documentId)));
+      const resp = await fetch(paperPath(paper.id, '/file?document_id=' + encodeURIComponent(documentId)), { signal: controller.signal });
       if (!resp.ok) throw new Error('PDF 下载失败 HTTP ' + resp.status);
       const data = await resp.arrayBuffer();
+      if (token !== state.renderToken) return;
       const doc = await pdfjsLib.getDocument({ data, cMapUrl: 'vendor/cmaps/', cMapPacked: true, standardFontDataUrl: 'vendor/standard_fonts/' }).promise;
       if (token !== state.renderToken) { doc.destroy(); return; }
       state.pdf = doc;
+      state.pdfContext = { paperId: paper.id, documentId };
       $('pdf-empty').hidden = true;
       $('pdf-empty').setAttribute('aria-busy', 'false');
       $('pdf-total').textContent = doc.numPages;
       $('pdf-page').max = doc.numPages;
       $('pdf-crop').disabled = false;
-      await renderPages(token, 1);
+      await renderPages(token, targetPage || position?.page || 1);
     } catch (e) {
       if (token === state.renderToken) {
         clearPdf();
         showPdfEmpty('error');
         toast('PDF 加载失败：' + e.message, 'error');
       }
-    }
+    } finally { if (state.pdfFetch === controller) state.pdfFetch = null; }
   }
 
   async function renderPages(token, keepPage) {
     const doc = state.pdf;
     if (!doc) return;
+    state.pdfDeferredPage = keepPage || 1;
+    if (!$('pdf-scroll').clientWidth || !$('pdf-scroll').clientHeight) return;
     const container = $('pdf-pages');
     container.innerHTML = '';
     state.pageWrappers = [];
+    state.pdfView = null;
     const first = await doc.getPage(1);
     if (token !== state.renderToken) return;
-    const base = first.getViewport({ scale: 1 });
+    const sizes = [];
+    // Read geometry only, in bounded batches. Mixed-size pages then have stable
+    // offsets before restoring the position; no full-document canvas allocation.
+    for (let start = 1; start <= doc.numPages; start += 20) {
+      const numbers = Array.from({ length: Math.min(20, doc.numPages - start + 1) }, (_, i) => start + i);
+      const pages = await Promise.all(numbers.map(n => n === 1 ? first : doc.getPage(n)));
+      if (token !== state.renderToken) return;
+      sizes.push(...pages.map(page => page.getViewport({ scale: 1 })));
+    }
     if (state.fitWidth) {
       const avail = $('pdf-scroll').clientWidth - 40;
-      state.scale = Math.max(0.3, Math.min(3, avail / base.width));
+      state.scale = Math.max(0.3, Math.min(3, avail / Math.max(...sizes.map(size => size.width))));
     }
     const scale = state.scale;
     $('pdf-zoom').textContent = Math.round(scale * 100) + '%';
-    for (let i = 1; i <= doc.numPages; i++) {
+    for (let i = 0; i < sizes.length; i++) {
       const w = document.createElement('div');
       w.className = 'pdf-page';
-      w.dataset.page = i;
-      w.style.width = Math.floor(base.width * scale) + 'px';
-      w.style.height = Math.floor(base.height * scale) + 'px';
+      w.dataset.page = i + 1;
+      w.style.width = Math.floor(sizes[i].width * scale) + 'px';
+      w.style.height = Math.floor(sizes[i].height * scale) + 'px';
+      w.setAttribute('aria-label', '第 ' + (i + 1) + ' 页');
       container.appendChild(w);
       state.pageWrappers.push(w);
     }
-    if (keepPage && keepPage > 1) goToPage(keepPage, false);
+    state.pdfView = { token, doc, scale, wanted: new Set(), canvases: new Map(), worker: null, task: null, failed: new Set() };
+    goToPage(Math.max(1, Math.min(doc.numPages, keepPage || 1)), false);
+    await paintVisiblePages();
+  }
 
-    const dpr = window.devicePixelRatio || 1;
-    for (let i = 1; i <= doc.numPages; i++) {
-      if (token !== state.renderToken) return;
-      const page = i === 1 ? first : await doc.getPage(i);
-      if (token !== state.renderToken) return;
-      const vp = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.floor(vp.width * dpr);
-      canvas.height = Math.floor(vp.height * dpr);
-      canvas.style.width = Math.floor(vp.width) + 'px';
-      canvas.style.height = Math.floor(vp.height) + 'px';
-      const ctx = canvas.getContext('2d');
-      const task = page.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null });
-      state.pdfRenderTasks.add(task);
-      try { await task.promise; }
-      catch (e) {
-        if (token !== state.renderToken || e.name === 'RenderingCancelledException') return;
-        throw e;
-      } finally { state.pdfRenderTasks.delete(task); }
-      if (token !== state.renderToken) return;
-      const w = state.pageWrappers[i - 1];
-      w.style.width = canvas.style.width;
-      w.style.height = canvas.style.height;
-      w.innerHTML = '';
-      w.appendChild(canvas);
-      const num = document.createElement('span');
-      num.className = 'page-num';
-      num.textContent = i;
-      w.appendChild(num);
+  function paintVisiblePages() {
+    const view = state.pdfView, scroller = $('pdf-scroll');
+    if (!view || !scroller.clientWidth || !scroller.clientHeight) return Promise.resolve();
+    const current = currentPage();
+    let last = current;
+    while (last < state.pageWrappers.length && state.pageWrappers[last].offsetTop < scroller.scrollTop + scroller.clientHeight) last++;
+    const wanted = [];
+    for (let i = Math.max(1, current - 1); i <= Math.min(state.pageWrappers.length, last + 1); i++) wanted.push(i);
+    wanted.sort((a, b) => Math.abs(a - current) - Math.abs(b - current));
+    view.wanted = new Set(wanted);
+    for (const [n, entry] of view.canvases) {
+      if (view.wanted.has(n)) continue;
+      entry.canvas.width = entry.canvas.height = 0;
+      entry.canvas.remove();
+      entry.page.cleanup();
+      view.canvases.delete(n);
+    }
+    if (view.task && !view.wanted.has(view.task.number)) view.task.render.cancel();
+    if (view.worker) return view.worker;
+    view.worker = (async () => {
+      while (view === state.pdfView) {
+        const number = [...view.wanted].find(n => !view.canvases.has(n) && !view.failed.has(n));
+        if (number === undefined) break;
+        let page, canvas;
+        try {
+          page = await view.doc.getPage(number);
+          if (view !== state.pdfView) return;
+          if (!view.wanted.has(number)) { page.cleanup(); continue; }
+          const vp = page.getViewport({ scale: view.scale });
+          // Bound a single high-DPI canvas as well as the number of cached pages.
+          const dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(8_000_000 / (vp.width * vp.height)));
+          canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.floor(vp.width * dpr));
+          canvas.height = Math.max(1, Math.floor(vp.height * dpr));
+          canvas.style.width = Math.floor(vp.width) + 'px';
+          canvas.style.height = Math.floor(vp.height) + 'px';
+          const task = page.render({ canvasContext: canvas.getContext('2d'), viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null });
+          view.task = { number, render: task };
+          state.pdfRenderTasks.add(task);
+          try { await task.promise; }
+          finally { state.pdfRenderTasks.delete(task); view.task = null; }
+          if (view !== state.pdfView || !view.wanted.has(number)) { canvas.width = canvas.height = 0; page.cleanup(); continue; }
+          state.pageWrappers[number - 1].appendChild(canvas);
+          view.canvases.set(number, { canvas, page });
+        } catch (e) {
+          if (canvas) canvas.width = canvas.height = 0;
+          if (page && view === state.pdfView) page.cleanup();
+          if (view !== state.pdfView) return;
+          if (e.name === 'RenderingCancelledException') continue;
+          view.failed.add(number);
+          const retry = document.createElement('button');
+          retry.className = 'btn pdf-retry'; retry.textContent = '第 ' + number + ' 页加载失败，点击重试';
+          retry.addEventListener('click', () => { retry.remove(); view.failed.delete(number); paintVisiblePages(); });
+          state.pageWrappers[number - 1].appendChild(retry);
+        }
+      }
+    })().finally(() => { view.worker = null; });
+    return view.worker;
+  }
+
+  function releasePdfCanvases() {
+    if (!state.pdfView) return;
+    for (const { canvas, page } of state.pdfView.canvases.values()) {
+      canvas.width = canvas.height = 0;
+      page.cleanup();
     }
   }
 
@@ -1513,17 +1661,21 @@
     if (!w) return;
     $('pdf-scroll').scrollTo({ top: w.offsetTop - 12, behavior: smooth ? 'smooth' : 'auto' });
     $('pdf-page').value = n;
+    paintVisiblePages();
+    rememberReadingPosition();
   }
 
   function cancelPdfRenders() {
     state.pdfRenderTasks.forEach((task) => task.cancel());
     state.pdfRenderTasks.clear();
+    releasePdfCanvases();
   }
 
   function rerenderPdf() {
     // A hidden narrow-screen view has no measurable width or page offsets.
     if (!state.pdf || !$('pdf-scroll').clientWidth || !$('pdf-scroll').clientHeight) return;
-    const page = currentPage();
+    const page = state.pdfView ? currentPage() : state.pdfDeferredPage;
+    rememberReadingPosition();
     state.renderToken++;
     cancelPdfRenders();
     const token = state.renderToken;
@@ -1600,10 +1752,12 @@
   }
 
   async function submitCrop(page, bbox, cssW, cssH) {
-    if (!state.current) return;
+    const paper = state.current;
+    if (!paper || state.materialBusy) return;
     toast('正在截取第 ' + page + ' 页的选区 …');
     try {
       const fig = await api.cropFigure(state.current.id, { page, bbox, label: '', caption: '', document_id: state.documentId });
+      if (!state.current || state.current.id !== paper.id) return;
       state.figures.push(fig);
       if (state.tab === 'figures') renderFigures();
       else renderFigures();
@@ -1782,9 +1936,7 @@
     $('supplement-input').addEventListener('change', (e) => { const files = [...e.target.files]; e.target.value = ''; if (files.length) changeSupplements(files, false); });
     $('btn-remove-supplement').addEventListener('click', () => changeSupplements([], true));
     $('document-select').addEventListener('change', (e) => {
-      const id = e.target.value;
-      if (id !== 'main' && !(state.current.supplements || []).some(d => d.id === id)) return;
-      state.documentId = id; renderDocuments(); loadPdf();
+      switchDocument(e.target.value);
     });
     $('btn-illustrate').addEventListener('click', illustrateNotes);
     $('btn-generate').addEventListener('click', generateNotes);
@@ -1833,6 +1985,8 @@
     $('fig-grid').addEventListener('click', (e) => {
       const zoom = e.target.closest('[data-zoom]');
       if (zoom) { openLightbox(zoom.dataset.zoom); return; }
+      const source = e.target.closest('[data-source-fig]');
+      if (source) { showFigureSource(source.dataset.sourceFig); return; }
       const cap = e.target.closest('[data-caption]');
       if (cap) { cap.setAttribute('aria-expanded', String(cap.classList.toggle('open'))); return; }
       const rf = e.target.closest('[data-read-fig]');
@@ -1869,7 +2023,13 @@
     let scrollRaf = null;
     $('pdf-scroll').addEventListener('scroll', () => {
       if (scrollRaf) return;
-      scrollRaf = requestAnimationFrame(() => { scrollRaf = null; if (state.pageWrappers.length) $('pdf-page').value = currentPage(); });
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = null;
+        if (!state.pdfView) return;
+        $('pdf-page').value = currentPage();
+        paintVisiblePages();
+        rememberReadingPosition();
+      });
     });
 
     const sidebar = $('sidebar');
@@ -1882,12 +2042,15 @@
     }));
 
     window.addEventListener('beforeunload', (e) => {
+      rememberReadingPosition();
+      flushReadingPositions();
       if (state.pendingSave || state.saveInFlight || state.generating) {
         flushSave();
         e.preventDefault();
         e.returnValue = '';
       }
     });
+    window.addEventListener('pagehide', () => { rememberReadingPosition(); flushReadingPositions(); });
   }
 
   async function init() {

@@ -58,6 +58,42 @@ class DocumentTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()['supplements'][0]
 
+    def test_reading_positions_survive_reload_without_changing_notes(self):
+        sup = self.attach()
+        self.client.patch(self.url, json={'notes': 'Do not rewrite this note'})
+        before = (self.directory / 'meta.json').read_bytes()
+        main_pos = {'page': 1, 'scale': 1.5, 'fit_width': False}
+        sup_pos = {'page': 1, 'scale': 0.8, 'fit_width': True}
+        self.assertEqual(self.client.put(self.url + '/reading-position', json=main_pos).json(), main_pos)
+        self.assertEqual(self.client.put(self.url + '/reading-position', params={'document_id': sup['id']}, json=sup_pos).json(), sup_pos)
+        with TestClient(main.app) as restarted:
+            saved = restarted.get(self.url).json()['reading_position']
+        self.assertEqual(saved['active_document'], sup['id'])
+        self.assertEqual(saved['documents'], {'main': main_pos, sup['id']: sup_pos})
+        self.assertEqual((self.directory / 'meta.json').read_bytes(), before)
+
+    def test_reading_position_bounds_corruption_and_removed_material(self):
+        sup = self.attach()
+        pos = {'page': 600, 'scale': 1, 'fit_width': True}
+        result = self.client.put(self.url + '/reading-position', params={'document_id': sup['id']}, json=pos)
+        self.assertEqual(result.json()['page'], 1)
+        for bad in ({**pos, 'page': 0}, {**pos, 'scale': 20}, {**pos, 'scale': 'NaN'}):
+            self.assertEqual(self.client.put(self.url + '/reading-position', json=bad).status_code, 422)
+        self.assertEqual(self.client.put(self.url + '/reading-position', params={'document_id': '../outside'}, json=pos).status_code, 404)
+        self.client.delete(self.url + '/supplements/' + sup['id'])
+        self.assertEqual(self.client.put(self.url + '/reading-position', params={'document_id': sup['id']}, json=pos).status_code, 404)
+        (self.directory / 'reading' / 'main.json').write_text('{incomplete', 'utf-8')
+        self.assertEqual(self.client.get(self.url).json()['reading_position'], {'active_document': 'main', 'documents': {}})
+
+    def test_replaced_shorter_pdf_clamps_restored_position(self):
+        meta = main.read_meta(self.directory)
+        meta['pages'] = 20
+        main.write_meta(self.directory, meta)
+        self.client.put(self.url + '/reading-position', json={'page': 18, 'scale': 1, 'fit_width': True})
+        self.client.post(self.url + '/file', files={'file': ('replacement.pdf', self.primary)})
+        saved = self.client.get(self.url).json()['reading_position']
+        self.assertEqual(saved['documents']['main']['page'], 1)
+
     def test_sources_are_separate_and_joint_reading_preserves_origin(self):
         original_figs = self.client.get(self.url + '/figures').json()
         self.assertTrue(original_figs, 'real geometry extraction must find the fixture figure')

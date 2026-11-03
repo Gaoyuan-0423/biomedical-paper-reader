@@ -14,11 +14,14 @@ function deferred() {
 function harness() {
   const elements = new Map();
   function element() {
-    return { value: '', textContent: '', innerHTML: '', dataset: {}, style: {}, children: [],
+    return { value: '', textContent: '', dataset: {}, style: {}, children: [],
+      get innerHTML() { return this.html || ''; }, set innerHTML(value) { this.html = value; this.children = []; },
+      get offsetTop() { return this.parent ? 20 + this.parent.children.slice(0, this.parent.children.indexOf(this)).reduce((n, el) => n + parseFloat(el.style.height || 0) + 18, 0) : 0; },
       classList: { toggle() {}, add() {}, remove() {} }, hidden: false,
       setAttribute() {}, querySelector: () => element(), querySelectorAll: () => [],
-      addEventListener() {}, before() {}, appendChild(child) { this.children.push(child); },
-      getContext: () => ({}), scrollTo() {}, click() {}, remove() {} };
+      addEventListener(name, fn) { this['on' + name] = fn; }, before() {}, appendChild(child) { child.parent = this; this.children.push(child); },
+      getContext: () => ({}), scrollTo({ top }) { this.scrollTop = Math.max(0, top); }, click() { this.onclick?.(); },
+      remove() { if (this.parent) this.parent.children = this.parent.children.filter(el => el !== this); } };
   }
   const $ = (id) => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const context = vm.createContext({
@@ -26,16 +29,18 @@ function harness() {
     window: { matchMedia: () => ({ matches: false }), devicePixelRatio: 1 },
     location: { pathname: '/' }, history: { replaceState() {} },
     setTimeout: () => 1, clearTimeout() {}, confirm: () => true,
+    requestAnimationFrame: callback => setImmediate(callback),
     performance, AbortController, TextDecoder, Blob, URL, console,
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown };'), context);
+    '  globalThis.app = { state, api, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   app.state.settings = { has_api_key: true, model: 'test' };
   app.api.figures = async () => [];
   app.api.illustrate = async (id, notes) => ({ notes });
+  app.api.saveReading = async () => ({});
   $('read-mode').value = 'deep';
   return { ...app, $, context };
 }
@@ -167,6 +172,7 @@ test('only the explicit done event reports a completed saved note', async () => 
 
 test('a stale first-page load cannot append old PDF wrappers', async () => {
   const h = harness(), page = deferred();
+  h.$('pdf-scroll').clientWidth = 640; h.$('pdf-scroll').clientHeight = 600;
   h.state.pdf = { getPage: () => page.promise, numPages: 2 };
   const rendering = h.renderPages(0, 1); h.state.renderToken++;
   page.resolve({ getViewport: () => ({ width: 100, height: 100 }) });
@@ -272,4 +278,155 @@ test('Word export reports a missing image instead of silently exporting text onl
   await h.exportWord();
   assert.equal(h.exported, undefined);
   assert.match(h.$('toast').textContent, /无法导出图片/);
+});
+
+function pdfFixture(h, count = 100, render) {
+  const rendered = [], cleaned = [];
+  const pages = Array.from({ length: count }, (_, i) => ({
+    getViewport: ({ scale }) => ({ width: 600 * scale, height: (i % 2 ? 900 : 800) * scale }),
+    render: () => { rendered.push(i + 1); return render ? render(i + 1) : { promise: Promise.resolve(), cancel() {} }; },
+    cleanup() { cleaned.push(i + 1); },
+  }));
+  h.$('pdf-scroll').clientWidth = 640; h.$('pdf-scroll').clientHeight = 600;
+  h.$('pdf-scroll').scrollTop = 0;
+  h.state.pdf = { numPages: count, getPage: async n => pages[n - 1], destroy() {} };
+  h.state.pdfContext = { paperId: A, documentId: 'main' };
+  return { rendered, cleaned, doc: h.state.pdf };
+}
+
+test('a 100-page mixed-size PDF renders only the current neighborhood and releases distant canvases', async () => {
+  const h = harness(), pdf = pdfFixture(h);
+  await h.renderPages(0, 1);
+  assert.deepEqual(pdf.rendered, [1, 2]);
+  assert.equal(h.state.pageWrappers[1].style.height, '900px');
+  const oldCanvas = h.state.pdfView.canvases.get(1).canvas;
+  h.goToPage(80, false); await h.paintVisiblePages();
+  assert.equal(h.currentPage(), 80);
+  assert.deepEqual(pdf.rendered, [1, 2, 80, 79, 81]);
+  assert.equal(oldCanvas.width, 0);
+  assert.ok(pdf.cleaned.includes(1));
+  assert.equal(h.state.pdfView.canvases.size, 3);
+  assert.equal(h.$('pdf-page').value, 80);
+});
+
+test('jumping during a canvas render cancels it and prioritizes the new page', async () => {
+  const h = harness(), first = deferred(); let cancelled = 0;
+  const pdf = pdfFixture(h, 100, n => n === 1 ? { promise: first.promise, cancel() {
+    cancelled++; first.reject(Object.assign(new Error('cancelled'), { name: 'RenderingCancelledException' }));
+  } } : { promise: Promise.resolve(), cancel() {} });
+  const rendering = h.renderPages(0, 1);
+  await new Promise(setImmediate);
+  h.goToPage(60, false); await rendering;
+  assert.ok(cancelled > 0);
+  assert.equal(pdf.rendered[1], 60);
+  assert.deepEqual([...h.state.pdfView.canvases.keys()], [60, 59, 61]);
+});
+
+test('a failed PDF page offers retry without blanking the document', async () => {
+  const h = harness(); let failed = false;
+  pdfFixture(h, 3, n => ({ promise: n === 1 && !failed ? (failed = true, Promise.reject(new Error('render failed'))) : Promise.resolve(), cancel() {} }));
+  await h.renderPages(0, 1);
+  const retry = h.state.pageWrappers[0].children.find(el => el.className === 'btn pdf-retry');
+  assert.ok(retry); assert.ok(h.state.pdfView.canvases.has(2));
+  retry.click(); await h.paintVisiblePages();
+  assert.ok(h.state.pdfView.canvases.has(1));
+  assert.equal(h.state.pdfView.failed.size, 0);
+});
+
+test('reading saves serialize and retain the newest position across documents', async () => {
+  const h = harness(), first = deferred(), writes = [];
+  pdfFixture(h); await h.renderPages(0, 1);
+  h.api.saveReading = async (id, doc, position) => { writes.push([id, doc, position.page]); if (writes.length === 1) await first.promise; };
+  const saving = h.flushReadingPositions();
+  h.state.pdfContext = { paperId: A, documentId: B }; h.goToPage(5, false);
+  h.state.pdfContext = { paperId: A, documentId: 'main' }; h.goToPage(10, false);
+  first.resolve(); await saving;
+  assert.deepEqual(writes, [[A, 'main', 1], [A, B, 5], [A, 'main', 10]]);
+  assert.equal(h.state.readingCache.get(A).active_document, 'main');
+  assert.equal(h.state.readingCache.get(A).documents[B].page, 5);
+});
+
+test('reading-position save failures retry; deleted materials do not block other saves', async () => {
+  const h = harness(); pdfFixture(h); await h.renderPages(0, 1);
+  h.api.saveReading = async () => { throw new Error('offline'); };
+  await h.flushReadingPositions(); assert.equal(h.state.readingPending.size, 1);
+  h.state.pdfContext = { paperId: B, documentId: 'main' }; h.goToPage(4, false);
+  const writes = [];
+  h.api.saveReading = async (id, doc, pos) => { if (id === A) throw Object.assign(new Error('gone'), { status: 404 }); writes.push(pos.page); };
+  await h.flushReadingPositions();
+  assert.deepEqual(writes, [4]); assert.equal(h.state.readingPending.size, 0);
+});
+
+test('PDF loading restores the selected source position and manual zoom', async () => {
+  const h = harness(), pdf = pdfFixture(h, 10), urls = [];
+  h.state.current.has_file = true;
+  h.state.current.supplements = [{ id: B, pages: 10, filename: 'Supplement.pdf' }];
+  h.state.readingCache.set(A, { active_document: B, documents: { [B]: { page: 7, scale: 1.5, fit_width: false } } });
+  h.context.pdfjsLib = h.context.window.pdfjsLib = { GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve(pdf.doc) }) };
+  h.context.fetch = async url => { urls.push(url); return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }; };
+  await h.switchDocument(B);
+  assert.match(urls[0], new RegExp('document_id=' + B));
+  assert.equal(h.currentPage(), 7); assert.equal(h.state.scale, 1.5); assert.equal(h.state.fitWidth, false);
+  assert.equal(pdf.rendered[0], 7);
+});
+
+test('figure source navigation switches to the correct supplement and page', async () => {
+  const h = harness(), pdf = pdfFixture(h, 10);
+  h.state.current.has_file = true;
+  h.state.current.supplements = [{ id: B, pages: 10, filename: 'Supplement.pdf' }];
+  h.state.figures = [{ id: 's002', page: 6, document_id: B }];
+  h.context.pdfjsLib = h.context.window.pdfjsLib = { GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve(pdf.doc) }) };
+  h.context.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  await h.showFigureSource('s002');
+  assert.equal(h.state.documentId, B); assert.equal(h.currentPage(), 6);
+});
+
+test('late re-extraction and crop results cannot enter another paper', async () => {
+  const h = harness(), extraction = deferred(), crop = deferred();
+  h.api.reextract = () => extraction.promise; h.api.cropFigure = () => crop.promise;
+  const extracting = h.reextractFigures(), cropping = h.submitCrop(1, [0, 0, 10, 10], 10, 10);
+  h.state.current = { id: B }; h.state.figures = [{ id: 'f099' }];
+  extraction.resolve({ figures: [{ id: 'f001' }] }); crop.resolve({ id: 'm002' });
+  await Promise.all([extracting, cropping]);
+  assert.equal(h.state.figures.length, 1); assert.equal(h.state.figures[0].id, 'f099');
+});
+
+test('failed illustrated-note saves keep the failure status instead of reporting success', async () => {
+  const h = harness(); h.$('editor').value = 'Original';
+  h.api.illustrate = async () => ({ notes: 'Original with images' });
+  h.api.patch = async () => { throw new Error('offline'); };
+  await h.illustrateNotes();
+  assert.equal(h.state.pendingSave.notes, 'Original with images');
+  assert.match(h.$('save-status').textContent, /保存失败/);
+  assert.doesNotMatch(h.$('toast').textContent, /已自动补入/);
+});
+
+test('a hidden PDF view defers rendering without losing its restored page', async () => {
+  const h = harness(), pdf = pdfFixture(h);
+  h.$('pdf-scroll').clientWidth = 0;
+  await h.renderPages(0, 70);
+  assert.equal(pdf.rendered.length, 0); assert.equal(h.state.readingPending.size, 0);
+  h.$('pdf-scroll').clientWidth = 640;
+  h.rerenderPdf(); await new Promise(setImmediate);
+  assert.equal(h.currentPage(), 70); assert.equal(pdf.rendered[0], 70);
+});
+
+test('high zoom on a retina screen bounds canvas pixels while keeping display size', async () => {
+  const h = harness(); pdfFixture(h, 3);
+  h.context.window.devicePixelRatio = 3;
+  h.state.fitWidth = false; h.state.scale = 3;
+  await h.renderPages(0, 2);
+  const canvas = h.state.pdfView.canvases.get(2).canvas;
+  assert.ok(canvas.width * canvas.height <= 8_000_000);
+  assert.equal(canvas.style.width, '1800px'); assert.equal(canvas.style.height, '2700px');
+});
+
+test('fit width accommodates landscape pages in a mixed-orientation PDF', async () => {
+  const h = harness(), pdf = pdfFixture(h, 3);
+  const landscape = await pdf.doc.getPage(2);
+  landscape.getViewport = ({ scale }) => ({ width: 900 * scale, height: 600 * scale });
+  await h.renderPages(0, 2);
+  assert.equal(h.state.scale, 600 / 900);
+  assert.ok(h.state.pageWrappers.every(page => parseFloat(page.style.width) <= 600));
+  assert.equal(h.currentPage(), 2);
 });

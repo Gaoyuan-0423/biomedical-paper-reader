@@ -154,6 +154,8 @@ select { cursor: pointer; }
 .pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 20px; min-width: min-content; }
 .pdf-page { position: relative; background: #fff; box-shadow: 0 3px 16px #263b3014, 0 0 0 1px #263b3009; }
 .pdf-page canvas { display: block; }
+.pdf-page::before { content: '第 ' attr(data-page) ' 页'; position: absolute; bottom: 5px; right: 9px; color: #7e8b83; font-size: 11px; pointer-events: none; }
+.pdf-retry { position: absolute; top: 45%; left: 50%; transform: translateX(-50%); white-space: nowrap; }
 .page-num { position: absolute; right: 7px; bottom: 7px; font-size: 10px; background: #ffffffe6; color: #929b8d; padding: 2px 5px; border-radius: 3px; }
 
 /* Quiet empty states, with a small paper illustration. */

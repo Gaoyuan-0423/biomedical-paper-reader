@@ -27,12 +27,13 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
 from external import LookupError_, fetch_crossref, fetch_related, normalize_doi
 from figures import crop_figure, load_figures, parse_pdf, save_figures
 from note_assets import illustrate_notes, markdown_bundle
+from reading_state import read_positions, save_position
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -499,7 +500,27 @@ async def import_doi(body: DoiIn):
 
 @app.get("/api/papers/{paper_id}")
 def get_paper(paper_id: str):
-    return read_meta(paper_dir(paper_id))
+    d = paper_dir(paper_id)
+    meta = read_meta(d)
+    return {**meta, "reading_position": read_positions(d, meta)}
+
+
+class ReadingPosition(BaseModel):
+    page: int = Field(ge=1, le=600)
+    scale: float = Field(ge=0.3, le=3, allow_inf_nan=False)
+    fit_width: bool
+
+
+@app.put("/api/papers/{paper_id}/reading-position")
+def update_reading_position(paper_id: str, body: ReadingPosition, document_id: str = "main"):
+    d = paper_dir(paper_id)
+    if not document_path(d, document_id).is_file():
+        raise HTTPException(404, "PDF 不存在")
+    meta = read_meta(d)
+    pages = meta["pages"] if document_id == "main" else next(s["pages"] for s in meta["supplements"] if s["id"] == document_id)
+    position = {"page": min(body.page, pages), "scale": body.scale, "fit_width": body.fit_width}
+    save_position(d, document_id, position)
+    return position
 
 
 @app.patch("/api/papers/{paper_id}")
