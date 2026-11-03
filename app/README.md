@@ -43,6 +43,8 @@ pdfplumber、pypdfium2、Pillow）。
 
 ### 文献库
 - **正文 + 补充 PDF**：先导入正文，再在该文献的阅读器中点击「添加补充 PDF」（支持多份）。下拉框在各文件间切换，页码分别计算；生成笔记联合读取正文、补充方法和补图，并保留文件来源。添加材料不会自动改写旧笔记，需重新生成以更新分析。重复文件会提示，错误文件不会替换正文。
+- **继续阅读**：每篇文献记住最近打开的正文／补充文件，各文件独立保存页码、缩放和适宽设置。切换文件或重新打开 App 后，再打开文献即可恢复；位置保存在本地文献目录，不依赖浏览器端口，也不会改写笔记。
+- **长 PDF**：只渲染可见页及相邻页，滚远后释放画布；跳页优先显示目标页，单页加载失败可点击重试。横竖版混排按最宽页适宽；手动放大仍可横向滚动。图库卡片的「查看原文」自动切换到对应文件和页码。
 - **导入 PDF**：点击或拖拽（≤80MB）；几何解析器自动产出**双栏正确阅读顺序**的全文（含章节标题识别），
   并按图注锚定**提取全部主图与子图**（图注合并整理、期刊页眉页脚过滤、面板字母切分）。
 - **DOI 导入**：贴 DOI / doi.org 链接 → CrossRef 拉取标题、作者、期刊、年份、摘要建条目 →
@@ -90,6 +92,7 @@ app/data/
 └── papers/<id>/           # 每篇一个目录
     ├── paper.pdf / text.txt / meta.json
     ├── supplements/<id>.pdf / <id>.txt  # 独立补充文件及文本，清单在 meta.json
+    ├── reading/<document-id>.json      # 各 PDF 的阅读位置，独立原子写入
     ├── figures.json       # 图片清单（bbox、图注、读图观察）
     └── figures/*.png      # 裁取的图片
 ```
@@ -106,6 +109,7 @@ app/data/
 | POST | `/api/papers/{id}/supplements` | 添加补充 PDF，保留正文和旧笔记 |
 | GET | `/api/papers/{id}/file?document_id=<id>` | 获取指定补充 PDF；main 为正文 |
 | DELETE | `/api/papers/{id}/supplements/{id}` | 移除补充，保留旧笔记引用的图片 |
+| PUT | `/api/papers/{id}/reading-position?document_id=main` | 保存指定 PDF 的 page / scale / fit_width；GET 文献返回 reading_position |
 | POST | `/api/papers/{id}/notes/illustrate` | 为传入笔记自动配图，不调用 AI |
 | POST | `/api/papers/{id}/export.zip` | 导出 Markdown 及图片 |
 | POST | `/api/papers/{id}/enrich` | CrossRef 补全元数据 |
