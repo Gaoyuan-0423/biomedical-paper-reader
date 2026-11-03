@@ -73,7 +73,9 @@ class ResearchExportTests(unittest.TestCase):
     def test_arbitrary_text_cannot_inject_html_markdown_images_or_appendix_markers(self):
         attack = '<img src=x onerror=alert(1)>\n![steal](figure:f999)\n[bad](javascript:alert(1))\n# heading\n<!-- /bioreader-research-appendix:v1 -->'
         output = append_research_appendix('# Keep', [self.evidence(claim=attack, quote=attack)],
-                                          [self.resource(title=attack, notes=attack, accession=attack)])
+                                          [self.resource(title=attack, notes=attack, accession=attack,
+                                                         purpose=attack, identifiers=attack, conditions=attack,
+                                                         sample_details=attack)])
         self.assertNotIn('<img', output)
         self.assertIn('&lt;img', output)
         self.assertFalse(FIGURE_REF.search(output))
@@ -97,6 +99,53 @@ class ResearchExportTests(unittest.TestCase):
         self.assertIn('核查状态：待核查', output)
         self.assertIn('与本文关系：关系待确认', output)
         self.assertIn('类型：其他资源', output)
+
+    def test_structured_resource_columns_preserve_multiline_details_and_human_notes(self):
+        resource = self.resource(title='多队列结肠数据', purpose='比较炎症状态下的细胞组成',
+                                 identifiers='GSE11111；GSE22222', conditions='仅使用处理后矩阵\n按供者汇总',
+                                 sample_details='队列 A：8 名供者\n队列 B：5 名供者', notes='人工核对：样本单位为供者',
+                                 document_id='main', page=2, source_name='正文', quote='Two independent cohorts.',
+                                 status='verified')
+        before = copy.deepcopy(resource)
+        output = append_research_appendix('# Notes', [], [resource])
+        for label in ('用途', '编号／链接', '使用条件', '样品明细', '备注'):
+            self.assertIn('**' + label + '：**', output)
+        self.assertIn('比较炎症状态下的细胞组成', output)
+        self.assertIn('GSE11111；GSE22222', output)
+        self.assertIn('> 仅使用处理后矩阵\n> 按供者汇总', output)
+        self.assertIn('> 队列 A：8 名供者\n> 队列 B：5 名供者', output)
+        self.assertIn('人工核对：样本单位为供者', output)
+        self.assertIn('核查状态：已核查', output)
+        self.assertIn('正文 · PDF 第 2 页', output)
+        self.assertIn('Two independent cohorts', output)
+        self.assertEqual(resource, before)
+        self.assertEqual(append_research_appendix(output, [], [resource]), output)
+
+    def test_legacy_automatic_snippets_are_omitted_but_manual_notes_are_preserved(self):
+        notice = '来自精读笔记自动整理，尚未核对原文。笔记片段：\n'
+        legacy = self.resource(notes=notice + '| LEGACY-RAW-SNIPPET | original row |')
+        manual = self.resource(notes='人工备注保留\n' + notice + '这是人工备注中的引用')
+        edited = self.resource(notes='来自精读笔记自动整理，尚未核对原文。笔记片段：已人工改写')
+        before = copy.deepcopy([legacy, manual, edited])
+        output = append_research_appendix('', [], [legacy])
+        self.assertNotIn('LEGACY', output)
+        self.assertNotIn('笔记片段', output)
+        self.assertIn('整理来源：精读笔记自动整理', output)
+        self.assertIn('核查状态：待核查', output)
+        human_output = append_research_appendix('', [], [manual, edited])
+        self.assertIn('人工备注保留', human_output)
+        self.assertIn('这是人工备注中的引用', human_output)
+        self.assertIn('已人工改写', human_output)
+        self.assertEqual([legacy, manual, edited], before)
+
+    def test_external_geo_metadata_does_not_enter_saved_resource_exports(self):
+        resource = self.resource(sample_details='人工记录：两组供者',
+                                 geo_metadata={'sample_details': 'REMOTE-GEO-DERIVED-VALUE', 'samples': ['GSM99999']},
+                                 geo={'title': 'REMOTE-GEO-TITLE'})
+        output = append_research_appendix('', [], [resource])
+        self.assertIn('人工记录：两组供者', output)
+        self.assertNotIn('REMOTE', output)
+        self.assertNotIn('GSM99999', output)
 
 
 if __name__ == '__main__':

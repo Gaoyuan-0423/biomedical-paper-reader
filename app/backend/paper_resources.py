@@ -2,7 +2,7 @@
 import re
 import unicodedata
 from typing import Literal, Optional
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -16,6 +16,10 @@ class ResourceIn(BaseModel):
     repository: str = Field(default='', max_length=200)
     accession: str = Field(default='', max_length=300)
     url: str = Field(default='', max_length=4000)
+    purpose: str = Field(default='', max_length=12000)
+    identifiers: str = Field(default='', max_length=12000)
+    conditions: str = Field(default='', max_length=12000)
+    sample_details: str = Field(default='', max_length=12000)
     role: Literal['generated', 'reused', 'implementation', 'unknown'] = 'unknown'
     organism: str = Field(default='', max_length=1000)
     tissue: str = Field(default='', max_length=1000)
@@ -33,6 +37,10 @@ class ResourcePatch(BaseModel):
     repository: Optional[str] = Field(default=None, max_length=200)
     accession: Optional[str] = Field(default=None, max_length=300)
     url: Optional[str] = Field(default=None, max_length=4000)
+    purpose: Optional[str] = Field(default=None, max_length=12000)
+    identifiers: Optional[str] = Field(default=None, max_length=12000)
+    conditions: Optional[str] = Field(default=None, max_length=12000)
+    sample_details: Optional[str] = Field(default=None, max_length=12000)
     role: Optional[Literal['generated', 'reused', 'implementation', 'unknown']] = None
     organism: Optional[str] = Field(default=None, max_length=1000)
     tissue: Optional[str] = Field(default=None, max_length=1000)
@@ -53,7 +61,11 @@ REPOSITORIES = {
     'arrayexpress': 'ArrayExpress', 'github': 'GitHub', 'gitlab': 'GitLab',
     'zenodo': 'Zenodo', 'bioproject': 'BioProject', 'dbgap': 'dbGaP',
 }
-ACCESSION_RE = re.compile(r'^(?:GS[EM]\d+|[SED]R[APRSX]\d+|PRJ[END][AB]\d+|CRA\d+|HRA\d+|E-[A-Z]+-\d+|phs\d+(?:\.v\d+\.p\d+)?)$', re.I)
+ACCESSION_PATTERN = (r'GS[EM]\d+|[SED]R[APRSX]\d+|PRJ(?:NA|EB|DB|CA)\d+|CRA\d+|HRA\d+|'
+                     r'OMIX\d+|E-(?:MTAB|MEXP|GEOD|TABM)-\d+|phs\d+(?:\.v\d+\.p\d+)?')
+ACCESSION_RE = re.compile(r'^(?:' + ACCESSION_PATTERN + r')$', re.I)
+ACCESSION_TOKEN = re.compile(r'(?<![A-Za-z0-9_])(?:' + ACCESSION_PATTERN + r')(?![A-Za-z0-9_]|-[A-Za-z0-9]|\.[A-Za-z0-9])', re.I)
+RESOURCE_URL = re.compile(r'https?://[^\s<>"`\[\]{}|\u3000-\u303f\uff00-\uffef]+', re.I)
 
 
 def load_resources(directory):
@@ -81,6 +93,13 @@ def resource_repository(value, accession):
             return 'GEO'
         if re.fullmatch(r'SR[APRSX]\d+', accession, re.I):
             return 'SRA'
+        for pattern, name in ((r'ER[APRSX]\d+', 'ENA'), (r'DR[APRSX]\d+', 'DRA'),
+                              (r'PRJ(?:NA|EB|DB|CA)\d+', 'BioProject'),
+                              (r'[CH]RA\d+', 'GSA'), (r'OMIX\d+', 'OMIX'),
+                              (r'E-[A-Z]+-\d+', 'ArrayExpress'),
+                              (r'phs\d+(?:\.v\d+\.p\d+)?', 'dbGaP')):
+            if re.fullmatch(pattern, accession, re.I):
+                return name
     return repository
 
 
@@ -123,8 +142,8 @@ def normalize_resource(record):
         result['accession'] = result['accession'].upper()
     result['repository'] = resource_repository(result['repository'], result['accession'])
     result['url'] = safe_url(result['url'])
-    if not result['accession'] and not result['url']:
-        raise HTTPException(422, '请至少填写仓库编号或资源链接')
+    if not any(result[field] for field in ('accession', 'url', 'identifiers', 'purpose', 'conditions', 'sample_details')):
+        raise HTTPException(422, '请填写编号/链接或资源入口说明；未提供编号时可如实说明')
     if result['document_id']:
         if result['document_id'] != 'main' and not re.fullmatch(r'[0-9a-f]{32}', result['document_id']):
             raise HTTPException(422, '无效的来源文件 ID')
@@ -135,12 +154,75 @@ def normalize_resource(record):
     return result
 
 
+def resource_urls(value):
+    """Read explicit safe URLs from a cell without inventing or shortening queries."""
+    output = []
+    for match in RESOURCE_URL.finditer(value or ''):
+        value = match[0].rstrip('.,;:!?')
+        while value.endswith(')') and value.count(')') > value.count('('):
+            value = value[:-1]
+        try:
+            output.append(safe_url(value))
+        except HTTPException:
+            continue
+    return list(dict.fromkeys(output))
+
+
+def resource_accessions(record):
+    """All explicit supported accessions, never inferred from purpose/notes."""
+    value = record.get('identifiers', '')
+    found = {m[0].upper() for m in ACCESSION_TOKEN.finditer(
+        unicodedata.normalize('NFKC', RESOURCE_URL.sub(' ', value)))}
+    accession = unicodedata.normalize('NFKC', record.get('accession', ''))
+    if ACCESSION_RE.fullmatch(accession):
+        found.add(accession.upper())
+    for value in resource_urls(record.get('url', '') + ' ' + record.get('identifiers', '')):
+        parsed = urlsplit(value)
+        path = unquote(parsed.path)
+        allowed = ((parsed.hostname in ('ncbi.nlm.nih.gov', 'www.ncbi.nlm.nih.gov') and
+                    re.match(r'^/(?:geo/|sra(?:/|$)|bioproject(?:/|$)|projects/gap/)', path)) or
+                   (parsed.hostname in ('ebi.ac.uk', 'www.ebi.ac.uk') and
+                    re.match(r'^/(?:ena/browser/view/|arrayexpress/experiments/|biostudies/arrayexpress/studies/)', path)) or
+                   (parsed.hostname == 'ngdc.cncb.ac.cn' and
+                    re.match(r'^/(?:gsa/|gsa-human/|bioproject/|omix/)', path)))
+        if not allowed:
+            continue
+        found.update(m[0].upper() for m in ACCESSION_TOKEN.finditer(path))
+        for name, values in parse_qs(parsed.query).items():
+            if name.casefold() in ('acc', 'term', 'id', 'study_id'):
+                found.update(item.upper() for item in values if ACCESSION_RE.fullmatch(item))
+    return sorted(found)
+
+
+def _text_key(value):
+    return ' '.join(unicodedata.normalize('NFKC', value or '').split()).casefold()
+
+
 def resource_key(record):
+    if any(record.get(field) for field in ('identifiers', 'purpose', 'conditions', 'sample_details')):
+        identifiers = _text_key(record.get('identifiers') or record.get('accession'))
+        if not identifiers and record.get('url'):
+            url = urlsplit(safe_url(record['url']))
+            identifiers = ('url', urlunsplit((url.scheme, url.netloc, url.path or '/', url.query, '')))
+        return ('row', _text_key(record.get('title')), identifiers)
     accession = record.get('accession', '').casefold()
     if accession:
         return ('accession', resource_repository(record.get('repository', ''), accession).casefold(), accession)
     url = urlsplit(safe_url(record.get('url', '')))
     return ('url', urlunsplit((url.scheme, url.netloc, url.path or '/', url.query, '')))
+
+
+def resource_link_keys(record):
+    """Independent identifiers within grouped rows drive cross-paper discovery."""
+    keys = {('accession', resource_repository('', acc).casefold(), acc.casefold())
+            for acc in resource_accessions(record)}
+    if record.get('accession'):
+        keys.add(('accession', resource_repository(record.get('repository', ''), record['accession']).casefold(),
+                  record['accession'].casefold()))
+    for value in resource_urls(record.get('url', '') + ' ' + record.get('identifiers', '')):
+        parsed = urlsplit(value)
+        keys.add(('url', urlunsplit((parsed.scheme, parsed.netloc, parsed.path or '/', parsed.query, ''))))
+    return keys
 
 
 def ensure_unique(records, record):
@@ -187,13 +269,18 @@ def related_resources(entries, query=''):
     """entries are already public records, each carrying paper_id and paper_title."""
     groups = {}
     for record in entries:
-        groups.setdefault(resource_key(record), {})[record['paper_id']] = record['paper_title']
+        for key in resource_link_keys(record):
+            groups.setdefault(key, {})[record['paper_id']] = record['paper_title']
     query = query.strip().casefold()
     output = []
-    fields = ('title', 'paper_title', 'repository', 'accession', 'organism', 'tissue', 'modality', 'notes', 'url')
+    fields = ('title', 'paper_title', 'repository', 'accession', 'organism', 'tissue', 'modality', 'notes', 'url',
+              'purpose', 'identifiers', 'conditions', 'sample_details')
     for record in entries:
         if query and query not in ' '.join(str(record.get(field, '')) for field in fields).casefold():
             continue
-        linked = [{'id': pid, 'title': title} for pid, title in groups[resource_key(record)].items() if pid != record['paper_id']]
+        linked_papers = {}
+        for key in sorted(resource_link_keys(record)):
+            linked_papers.update(groups[key])
+        linked = [{'id': pid, 'title': title} for pid, title in linked_papers.items() if pid != record['paper_id']]
         output.append({**record, 'related_papers': linked})
     return output

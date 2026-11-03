@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from test_documents import main, TestClient
 from resource_extraction import extract_resources
+from paper_resources import resource_accessions
 
 
 class ResourceExtractionTests(unittest.TestCase):
@@ -235,6 +236,161 @@ https://doi.org/10.5061/dryad.abc123
             results = [future.result(timeout=10) for future in futures]
         self.assertEqual(sorted(item['added_count'] for item in results), [0, 1])
         self.assertEqual(len(json.loads((self.directory / 'resources.json').read_text())), 1)
+
+    def test_reproduction_table_preserves_whole_rows_missing_ids_and_samples(self):
+        self.save_notes('''## 研究材料
+| 队列 | 编号 |
+| --- | --- |
+| 同一个 GEO 数据 | GSE11111、GSE22222、GSE99999 |
+## 数据与复现入口
+| 资源 | 用途 | 编号/链接 | 影响使用的条件 | 样品/材料 |
+| --- | --- | --- | --- | --- |
+| TCGA-STAD / TCGA GDC | 胃癌发现队列 | TCGA-STAD；TCGA GDC | 未报告具体下载批次 | 胃癌组织，纳入数量未报告 |
+| GEO 验证队列 | 外部验证 | GSE11111、GSE22222 | 缺少筛选条件；不能等同仓库全部样本 | 论文使用样本数未报告 |
+| 蛋白组数据 | 蛋白表达分析 | OMIX001073 | 需要申请数据 | 手术组织 |
+| IMvigor210 | 免疫治疗验证 | IMvigor210 | 缺少本研究纳入病例说明 | 尿路上皮癌队列 |
+| HGC-27、MKN-45 细胞系 | 体外验证 | | 未报告细胞来源编号 | HGC-27 / MKN-45 |
+''')
+        body = self.extract().json()
+        self.assertEqual(body['added_count'], 5, body)
+        resources = body['resources']
+        geo = next(record for record in resources if record['title'] == 'GEO 验证队列')
+        self.assertEqual(geo['identifiers'], 'GSE11111、GSE22222')
+        self.assertEqual(geo['accession'], '')
+        self.assertEqual(resource_accessions(geo), ['GSE11111', 'GSE22222'])
+        self.assertNotIn('GSE99999', json.dumps(resources))
+        self.assertEqual(geo['conditions'], '缺少筛选条件；不能等同仓库全部样本')
+        self.assertEqual(geo['sample_details'], '论文使用样本数未报告')
+        self.assertEqual(next(record for record in resources if record['title'] == '蛋白组数据')['accession'], 'OMIX001073')
+        cell = next(record for record in resources if '细胞系' in record['title'])
+        self.assertEqual((cell['kind'], cell['identifiers'], cell['url']), ('other', '', ''))
+        for record in resources:
+            self.assertEqual(record['auto_extraction']['source'], 'resource_table')
+            self.assertNotIn('笔记片段', record['notes'])
+            self.assertNotIn('|', record['notes'])
+            self.assertEqual(record['status'], 'pending')
+
+    def test_english_table_aliases_escaped_pipes_and_explicit_links(self):
+        records = extract_resources('''## Data and reproducibility
+| Resource (资源) | Purpose | Accession / link | Conditions affecting use | Samples |
+| :--- | --- | ---: | --- | --- |
+| **Analysis code** | source code | [repository](https://github.com/lab/code?ref=stable&x=1) | access\\|controlled<br>Version not reported | not applicable |
+''')
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['title'], 'Analysis code')
+        self.assertEqual(record['conditions'], 'access|controlled\nVersion not reported')
+        self.assertEqual(record['url'], 'https://github.com/lab/code?ref=stable&x=1')
+        self.assertEqual(record['identifiers'], '[repository](https://github.com/lab/code?ref=stable&x=1)')
+        self.assertEqual(record['kind'], 'code')
+
+    def test_migration_backs_up_only_untouched_legacy_auto_and_is_idempotent(self):
+        from resource_extraction import NOTICE
+        def old_record(index, accession, **changes):
+            raw = f'| GEO 数据 | {accession} |'
+            record = main.ResourceIn(title='GEO · ' + accession, repository='GEO', accession=accession,
+                                     notes=NOTICE + raw).model_dump()
+            for field in ('purpose', 'identifiers', 'conditions', 'sample_details'):
+                record.pop(field)
+            record.update(id=str(index) * 32, created_at='2026-01-01', updated_at='2026-01-01', source_revision='')
+            record.update(changes)
+            return record
+        original = [old_record(1, 'GSE11111'), old_record(2, 'GSE22222'),
+                    old_record(3, 'GSE33333', status='verified'),
+                    old_record(4, 'GSE44444', title='Human changed title'),
+                    old_record(5, 'GSE55555', notes=NOTICE + '| GEO 数据 | GSE55555 |\n我的补充说明'),
+                    old_record(6, 'GSE66666', custom_legacy_field='keep')]
+        path = self.directory / 'resources.json'
+        path.write_text(json.dumps(original, ensure_ascii=False))
+        self.save_notes('''## 数据与复现入口
+| 资源 | 用途 | 编号/链接 | 影响使用的条件 |
+| --- | --- | --- | --- |
+| GEO 验证队列 | 外部验证 | GSE11111、GSE22222 | 样本纳入条件未报告 |
+''')
+        body = self.extract().json()
+        self.assertEqual((body['added_count'], body['updated_count'], body['backup_created']), (1, 2, True), body)
+        backups = list(self.directory.glob('resources.backup-*.json'))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(json.loads(backups[0].read_text()), original)
+        raw = json.loads(path.read_text())
+        for preserved in original[2:]:
+            self.assertEqual(next(record for record in raw if record['id'] == preserved['id']), preserved)
+        self.assertEqual(len(raw), 5)
+        before = path.read_bytes()
+        repeated = self.extract().json()
+        self.assertEqual((repeated['added_count'], repeated['updated_count']), (0, 0))
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(len(list(self.directory.glob('resources.backup-*.json'))), 1)
+
+    def test_new_auto_updates_preserve_manual_edits_and_status(self):
+        template = '''| 资源 | 用途 | 编号/链接 | 影响使用的条件 |
+| --- | --- | --- | --- |
+| GEO 队列 | 验证 | GSE11111 | %s |
+| 代码 | 分析 | https://github.com/lab/code | 未报告版本 |
+'''
+        self.save_notes(template % '未报告样本量')
+        first = self.extract().json()['resources']
+        geo, code = first
+        edited = self.client.patch(self.url + '/resources/' + code['id'], json={'purpose': '我的人工用途', 'status': 'verified'})
+        self.assertEqual(edited.status_code, 200)
+        self.assertNotIn('auto_extraction', edited.json())
+        self.save_notes(template % '需筛选病理类型')
+        response = self.extract().json()
+        self.assertEqual((response['added_count'], response['updated_count']), (1, 1), response)
+        self.assertEqual(len(response['resources']), 2)
+        self.assertEqual(next(record for record in response['resources'] if record['id'] == code['id'])['purpose'], '我的人工用途')
+        updated = next(record for record in response['resources'] if record['title'] == 'GEO 队列')
+        self.assertNotEqual(updated['id'], geo['id'])
+        self.assertEqual(updated['conditions'], '需筛选病理类型')
+
+    def test_grouped_identifiers_link_each_paper_without_matching_generic_missing_text(self):
+        self.save_notes('''| 资源 | 用途 | 编号/链接 | 影响使用的条件 |
+| --- | --- | --- | --- |
+| 联合队列 | 分析 | GSE11111、GSE22222、OMIX001073 | 需核对 |
+| IMvigor210 | 验证 | 未报告 | 样本量未报告 |
+''')
+        self.extract()
+        other_id, other = main.new_paper_dir()
+        main.write_meta(other, {**main.blank_meta(other_id), 'title': 'Independent synthetic paper'})
+        for fields in ({'title': 'Second accession', 'accession': 'GSE22222'},
+                       {'title': 'OMIX', 'accession': 'OMIX001073'},
+                       {'title': 'Unrelated cell line', 'identifiers': '未报告'}):
+            response = self.client.post('/api/papers/' + other_id + '/resources', json=fields)
+            self.assertEqual(response.status_code, 200, response.text)
+        records = self.client.get('/api/resources').json()
+        grouped = next(record for record in records if record['title'] == '联合队列')
+        self.assertEqual([item['id'] for item in grouped['related_papers']], [other_id])
+        for record in records:
+            if record['title'] in ('Second accession', 'OMIX'):
+                self.assertEqual([item['id'] for item in record['related_papers']], [self.pid])
+            if record['identifiers'] == '未报告':
+                self.assertEqual(record['related_papers'], [])
+
+    def test_failed_backup_never_replaces_existing_records(self):
+        self.save_notes('''| 资源 | 用途 | 编号/链接 | 影响使用的条件 |
+| --- | --- | --- | --- |
+| GEO 队列 | 分析 | GSE11111 | 旧条件 |
+''')
+        self.extract()
+        path = self.directory / 'resources.json'
+        before = path.read_bytes()
+        self.save_notes(self.client.get(self.url).json()['notes'].replace('旧条件', '新条件'))
+        atomic = main.atomic_json
+        def fail_backup(path, value):
+            if 'backup-' in path.name:
+                raise OSError('synthetic disk error')
+            return atomic(path, value)
+        with patch.object(main, 'atomic_json', side_effect=fail_backup):
+            with self.assertRaises(OSError):
+                self.extract()
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_accession_membership_ignores_unrelated_repository_search_routes(self):
+        self.assertEqual(resource_accessions({'url': 'https://www.ncbi.nlm.nih.gov/pubmed/?term=GSE12345'}), [])
+        self.assertEqual(resource_accessions({'url': 'https://www.ebi.ac.uk/search?acc=GSE12345'}), [])
+        self.assertEqual(resource_accessions({'url': 'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE12345'}), ['GSE12345'])
+        self.assertEqual(resource_accessions({'identifiers': 'GSM1234、GSE12345；OMIX001073',
+                                             'purpose': 'GSE99999'}), ['GSE12345', 'GSM1234', 'OMIX001073'])
 
 
 if __name__ == '__main__':

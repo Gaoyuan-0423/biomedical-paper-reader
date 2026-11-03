@@ -1,4 +1,4 @@
-"""Reading decisions remain human-owned; evidence stays bound to its source."""
+"""Only actionable gaps become tasks; legacy metadata and source evidence survive."""
 import json
 import tempfile
 import unittest
@@ -48,7 +48,7 @@ class WorkflowTests(unittest.TestCase):
     def task_ids(self):
         return {t['id'] for t in self.client.get(self.url).json()['tasks']}
 
-    def test_legacy_defaults_and_validated_manual_decisions(self):
+    def test_legacy_reading_fields_are_preserved_without_creating_tasks(self):
         meta = json.loads((self.directory / 'meta.json').read_text())
         for key in ('reading_status', 'reading_decision', 'notes_incomplete', 'material_revision', 'notes_material_revision', 'document_revisions'):
             meta.pop(key, None)
@@ -56,23 +56,29 @@ class WorkflowTests(unittest.TestCase):
         legacy = self.client.get(self.url).json()
         self.assertEqual(legacy['reading_status'], 'unread')
         self.assertEqual(legacy['reading_decision'], 'pending')
-        self.assertEqual(self.task_ids(), {'decision'})
-        self.assertEqual(self.client.patch(self.url, json={'reading_status': 'generated'}).status_code, 422)
-        result = self.client.patch(self.url, json={'reading_status': 'reading', 'reading_decision': 'priority'}).json()
-        self.assertEqual({t['id'] for t in result['tasks']}, {'resume'})
+        self.assertEqual(self.task_ids(), set())
+        meta.update(reading_status='reading', reading_decision='pending')
+        (self.directory / 'meta.json').write_text(json.dumps(meta))
+        self.client.patch(self.url, json={'notes': 'New note'})
         listed = self.client.get('/api/papers').json()[0]
         self.assertEqual(listed['reading_status'], 'reading')
+        self.assertEqual(listed['reading_decision'], 'pending')
         self.assertNotIn('notes', listed)
-        self.client.patch(self.url, json={'reading_status': 'completed'})
         self.assertEqual(self.task_ids(), set())
+        saved = json.loads((self.directory / 'meta.json').read_text())
+        self.assertEqual(saved['reading_status'], 'reading')
+        self.assertEqual(saved['reading_decision'], 'pending')
 
-    def test_metadata_only_fulltext_task_respects_irrelevant_decision(self):
+    def test_legacy_irrelevant_decision_cannot_hide_a_missing_fulltext_task(self):
         pid, directory = main.new_paper_dir()
         main.write_meta(directory, main.blank_meta(pid))
         url = '/api/papers/' + pid
-        self.assertEqual({t['id'] for t in self.client.get(url).json()['tasks']}, {'decision', 'fulltext'})
-        result = self.client.patch(url, json={'reading_decision': 'irrelevant'}).json()
-        self.assertEqual(result['tasks'], [])
+        self.assertEqual({t['id'] for t in self.client.get(url).json()['tasks']}, {'fulltext'})
+        meta = main.read_meta(directory)
+        meta.update(reading_decision='irrelevant', reading_status='reading')
+        main.write_meta(directory, meta)
+        result = self.client.get(url).json()
+        self.assertEqual({t['id'] for t in result['tasks']}, {'fulltext'})
 
     def test_manual_edits_do_not_silently_clear_incomplete_or_stale_notes(self):
         first = self.client.patch(self.url, json={'notes': 'Partial notes', 'notes_incomplete': True}).json()
@@ -87,7 +93,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(result['notes_incomplete'])
         self.assertNotIn('tasks', json.loads((self.directory / 'meta.json').read_text()))
 
-    def test_concurrent_note_and_status_patches_preserve_both_fields(self):
+    def test_concurrent_note_and_favorite_patches_preserve_both_fields(self):
         first_read, second_read, release = Event(), Event(), Event()
         original = main.read_meta
         calls = []
@@ -106,16 +112,16 @@ class WorkflowTests(unittest.TestCase):
         with patch.object(main, 'read_meta', delayed_read), ThreadPoolExecutor(max_workers=2) as pool:
             notes = pool.submit(self.client.patch, self.url, json={'notes': 'Concurrent note'})
             self.assertTrue(first_read.wait(3))
-            status = pool.submit(self.client.patch, self.url, json={'reading_status': 'completed'})
+            favorite = pool.submit(self.client.patch, self.url, json={'favorite': True})
             try:
                 self.assertFalse(second_read.wait(0.1), 'second PATCH read stale metadata before first committed')
             finally:
                 release.set()
             self.assertEqual(notes.result(timeout=3).status_code, 200)
-            self.assertEqual(status.result(timeout=3).status_code, 200)
+            self.assertEqual(favorite.result(timeout=3).status_code, 200)
         meta = self.client.get(self.url).json()
         self.assertEqual(meta['notes'], 'Concurrent note')
-        self.assertEqual(meta['reading_status'], 'completed')
+        self.assertTrue(meta['favorite'])
 
     def test_interrupted_generation_records_its_original_material_revision(self):
         revision = self.paper['material_revision']
@@ -128,14 +134,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(invalid.status_code, 422)
         self.assertEqual(self.client.get(self.url).json()['notes'], 'Partial older-source notes')
 
-    def test_generation_preserves_manual_status_and_detects_material_change_during_run(self):
-        self.client.patch(self.url, json={'reading_status': 'reading', 'notes': 'Old', 'notes_incomplete': True})
+    def test_generation_preserves_user_metadata_and_detects_material_change_during_run(self):
+        self.client.patch(self.url, json={'notes': 'Old', 'notes_incomplete': True})
         self.client.put('/api/settings', json={'api_key': 'fixture-only', 'model': 'test'})
 
         async def stream(*args, **kwargs):
             current = main.read_meta(self.directory)
-            current['reading_status'] = 'completed'
-            current['reading_decision'] = 'reference'
+            current['favorite'] = True
+            current['tags'] = ['manual tag']
             main.materials_changed(current, 'new-document', 'changed-during-generation')
             main.write_meta(self.directory, current)
             yield 'Generated notes'
@@ -146,8 +152,8 @@ class WorkflowTests(unittest.TestCase):
         done = next(e for e in events if e['type'] == 'done')
         self.assertTrue(done['paper']['notes_stale'])
         meta = self.client.get(self.url).json()
-        self.assertEqual(meta['reading_status'], 'completed')
-        self.assertEqual(meta['reading_decision'], 'reference')
+        self.assertTrue(meta['favorite'])
+        self.assertEqual(meta['tags'], ['manual tag'])
         self.assertFalse(meta['notes_incomplete'])
         self.assertTrue(meta['notes_stale'])
 

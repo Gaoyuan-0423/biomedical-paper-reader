@@ -77,7 +77,7 @@ test('failure retains draft, prevents duplicate writes, and retries successfully
   pending.reject(new Error('offline')); await saving;
   assert.match(h.panel.innerHTML, /Do not lose this/); assert.match(h.panel.innerHTML, /offline/);
   h.hooks.request = async (_, __, body) => record(body); await h.submit();
-  assert.equal(h.ui.canLeave(), true); assert.match(h.panel.innerHTML, /resource-card/);
+  assert.equal(h.ui.canLeave(), true); assert.match(h.panel.innerHTML, /resource-row/);
 });
 
 test('late reads cannot replace results from the currently opened paper', async () => {
@@ -210,4 +210,96 @@ test('late extraction completion cannot render resources into a different paper'
   h.ui.clear(); h.hooks.request = async () => [record({ title: 'Current paper resource' })]; await h.ui.open(paper(B));
   await h.ui.refreshAfterExtraction(A); pending.resolve(true); await extracting;
   assert.match(h.panel.innerHTML, /Current paper resource/); assert.doesNotMatch(h.panel.innerHTML, /正在整理…/);
+});
+
+test('the table preserves grouped identifiers, readable safe links and non-GEO resources as one row each', async () => {
+  const h = harness();
+  h.hooks.request = async (_, url) => url.endsWith('/geo') ? { records: {} } : [record({ title: 'Validation cohorts', purpose: '比较外部队列', identifiers: '**GSE12345**、GSE67890；[GDC](https://portal.gdc.cancer.gov/)\nTCGA / IMvigor210', conditions: '仅使用已获授权的临床字段', sample_details: '论文使用 12 位患者的肿瘤组织' }), record({ id: S, title: 'Cell line', accession: '', url: '', identifiers: 'MCF-7；培养条件待核对' })];
+  await h.ui.open(paper());
+  assert.match(h.panel.innerHTML, /<table class="resource-table">/);
+  assert.equal((h.panel.innerHTML.match(/class="resource-row"/g) || []).length, 2);
+  for (const label of ['用途', '编号／链接', '影响使用的条件', '样品／材料', '比较外部队列', 'TCGA / IMvigor210', '论文使用 12 位患者']) assert.ok(h.panel.innerHTML.includes(label));
+  assert.match(h.panel.innerHTML, /href="https:\/\/portal.gdc.cancer.gov\/"/);
+  assert.doesNotMatch(h.panel.innerHTML, /\*\*GSE|\[GDC\]|resource-card/);
+  assert.equal((h.panel.innerHTML.match(/data-resource-accession="GSE/g) || []).length, 2);
+});
+
+test('new table fields survive editing and persist without requiring a URL or accession', async () => {
+  const h = harness(); await h.ui.open(paper()); await h.click('add');
+  const fields = { title: 'IMvigor210', purpose: '外部验证', identifiers: 'IMvigor210；申请编号未报告', conditions: '需确认队列使用许可', sample_details: '论文筛选后的患者，数量待核对' };
+  for (const [name, value] of Object.entries(fields)) h.input(name, value);
+  assert.equal(h.ui.canLeave(), false); await h.submit();
+  const posted = h.calls.find(c => c.method === 'POST').body;
+  for (const [name, value] of Object.entries(fields)) assert.equal(posted[name], value);
+  assert.equal(posted.url, ''); assert.equal(posted.accession, '');
+  await h.click('edit', { resourceKey: A + ':' + R });
+  for (const [name, value] of Object.entries(fields)) assert.ok(h.panel.innerHTML.includes(value), name);
+});
+
+test('legacy automatic raw note snippets are hidden in table and edit while manual notes remain available', async () => {
+  const h = harness();
+  h.hooks.request = async () => [record({ notes: '来自精读笔记自动整理，尚未核对原文。笔记片段：\n| raw-private-marker | GSE12345 |\n## 其他长篇段落' }), record({ id: S, auto_extraction: { version: 2 }, notes: '人工补充：需确认数据授权' })];
+  await h.ui.open(null);
+  assert.doesNotMatch(h.panel.innerHTML, /raw-private-marker|笔记片段|其他长篇段落/);
+  assert.match(h.panel.innerHTML, /人工补充：需确认数据授权/);
+  await h.ui.open(paper()); await h.mode('current'); await h.click('edit', { resourceKey: A + ':' + R });
+  assert.doesNotMatch(h.panel.innerHTML, /raw-private-marker|笔记片段/);
+});
+
+const geo = (extra = {}) => ({ accession: 'GSE12345', title: 'Synthetic GEO collection', source_url: 'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE12345', fetched_at: '2026-11-03', geo_sample_count: 60, samples_total: 60, samples_shown: 1, sample_scope: 'examples', experiment_types: ['Expression profiling'], platforms: ['GPL111'], summary: 'Public collection', overall_design: 'Tumor and normal samples; paper subset unknown', samples: [{ accession: 'GSM123', title: 'Example <script>sample</script>', source_url: 'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM123', organism: ['Homo sapiens'], source: ['tumor tissue'], characteristics: ['donor: example only'], molecule: ['total RNA'], library_strategy: ['RNA-Seq'] }], warnings: [], ...extra });
+
+test('opening resources reads only the GEO cache and clearly distinguishes repository totals and sample examples', async () => {
+  const h = harness();
+  h.hooks.request = async (method, url) => { h.calls.push({ method, url }); return url.endsWith('/geo') ? { records: { GSE12345: geo() } } : [record({ sample_details: '论文实际使用 12 个样本' })]; };
+  await h.ui.open(paper());
+  assert.ok(h.calls.every(c => c.method === 'GET'));
+  assert.equal(h.calls[1].url, '/api/papers/' + A + '/resources/geo');
+  for (const text of ['论文实际使用 12 个样本', 'GEO 收录 60 个样本，非论文实际使用数量', '样品示例（1/60）', '不能代表全部样品或论文分组', '研究设计原文', '材料来源', 'tumor tissue']) assert.ok(h.panel.innerHTML.includes(text), text);
+  assert.doesNotMatch(h.panel.innerHTML, /<script>/); assert.match(h.panel.innerHTML, /&lt;script&gt;/);
+});
+
+test('GEO enrichment is explicit, prevents duplicate requests, caches separately and preserves manually entered samples', async () => {
+  const h = harness(), response = deferred();
+  h.hooks.request = async (method, url) => { h.calls.push({ method, url }); return method === 'POST' ? response.promise : url.endsWith('/geo') ? { records: {} } : [record({ sample_details: '论文样品描述保留' })]; };
+  await h.ui.open(paper());
+  const data = { resourceKey: A + ':' + R, resourceAccession: 'GSE12345' };
+  const fetching = h.click('geo', data); await h.click('geo', data);
+  assert.equal(h.calls.filter(c => c.method === 'POST').length, 1); assert.match(h.panel.innerHTML, /正在读取 GEO/);
+  response.resolve({ metadata: geo(), cached: false }); await fetching;
+  assert.match(h.panel.innerHTML, /GEO 样品信息/); assert.match(h.panel.innerHTML, /论文样品描述保留/);
+  assert.deepEqual(h.changes, []);
+  await h.click('geo', data); assert.ok(h.calls.at(-1).url.endsWith('/geo/GSE12345?refresh=true'));
+});
+
+test('failed GEO reads retain resource data and late responses never render into another paper', async () => {
+  const h = harness();
+  h.hooks.request = async (method, url) => { if (method === 'POST') throw new Error('network unavailable'); return url.endsWith('/geo') ? { records: {} } : [record()]; };
+  await h.ui.open(paper()); const data = { resourceKey: A + ':' + R, resourceAccession: 'GSE12345' };
+  await h.click('geo', data); assert.match(h.panel.innerHTML, /GEO 信息读取失败：network unavailable/); assert.match(h.panel.innerHTML, /Public atlas/);
+  const response = deferred(); h.hooks.request = async (method, url) => method === 'POST' ? response.promise : url.endsWith('/geo') ? { records: {} } : [record({ title: 'Current paper only', accession: 'GSE98765' })];
+  const fetching = h.click('geo', data); h.ui.clear(); await h.ui.open(paper(B));
+  response.resolve({ metadata: geo() }); await fetching;
+  assert.match(h.panel.innerHTML, /Current paper only/); assert.doesNotMatch(h.panel.innerHTML, /Synthetic GEO collection|GSM123|network unavailable/);
+});
+
+test('a GEO response does not replace an active resource draft', async () => {
+  const h = harness(), response = deferred();
+  h.hooks.request = async (method, url) => method === 'POST' ? response.promise : url.endsWith('/geo') ? { records: {} } : [record()];
+  await h.ui.open(paper()); const fetching = h.click('geo', { resourceKey: A + ':' + R, resourceAccession: 'GSE12345' });
+  await h.click('add'); h.input('sample_details', '尚未保存的样品说明'); const before = h.panel.innerHTML;
+  response.resolve({ metadata: geo() }); await fetching;
+  assert.equal(h.panel.innerHTML, before); assert.equal(h.ui.canLeave(), false);
+  await h.field('document_id', S); assert.match(h.panel.innerHTML, /尚未保存的样品说明/);
+});
+
+test('GEO actions match explicit accession membership including official legacy URLs but excluding search and unrelated links', async () => {
+  const h = harness();
+  h.hooks.request = async (_, url) => url.endsWith('/geo') ? { records: {} } : [
+    record({ accession: '', identifiers: '', url: 'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE12345' }),
+    record({ id: S, accession: '', url: '', identifiers: 'https://pubmed.ncbi.nlm.nih.gov/?term=GSE99999 https://example.org/GSE77777 [dataset](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE67890)；GSE24680；GSE13579-suffix；GSE12345.version' }),
+  ];
+  await h.ui.open(paper());
+  for (const accession of ['GSE12345', 'GSE67890', 'GSE24680']) assert.match(h.panel.innerHTML, new RegExp('data-resource-accession="' + accession + '"'));
+  for (const accession of ['GSE99999', 'GSE77777', 'GSE13579']) assert.doesNotMatch(h.panel.innerHTML, new RegExp('data-resource-accession="' + accession + '"'));
+  assert.equal((h.panel.innerHTML.match(/data-resource-accession="GSE12345"/g) || []).length, 1);
 });

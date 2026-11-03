@@ -4,9 +4,9 @@
 
 ## 下载与安装预览包
 
-下载入口：[v0.5.2 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.5.2)。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
+下载入口：[v0.5.3 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.5.3)。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
 
-1. 下载 [BioReader-v0.5.2-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.5.2/BioReader-v0.5.2-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
+1. 下载 [BioReader-v0.5.3-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.5.3/BioReader-v0.5.3-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
 2. 解压 ZIP，将 `BioReader.app` 拖入“应用程序”，或从解压目录直接打开。更新旧版前先退出正在运行的 BioReader。
 3. 双击打开 App。无需另装 Python 或手动启动浏览器／终端。AI 笔记需要在设置中配置模型接口和 API Key。
 
@@ -37,7 +37,7 @@ BIOREADER_PYTHON=/path/to/python3 ./app/build-macos.sh
 
 ## 验证与限制
 
-v0.5.2 修复阅读价值按钮的交互，延长并重试标签识别，将筛选和资源入口移到侧栏底部，并支持从完整精读笔记自动整理数据与代码。当前源码已完成自动回归及隔离合成文献的 Chrome 交互／下载验收，覆盖桌面和窄窗口。新应用包通过构建、随包资源一致性与本地包完整性检查；本轮未单独复验原生 WebKit 窗口，也未调用真实 AI 或评测真实论文解读质量。详细记录见 [App 验证记录](tests/README.md)。
+v0.5.3 移除阅读进度、决策和判断按钮，以星标管理重点文献；数据与复现按精读表格整理，增加样品明细及手动补充 GEO 公开元数据。当前源码已完成自动回归及隔离合成文献的 Chrome 交互／下载验收，覆盖桌面和窄窗口。新应用包通过构建、随包资源一致性与本地包完整性检查；本轮未单独复验原生 WebKit 窗口，也未调用真实 AI 或评测真实论文解读质量。详细记录见 [App 验证记录](tests/README.md)。
 
 ### v0.4.0 历史发布快照
 

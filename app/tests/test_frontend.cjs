@@ -34,7 +34,7 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, openTask, openDecision, submitDecision, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -98,18 +98,18 @@ test('a delayed tag response updates its paper without changing the newly opened
 
 test('tag responses merge only tags and preserve newer metadata and input', async () => {
   const h = harness(), response = deferred();
-  h.state.papers = [{ ...h.state.current, reading_status: 'reading', notes_updated_at: 'latest' }];
+  h.state.papers = [{ ...h.state.current, favorite: true, notes_updated_at: 'latest' }];
   h.api.patch = () => response.promise;
   const adding = h.addTag('topic');
   await new Promise(setImmediate);
   h.state.current.notes = 'newer note';
-  h.state.current.reading_status = 'reading';
+  h.state.current.favorite = true;
   h.$('tag-input').value = 'next draft';
-  response.resolve({ id: A, tags: ['topic'], notes: 'old note', reading_status: 'unread', notes_updated_at: 'old' });
+  response.resolve({ id: A, tags: ['topic'], notes: 'old note', favorite: false, notes_updated_at: 'old' });
   await adding;
   assert.equal(h.state.current.notes, 'newer note');
-  assert.equal(h.state.current.reading_status, 'reading');
-  assert.equal(h.state.papers[0].reading_status, 'reading');
+  assert.equal(h.state.current.favorite, true);
+  assert.equal(h.state.papers[0].favorite, true);
   assert.equal(h.state.papers[0].notes_updated_at, 'latest');
   assert.equal(h.$('tag-input').value, 'next draft');
 });
@@ -189,7 +189,7 @@ test('automatic tags deduplicate requests and update only their paper after swit
   h.state.current = paperA; h.renderHeadTags();
   assert.match(h.$('head-tags').innerHTML, /正在识别/);
   h.state.current = { id: B, tags: ['B only'], notes: 'B note' }; h.renderHeadTags();
-  response.resolve({ paper: { id: A, tags: ['cell atlas'], tags_revision: 1, notes: 'old A', reading_status: 'unread' }, added_tags: ['cell atlas'] });
+  response.resolve({ paper: { id: A, tags: ['cell atlas'], tags_revision: 1, notes: 'old A', favorite: false }, added_tags: ['cell atlas'] });
   await identifying;
   assert.equal(calls, 1);
   assert.deepEqual([...h.state.current.tags], ['B only']);
@@ -721,21 +721,37 @@ test('fit width accommodates landscape pages in a mixed-orientation PDF', async 
   assert.equal(h.currentPage(), 2);
 });
 
-test('workflow filters intersect reading, decision, tasks and search, with safe legacy defaults', () => {
+test('library filters intersect favorites, tags, actionable tasks and search', () => {
   const h = harness();
   h.state.papers = [
-    { id: A, title: 'Cancer atlas', reading_status: 'reading', reading_decision: 'priority', tasks: [{ id: 'resume' }] },
-    { id: B, title: 'Legacy paper' },
-    { id: C, title: 'Cancer methods', reading_status: 'reading', reading_decision: 'reference', tasks: [] },
+    { id: A, title: 'Cancer atlas', favorite: true, tags: ['RNA-seq'], tasks: [{ id: 'evidence' }] },
+    { id: B, title: 'Legacy paper', reading_status: 'reading', reading_decision: 'pending', tasks: [{ id: 'decision' }, { id: 'resume' }] },
+    { id: C, title: 'Cancer methods', favorite: false, tags: ['RNA-seq'], tasks: [{ id: 'fulltext' }] },
   ];
-  h.state.readingFilter = 'unread';
-  assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [B]);
-  h.state.readingFilter = 'reading'; h.state.decisionFilter = 'priority'; h.state.taskFilter = 'resume'; h.state.query = 'cancer';
+  h.state.taskFilter = 'any';
+  assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [A, C]);
+  h.state.favOnly = true; h.state.activeTag = 'RNA-seq'; h.state.taskFilter = 'evidence'; h.state.query = 'cancer';
   assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [A]);
   h.state.query = 'absent'; assert.equal(h.visiblePapers().length, 0);
 });
 
-test('workflow save waits for note persistence and does not replace a new draft', async () => {
+test('legacy reading fields produce no visible badges or empty task strip', () => {
+  const h = harness();
+  Object.assign(h.state.current, { reading_status: 'reading', reading_decision: 'pending', tasks: [{ id: 'decision' }, { id: 'resume' }] });
+  h.state.papers = [h.state.current];
+  h.renderList(); h.renderWorkflow();
+  assert.doesNotMatch(h.$('paper-list').innerHTML, /精读中|待判断|判断阅读价值|继续精读/);
+  assert.equal(h.$('task-total').textContent, '0 篇');
+  assert.equal(h.$('paper-workflow').hidden, true);
+  h.state.current.notes_incomplete = true;
+  h.state.current.tasks.push({ id: 'notes_incomplete' });
+  h.renderWorkflow();
+  assert.equal(h.$('paper-workflow').hidden, false);
+  assert.equal(h.$('notes-complete').hidden, false);
+  assert.match(h.$('paper-tasks').innerHTML, /补完笔记/);
+});
+
+test('note review save waits for persistence and does not replace a new draft', async () => {
   const h = harness(), request = deferred(), writes = [];
   h.api.patch = async (id, body) => {
     writes.push(body);
@@ -743,90 +759,36 @@ test('workflow save waits for note persistence and does not replace a new draft'
     return { id, ...body, notes: 'server snapshot', tasks: [] };
   };
   edit(h, 'keep draft');
-  const save = h.saveWorkflow({ reading_status: 'completed' });
+  const save = h.saveWorkflow({ notes_incomplete: false });
   assert.equal(writes.length, 1); assert.equal(writes[0].notes, 'keep draft');
   request.resolve(); await save;
-  assert.equal(h.state.current.reading_status, 'completed');
+  assert.equal(h.state.current.notes_incomplete, false);
   assert.equal(h.$('editor').value, 'keep draft');
   assert.equal(h.state.current.notes, 'keep draft');
-  assert.equal(writes[1].reading_status, 'completed');
+  assert.equal(writes[1].notes_incomplete, false);
 });
 
-test('failed status save restores persisted controls and late status response cannot modify another paper', async () => {
-  const h = harness(); h.state.current.reading_status = 'unread';
+test('failed note review retains its reminder and a late response cannot modify another paper', async () => {
+  const h = harness(); h.state.current.notes_incomplete = true;
   h.api.patch = async () => { throw new Error('offline'); };
-  await h.saveWorkflow({ reading_status: 'completed' });
-  assert.equal(h.state.current.reading_status, 'unread');
-  assert.equal(h.$('paper-reading').value, 'unread');
+  await h.saveWorkflow({ notes_incomplete: false });
+  assert.equal(h.state.current.notes_incomplete, true);
+  assert.equal(h.$('notes-complete').hidden, false);
   const request = deferred(); h.api.patch = () => request.promise;
-  const save = h.saveWorkflow({ reading_status: 'reading' }); await new Promise(setImmediate);
-  h.state.current = { id: B, reading_status: 'skimmed' };
-  request.resolve({ id: A, reading_status: 'reading', tasks: [] }); await save;
-  assert.equal(h.state.current.reading_status, 'skimmed');
+  const save = h.saveWorkflow({ notes_incomplete: false }); await new Promise(setImmediate);
+  h.state.current = { id: B, notes_incomplete: true };
+  request.resolve({ id: A, notes_incomplete: false, tasks: [] }); await save;
+  assert.equal(h.state.current.notes_incomplete, true);
 });
 
-test('late workflow refresh cannot undo a newer manual reading decision', async () => {
+test('late workflow refresh cannot restore a resolved note reminder', async () => {
   const h = harness(), request = deferred();
   h.api.paper = () => request.promise;
   const refresh = h.refreshWorkflow(A);
   h.api.patch = async (id, body) => ({ id, ...body, tasks: [] });
-  await h.saveWorkflow({ reading_decision: 'priority' });
-  request.resolve({ id: A, reading_decision: 'pending' }); await refresh;
-  assert.equal(h.state.current.reading_decision, 'priority');
-});
-
-test('the decision task opens an explicit chooser and saves only the reading decision', async () => {
-  const h = harness(), writes = [];
-  h.state.current.reading_status = 'unread';
-  h.state.current.reading_decision = 'pending';
-  h.state.current.notes = 'existing note';
-  h.state.papers = [{ ...h.state.current, tasks: [{ id: 'decision' }] }];
-  h.$('decision-modal').hidden = true;
-  h.api.patch = async (id, body) => { writes.push({ id, ...body }); return { id, ...body, tasks: [] }; };
-  await h.openTask(A, 'decision');
-  assert.equal(h.$('decision-modal').hidden, false);
-  assert.equal(h.$('decision-modal').dataset.paperId, A);
-  assert.equal(h.$('decision-paper-title').textContent, 'Synthetic paper');
-  assert.equal(h.$('decision-value').value, 'pending');
-  assert.deepEqual(writes, []);
-  h.$('decision-value').value = 'priority';
-  assert.equal(await h.submitDecision(), true);
-  assert.deepEqual(writes, [{ id: A, reading_decision: 'priority' }]);
-  assert.equal(h.state.current.reading_status, 'unread');
-  assert.equal(h.state.current.notes, 'existing note');
-  assert.equal(h.state.current.reading_decision, 'priority');
-  assert.equal(h.$('decision-modal').hidden, true);
-});
-
-test('failed decision saving retains the selection and can be retried without duplicate requests', async () => {
-  const h = harness(), response = deferred(); let writes = 0;
-  h.openDecision(); h.$('decision-value').value = 'reference';
-  h.api.patch = () => { writes++; return response.promise; };
-  const saving = h.submitDecision();
-  await new Promise(setImmediate);
-  assert.equal(h.$('decision-save').disabled, true);
-  assert.equal(await h.submitDecision(), false);
-  assert.equal(writes, 1);
-  response.reject(new Error('offline'));
-  assert.equal(await saving, false);
-  assert.equal(h.$('decision-modal').hidden, false);
-  assert.equal(h.$('decision-value').value, 'reference');
-  assert.match(h.$('decision-status').textContent, /选择已保留/);
-  assert.equal(h.$('decision-save').disabled, false);
-  h.api.patch = async (id, body) => ({ id, ...body });
-  assert.equal(await h.submitDecision(), true);
-  assert.equal(h.state.current.reading_decision, 'reference');
-});
-
-test('a decision dialog for another paper cannot modify the currently selected paper', async () => {
-  const h = harness(); let writes = 0;
-  h.openDecision(); h.$('decision-value').value = 'irrelevant';
-  h.state.current = { id: B, reading_decision: 'pending', reading_status: 'unread' };
-  h.api.patch = async () => { writes++; };
-  assert.equal(await h.submitDecision(), false);
-  assert.equal(writes, 0);
-  assert.equal(h.state.current.reading_decision, 'pending');
-  assert.equal(h.$('decision-modal').hidden, true);
+  await h.saveWorkflow({ notes_incomplete: false });
+  request.resolve({ id: A, notes_incomplete: true }); await refresh;
+  assert.equal(h.state.current.notes_incomplete, false);
 });
 
 test('saved deep notes extract resources independently of automatic tag failures', async () => {
@@ -863,22 +825,22 @@ test('quick, incomplete, stopped and stale notes never automatically extract res
 test('resource extraction merges only its fields and never replaces another paper or clears a draft', async () => {
   const h = harness(), response = deferred(), refreshed = [];
   const paperA = h.state.current;
-  paperA.notes = 'new note'; paperA.tags = ['manual']; paperA.reading_status = 'reading'; paperA.tasks = [{ id: 'decision' }];
+  paperA.notes = 'new note'; paperA.tags = ['manual']; paperA.favorite = true; paperA.tasks = [{ id: 'evidence' }];
   h.state.papers = [{ ...paperA }]; h.state.tab = 'resources';
   h.context.window.BioResources = { refreshAfterExtraction: async id => refreshed.push(id), clear: () => { throw new Error('draft must not be cleared'); } };
   h.api.extractResources = () => response.promise;
   const extracting = h.extractResources();
   await new Promise(setImmediate);
-  h.state.current = { id: B, notes: 'B note', tags: ['B'], reading_status: 'completed', resources_count: 9 };
-  response.resolve({ paper: { id: A, notes: 'old', tags: ['old'], reading_status: 'unread', resources_count: 2, resources_pending: 2, tasks: [{ id: 'resources' }, { id: 'notes_stale' }] } });
+  h.state.current = { id: B, notes: 'B note', tags: ['B'], favorite: true, resources_count: 9 };
+  response.resolve({ paper: { id: A, notes: 'old', tags: ['old'], favorite: false, resources_count: 2, resources_pending: 2, tasks: [{ id: 'resources' }, { id: 'notes_stale' }] } });
   assert.equal(await extracting, true);
   assert.equal(h.state.current.notes, 'B note');
   assert.equal(h.state.current.resources_count, 9);
   assert.equal(paperA.notes, 'new note');
   assert.deepEqual(paperA.tags, ['manual']);
-  assert.equal(paperA.reading_status, 'reading');
+  assert.equal(paperA.favorite, true);
   assert.equal(paperA.resources_count, 2);
-  assert.deepEqual([...paperA.tasks].map(t => t.id), ['decision', 'resources']);
+  assert.deepEqual([...paperA.tasks].map(t => t.id), ['evidence', 'resources']);
   assert.deepEqual(refreshed, [A]);
 });
 
@@ -893,7 +855,7 @@ test('resource extraction failure leaves notes saved and permits an independent 
   assert.equal(h.state.current.notes, 'Saved deep note');
   assert.equal(h.$('save-status').textContent, '已保存');
   assert.equal(h.state.pendingSave, null);
-  assert.match(h.$('toast').textContent, /笔记已保存.*数据与代码.*重试/);
+  assert.match(h.$('toast').textContent, /笔记已保存.*数据与复现.*重试/);
   h.api.extractResources = async id => ({ paper: { id, resources_count: 1, resources_pending: 1, tasks: [{ id: 'resources' }] } });
   assert.equal(await h.extractResources(), true);
   assert.equal(h.state.current.resources_count, 1);
@@ -931,7 +893,7 @@ test('automatic tag and resource success cannot hide the other operation failure
 
 test('resource extraction coalesces repeated completions and refreshes changed workflow authoritatively', async () => {
   const h = harness(), old = deferred(), latest = deferred(); let calls = 0, reads = 0;
-  Object.assign(h.state.current, { notes_mode: 'deep', notes: 'latest deep note', reading_decision: 'priority' });
+  Object.assign(h.state.current, { notes_mode: 'deep', notes: 'latest deep note', notes_incomplete: false });
   h.api.extractResources = () => ++calls === 1 ? old.promise : latest.promise;
   const extracting = h.extractResources();
   assert.equal(h.extractResources(h.state.current, { automatic: true }), extracting);
@@ -941,11 +903,11 @@ test('resource extraction coalesces repeated completions and refreshes changed w
   await new Promise(setImmediate);
   assert.equal(calls, 2);
   h.state.workflowVersion++;
-  h.api.paper = async id => { reads++; return { id, reading_decision: 'priority', resources_count: 3, resources_pending: 3, tasks: [{ id: 'resources' }] }; };
-  latest.resolve({ paper: { id: A, reading_decision: 'pending', resources_count: 1, resources_pending: 1, tasks: [] } });
+  h.api.paper = async id => { reads++; return { id, notes_incomplete: false, resources_count: 3, resources_pending: 3, tasks: [{ id: 'resources' }] }; };
+  latest.resolve({ paper: { id: A, notes_incomplete: true, resources_count: 1, resources_pending: 1, tasks: [] } });
   assert.equal(await extracting, true);
   assert.equal(reads, 1);
-  assert.equal(h.state.current.reading_decision, 'priority');
+  assert.equal(h.state.current.notes_incomplete, false);
   assert.equal(h.state.current.resources_count, 3);
   assert.equal(h.state.extractingResources.size, 0);
 });
@@ -969,25 +931,25 @@ test('manual resource extraction waits for note saving and keeps a failed-save d
   assert.equal(h.state.pendingSave.notes, 'keep draft');
 });
 
-test('partial-generation marker survives retry edits and report generation never marks reading complete', async () => {
+test('partial-generation marker survives retry edits without changing favorites', async () => {
   const h = harness(); let body;
-  h.state.current.reading_status = 'unread';
+  h.state.current.favorite = true;
   h.api.patch = async (id, value) => { body = value; return { id, ...value, tasks: [{ id: 'notes_incomplete' }] }; };
   stream(h, [{ type: 'chunk', text: 'Partial text' }]);
   await h.generateNotes();
   assert.equal(body.notes_incomplete, true);
   edit(h, 'Partial text plus manual edit'); await h.flushSave();
   assert.equal(body.notes_incomplete, true);
-  assert.equal(h.state.current.reading_status, 'unread');
+  assert.equal(h.state.current.favorite, true);
 });
 
 test('generation uses authoritative material freshness from done event', async () => {
-  const h = harness(); h.state.current.reading_status = 'skimmed';
+  const h = harness(); h.state.current.favorite = true;
   stream(h, [{ type: 'done', notes: 'Finished report', paper: { notes_incomplete: false, notes_stale: true, tasks: [{ id: 'notes_stale' }] } }]);
   await h.generateNotes();
   assert.equal(h.state.current.notes_stale, true);
   assert.equal(h.state.current.tasks[0].id, 'notes_stale');
-  assert.equal(h.state.current.reading_status, 'skimmed');
+  assert.equal(h.state.current.favorite, true);
 });
 
 test('loading figures adds exact source links to an already saved note preview', async () => {
@@ -1020,7 +982,7 @@ test('Word export uses saved research appendix without modifying notes and keeps
   h.state.current.resources_count = 1;
   h.api.prepareExport = async (id, notes) => {
     requested = { id, notes };
-    return { notes: '<!-- bioreader-research-appendix:v1 sha256=' + 'a'.repeat(64) + ' -->\n## 数据与代码\n\n- 与本文关系：复用已有数据\n- 名称：a\\_b &amp; c\n- 链接：[打开资源](https://example.org/data)\n<!-- /bioreader-research-appendix:v1 -->\n' };
+    return { notes: '<!-- bioreader-research-appendix:v1 sha256=' + 'a'.repeat(64) + ' -->\n## 数据与复现\n\n- 与本文关系：复用已有数据\n- 名称：a\\_b &amp; c\n- 链接：[打开资源](https://example.org/data)\n<!-- /bioreader-research-appendix:v1 -->\n' };
   };
   await h.exportWord();
   assert.deepEqual(requested, { id: A, notes: '' });
