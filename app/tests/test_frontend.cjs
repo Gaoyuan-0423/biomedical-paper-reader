@@ -34,7 +34,7 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -721,27 +721,26 @@ test('fit width accommodates landscape pages in a mixed-orientation PDF', async 
   assert.equal(h.currentPage(), 2);
 });
 
-test('library filters intersect favorites, tags, actionable tasks and search', () => {
+test('library filters intersect favorites, tags and search without filtering on tasks', () => {
   const h = harness();
   h.state.papers = [
     { id: A, title: 'Cancer atlas', favorite: true, tags: ['RNA-seq'], tasks: [{ id: 'evidence' }] },
     { id: B, title: 'Legacy paper', reading_status: 'reading', reading_decision: 'pending', tasks: [{ id: 'decision' }, { id: 'resume' }] },
     { id: C, title: 'Cancer methods', favorite: false, tags: ['RNA-seq'], tasks: [{ id: 'fulltext' }] },
   ];
-  h.state.taskFilter = 'any';
-  assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [A, C]);
-  h.state.favOnly = true; h.state.activeTag = 'RNA-seq'; h.state.taskFilter = 'evidence'; h.state.query = 'cancer';
+  assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [A, B, C]);
+  h.state.favOnly = true; h.state.activeTag = 'RNA-seq'; h.state.query = 'cancer';
   assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [A]);
   h.state.query = 'absent'; assert.equal(h.visiblePapers().length, 0);
 });
 
-test('legacy reading fields produce no visible badges or empty task strip', () => {
+test('retired reading and resource tasks produce no list badges or empty issue strip', () => {
   const h = harness();
-  Object.assign(h.state.current, { reading_status: 'reading', reading_decision: 'pending', tasks: [{ id: 'decision' }, { id: 'resume' }] });
+  Object.assign(h.state.current, { reading_status: 'reading', reading_decision: 'pending', resources_pending: 5, tasks: [{ id: 'decision' }, { id: 'resume' }, { id: 'resources' }] });
   h.state.papers = [h.state.current];
   h.renderList(); h.renderWorkflow();
-  assert.doesNotMatch(h.$('paper-list').innerHTML, /精读中|待判断|判断阅读价值|继续精读/);
-  assert.equal(h.$('task-total').textContent, '0 篇');
+  assert.doesNotMatch(h.$('paper-list').innerHTML, /精读中|待判断|判断阅读价值|继续精读|data-task|list-tasks/);
+  assert.equal(h.$('paper-tasks').innerHTML, '');
   assert.equal(h.$('paper-workflow').hidden, true);
   h.state.current.notes_incomplete = true;
   h.state.current.tasks.push({ id: 'notes_incomplete' });
@@ -749,6 +748,46 @@ test('legacy reading fields produce no visible badges or empty task strip', () =
   assert.equal(h.$('paper-workflow').hidden, false);
   assert.equal(h.$('notes-complete').hidden, false);
   assert.match(h.$('paper-tasks').innerHTML, /补完笔记/);
+  h.state.current.notes_stale = true;
+  h.state.current.tasks.push({ id: 'notes_stale' });
+  h.renderList(); h.renderWorkflow();
+  assert.equal(h.$('notes-reviewed').hidden, false);
+  assert.match(h.$('paper-tasks').innerHTML, /核对新材料/);
+  assert.doesNotMatch(h.$('paper-tasks').innerHTML, /data-task="resources"|核对数据与复现/);
+  assert.doesNotMatch(h.$('paper-list').innerHTML, /data-task|list-tasks|补完笔记|核对新材料/);
+});
+
+test('clear filters is available for search, tags and favorites and restores every paper', () => {
+  const h = harness();
+  h.state.papers = [
+    { id: A, title: 'Cancer atlas', favorite: true, tags: ['RNA-seq'] },
+    { id: B, title: 'Other paper', favorite: false, tags: [] },
+  ];
+  h.renderList();
+  assert.equal(h.$('clear-library-filters').hidden, true);
+  for (const filter of [{ query: 'absent' }, { activeTag: 'RNA-seq' }, { favOnly: true }, { query: 'cancer', activeTag: 'RNA-seq', favOnly: true }]) {
+    Object.assign(h.state, filter); h.$('search').value = h.state.query;
+    h.renderList();
+    assert.equal(h.$('clear-library-filters').hidden, false);
+    assert.ok(h.visiblePapers().length < 2);
+    if (filter.query === 'absent') assert.match(h.$('paper-list').innerHTML, /上方「清除筛选」/);
+    h.clearLibraryFilters();
+    assert.equal(h.$('search').value, '');
+    assert.equal(h.state.activeTag, ''); assert.equal(h.state.favOnly, false);
+    assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [A, B]);
+    assert.equal(h.$('clear-library-filters').hidden, true);
+    assert.equal(h.$('tag-chips').hidden, false);
+    assert.match(h.$('tag-chips').innerHTML, /data-tag="RNA-seq"/);
+  }
+});
+
+test('library markup keeps reset near visible filters and contains no retired task controls', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8');
+  assert.doesNotMatch(html, /library-refine|filter-task|task-total|active-filter-count|筛选与待办/);
+  assert.doesNotMatch(source, /library-refine|filter-task|task-total|active-filter-count|taskFilter/);
+  assert.ok(html.indexOf('id="search"') < html.indexOf('id="clear-library-filters"'));
+  assert.ok(html.indexOf('id="tag-chips"') < html.indexOf('id="clear-library-filters"'));
+  assert.ok(html.indexOf('id="clear-library-filters"') < html.indexOf('id="paper-list"'));
 });
 
 test('note review save waits for persistence and does not replace a new draft', async () => {

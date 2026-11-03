@@ -23,7 +23,7 @@ SKIP = re.compile(
 SKIP_HEADING = re.compile(r'未来|展望|建议|假设|示例|参考文献|阅读核查与资源记录|\b(?:references|future|recommendations|examples)\b', re.I)
 PREFERRED_HEADING = re.compile(r'数据|方法|代码|资源|\b(?:data|methods?|code|resources?|availability)\b', re.I)
 NOTICE = '来自精读笔记自动整理，尚未核对原文。笔记片段：\n'
-AUTO_NOTICE = '来自精读笔记自动整理，尚未核对原文。'
+AUTO_NOTICE = '来自精读笔记自动整理。'
 
 
 def accession_repository(accession):

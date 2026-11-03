@@ -8,9 +8,9 @@
 
 `main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 补发前核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。v0.3.3 现已正式发布。
 
-### 当前桌面预览版 v0.5.3
+### 当前桌面预览版 v0.5.4
 
-v0.5.3 继续使用 Pre-release 流程，下载附件为 `BioReader-v0.5.3-macos-arm64.zip` 与 `SHA256SUMS.txt`。使用 [v0.5.3 双语说明](releases/v0.5.3.md)，运行 `prepare_release.py v0.5.3`，将标签绑定到通过检查的源码提交，上传并核对附件后发布。保留 v0.3.4 稳定版，不运行稳定版工作流。
+v0.5.4 继续使用 Pre-release 流程，下载附件为 `BioReader-v0.5.4-macos-arm64.zip` 与 `SHA256SUMS.txt`。使用 [v0.5.4 双语说明](releases/v0.5.4.md)，运行 `prepare_release.py v0.5.4`，将标签绑定到通过检查的源码提交，上传并核对附件后发布。保留 v0.3.4 稳定版，不运行稳定版工作流。
 
 ### 桌面预览版 v0.4.0（历史）
 
@@ -66,9 +66,9 @@ ZIP 应保留 `BioReader.app` 的目录、权限和符号链接，解压后复�
 
 README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. Before the catch-up release on 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow. v0.3.3 has since been published.
 
-### Current desktop preview v0.5.3
+### Current desktop preview v0.5.4
 
-v0.5.3 remains a Pre-release. Use the [v0.5.3 notes](releases/v0.5.3.md), validate the version, bind the new tag to the checked source commit, and upload `BioReader-v0.5.3-macos-arm64.zip` plus `SHA256SUMS.txt` before publishing. Keep the stable v0.3.4 and do not run the stable-release workflow.
+v0.5.4 remains a Pre-release. Use the [v0.5.4 notes](releases/v0.5.4.md), validate the version, bind the new tag to the checked source commit, and upload `BioReader-v0.5.4-macos-arm64.zip` plus `SHA256SUMS.txt` before publishing. Keep the stable v0.3.4 and do not run the stable-release workflow.
 
 ### Desktop preview v0.4.0 (historical)
 

@@ -168,8 +168,6 @@ def annotate_paper(d: Path, meta: dict) -> dict:
     except SidecarError as exc:
         meta['resources_count'] = meta['resources_pending'] = None
         meta['storage_warnings'].append({'kind': exc.kind, 'message': exc.message})
-    if meta['resources_pending']:
-        meta['tasks'].append({'id': 'resources', 'label': '核对数据与复现', 'count': meta['resources_pending']})
     if meta['storage_warnings']:
         meta['tasks'].append({'id': 'storage', 'label': '检查本地记录'})
     return meta
@@ -597,7 +595,7 @@ def extract_paper_resources(paper_id: str):
                 atomic_json(d / ('resources.backup-' + uuid.uuid4().hex + '.json'), original)
             atomic_json(path, [record for record in original if record['id'] not in replaced_ids] + additions)
         if added:
-            message = f'已从精读笔记整理 {added} 条资源记录，均待核查原文'
+            message = f'已从精读笔记整理 {added} 条资源记录'
         elif candidates:
             message = '精读笔记中的资源已记录，已有内容保持不变'
         else:
@@ -629,8 +627,6 @@ def patch_paper_resource(paper_id: str, resource_id: str, body: ResourcePatch):
         if content_changed or 'status' in updates:
             record.pop('auto_extraction', None)
         source_changed = any(record[k] != old[k] for k in ('document_id', 'page'))
-        if content_changed and 'status' not in updates:
-            record['status'] = 'pending'
         if source_changed or updates.get('status') == 'verified':
             validate_source(d, meta, record)
             record['source_revision'] = source_revision(meta, record)

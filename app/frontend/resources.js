@@ -7,6 +7,7 @@
   let epoch = 0, busy = false, loading = false, extracting = false, opened = false, refreshPending = false, error = '';
   let geoCache = {}, geoBusy = new Set(), geoErrors = {}, geoExpanded = new Set();
   const AUTO_NOTE = '来自精读笔记自动整理，尚未核对原文。';
+  const AUTO_SOURCE_NOTE = '来自精读笔记自动整理。';
   const CONTENT_FIELDS = ['title', 'purpose', 'identifiers', 'conditions', 'sample_details', 'repository', 'accession', 'url', 'organism', 'tissue', 'modality', 'notes', 'quote'];
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const current = token => token === epoch;
@@ -70,10 +71,10 @@
     }
     return [...found].sort();
   }
-  function automatic(record) { return !!record.auto_extraction || String(record.notes || '').startsWith(AUTO_NOTE); }
+  function automatic(record) { return !!record.auto_extraction || String(record.notes || '').startsWith(AUTO_NOTE) || record.notes === AUTO_SOURCE_NOTE; }
   function readableNotes(record) {
     const notes = String(record.notes || '');
-    return notes === AUTO_NOTE || notes.startsWith(AUTO_NOTE + '笔记片段：') ? '' : notes;
+    return notes === AUTO_SOURCE_NOTE || notes === AUTO_NOTE || notes.startsWith(AUTO_NOTE + '笔记片段：') ? '' : notes;
   }
   function documents() {
     return paper ? (paper.has_file ? [{ id: 'main', name: '正文', pages: paper.pages }] : [])
@@ -103,7 +104,6 @@
       '<div class="resource-source-fields"><label>原文来源（可选）<select data-resource-field="document_id"' + disabled + '><option value="">不关联原文</option>' + docs.map(d => '<option value="' + esc(d.id) + '"' + (draft.document_id === d.id ? ' selected' : '') + '>' + esc(d.name) + '</option>').join('') + '</select></label>' +
       '<label>PDF 页码<input data-resource-field="page" type="number" min="1" max="' + (doc?.pages || 600) + '" value="' + esc(draft.page) + '"' + (!doc || busy ? ' disabled' : ' required') + '></label></div>' +
       textarea('quote', '原文摘录', draft.quote, 12000) + '</div></details>' +
-      '<p class="hint">保存后为“待核对”。核对仓库编号、链接及文献关联后，再标记为已核对。</p>' +
       (error ? '<p class="resource-error" role="alert">' + esc(error) + '</p>' : '') +
       '<div class="resource-actions"><button class="btn btn-primary" type="submit"' + disabled + '>' + (busy ? '正在保存…' : '保存资源') + '</button><button class="btn btn-ghost" type="button" data-resource-action="cancel"' + disabled + '>取消</button></div></form>';
   }
@@ -136,13 +136,12 @@
   }
   function rowHTML(record) {
     const mutable = mode === 'current' && paper, disabled = busy || draft ? ' disabled' : '';
-    const available = record.source_available !== false, verified = record.status === 'verified' && available && !record.source_changed;
+    const available = record.source_available !== false;
     const recordKey = esc(key(record));
     const details = [record.organism, record.tissue, record.modality].filter(Boolean);
     const related = (record.related_papers || []).filter(p => p.id !== (record.paper_id || paper?.id));
     const identifiers = record.identifiers || [record.accession, record.url].filter(Boolean).join('\n');
     return '<tr class="resource-row" data-resource-row="' + recordKey + '"><th scope="row"><div class="resource-title">' + richText(record.title) + '</div>' +
-      '<span class="resource-status' + (verified ? ' verified' : '') + '">' + (verified ? '已核对' : '待核对') + '</span>' +
       (automatic(record) ? '<span class="resource-auto">笔记整理</span>' : '') +
       (mode === 'all' ? '<div class="resource-paper">来自 ' + paperLink(record.paper_id, record.paper_title) + '</div>' : '') +
       (related.length ? '<details class="resource-related"><summary>其他关联论文 · ' + related.length + '</summary>' + related.map(p => paperLink(p.id, p.title)).join('') + '</details>' : '') +
@@ -153,10 +152,10 @@
       (readableNotes(record) ? cellText(readableNotes(record)) : '') +
       (record.quote ? '<blockquote>' + esc(record.quote) + '</blockquote>' : '') +
       (record.document_id ? '<p class="resource-source">' + esc(record.source_name || documents().find(d => d.id === record.document_id)?.name || '原文') + ' · PDF 第 ' + esc(record.page) + ' 页</p>' : '') +
-      (!available ? '<p class="resource-warning">原文来源已移除或页码失效，请编辑来源后重新核对。</p>' : record.source_changed ? '<p class="resource-warning">原文文件已更新，请重新核对资源与原文的关联。</p>' : '') +
+      (!available ? '<p class="resource-warning">原文来源已移除或页码失效，请编辑来源。</p>' : record.source_changed ? '<p class="resource-warning">原文文件已更新，请检查资源与原文的关联。</p>' : '') +
       '<div class="resource-actions">' +
       (record.document_id ? '<button type="button" class="btn" data-resource-action="jump" data-resource-key="' + recordKey + '"' + (!available || busy ? ' disabled' : '') + '>查看原文</button>' : '') +
-      (mutable ? '<label><select aria-label="资源核对状态" data-resource-status="' + recordKey + '"' + disabled + '><option value="pending"' + (!verified ? ' selected' : '') + '>待核对</option><option value="verified"' + (verified ? ' selected' : '') + (!available ? ' disabled' : '') + '>已核对</option></select></label><button type="button" class="btn btn-ghost danger-ghost" data-resource-action="delete" data-resource-key="' + recordKey + '"' + disabled + '>删除</button>' : '') +
+      (mutable ? '<button type="button" class="btn btn-ghost danger-ghost" data-resource-action="delete" data-resource-key="' + recordKey + '"' + disabled + '>删除</button>' : '') +
       '</div></div></details></td></tr>';
   }
   function render() {
@@ -165,7 +164,7 @@
     panel.innerHTML = '<div class="resource-toolbar"><div><strong>数据与复现</strong><p class="hint">积累可复用资源，追踪它们来自哪些论文。</p></div>' +
       '<div class="resource-toolbar-actions"><button class="btn" type="button" data-resource-action="extract" aria-busy="' + extracting + '" title="仅整理已保存且材料未变更的完整精读笔记中的明确资源"' + (!paper || mode !== 'current' || loading || busy || draft || !extractable() ? ' disabled' : '') + '>' + (extracting ? '正在整理…' : '从精读笔记整理') + '</button>' +
       '<button class="btn btn-primary" type="button" data-resource-action="add"' + (!paper || mode !== 'current' || loading || busy || draft ? ' disabled' : '') + '>添加资源</button></div></div>' +
-      (paper && mode === 'current' ? '<p class="hint resource-extract-hint">' + (extractable() ? '整理笔记中的资源、用途、使用条件与样品，结果仍需核对原文。' : '完整精读笔记保存并核对材料后，可在这里整理资源、用途、使用条件与样品。') + '</p>' : '') +
+      (paper && mode === 'current' ? '<p class="hint resource-extract-hint">' + (extractable() ? '整理笔记中的资源、用途、使用条件与样品，可随时编辑补充。' : '完整精读笔记保存且材料未变更时，可在这里整理资源、用途、使用条件与样品。') + '</p>' : '') +
       '<div class="resource-modes" role="group" aria-label="资源范围"><button class="btn' + (mode === 'current' ? ' active' : '') + '" type="button" data-resource-mode="current" aria-pressed="' + (mode === 'current') + '"' + (!paper || busy || draft ? ' disabled' : '') + '>当前论文</button><button class="btn' + (mode === 'all' ? ' active' : '') + '" type="button" data-resource-mode="all" aria-pressed="' + (mode === 'all') + '"' + (busy || draft ? ' disabled' : '') + '>全部论文</button></div>' +
       '<form class="resource-search" id="resource-search"><input type="search" aria-label="搜索数据与复现" placeholder="搜索编号、样品、用途…" value="' + esc(query) + '" maxlength="500"' + (busy || draft ? ' disabled' : '') + '><button class="btn" type="submit"' + (busy || draft ? ' disabled' : '') + '>搜索</button></form>' +
       (!paper ? '<p class="hint">在全库中搜索资源；打开一篇论文后可添加与编辑它的资源。</p>' : '') +
@@ -285,16 +284,11 @@
     if (draft.document_id && (!doc || !Number.isInteger(page) || page < 1 || page > doc.pages)) { error = '请选择有效的原文文件和 PDF 页码。'; render(); return; }
     const body = {};
     for (const name of [...CONTENT_FIELDS, 'kind', 'role', 'document_id']) body[name] = draft[name].trim();
-    body.page = page; body.status = 'pending';
+    body.page = page;
     await mutate(draft.id ? 'PATCH' : 'POST', draft.id, body);
   }
   async function change(event) {
     const element = event.target;
-    if (element.dataset.resourceStatus && !busy && !draft && mode === 'current') {
-      const record = records.find(r => key(r) === element.dataset.resourceStatus);
-      if (!record || !['pending', 'verified'].includes(element.value) || (element.value === 'verified' && record.source_available === false)) { render(); return; }
-      await mutate('PATCH', record.id, { status: element.value }); return;
-    }
     input(event);
     if (draft && !busy && element.dataset.resourceField === 'document_id') {
       draft.page = draft.document_id ? 1 : null; draft.detailsOpen = true; render();
