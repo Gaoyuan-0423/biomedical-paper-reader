@@ -30,11 +30,12 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord };'), context);
+    '  globalThis.app = { state, api, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   app.state.settings = { has_api_key: true, model: 'test' };
   app.api.figures = async () => [];
+  app.api.illustrate = async (id, notes) => ({ notes });
   $('read-mode').value = 'deep';
   return { ...app, $, context };
 }
@@ -232,4 +233,43 @@ test('Word export keeps the original paper and figures while switching', async (
   h.$('editor').value = 'different note'; saving.resolve({ id: A }); await exporting;
   assert.deepEqual(urls, ['/api/papers/' + A + '/figures/f001.png']);
   assert.equal(h.exported.sections[0].children[0].text, 'Original figure');
+});
+
+test('adding material prevents a paper switch until parsing completes', async () => {
+  const h = harness(), upload = deferred();
+  h.api.supplement = () => upload.promise;
+  const importing = h.changeSupplements([{ name: 'supp.pdf' }], false);
+  await new Promise(setImmediate);
+  h.state.pendingPaper = { id: B }; await h.openPaper();
+  assert.equal(h.state.current.id, A); assert.equal(h.state.materialBusy, true);
+  upload.resolve({ id: A, supplements: [{ id: C, filename: 'supp.pdf', pages: 2 }] });
+  await importing;
+  assert.equal(h.state.documentId, C); assert.equal(h.state.materialBusy, false);
+});
+
+test('automatic illustrations do not overwrite an edit made during the request', async () => {
+  const h = harness(), response = deferred();
+  h.$('editor').value = 'original'; h.api.illustrate = () => response.promise;
+  const illustrating = h.illustrateNotes(); h.$('editor').value = 'new edit';
+  response.resolve({ notes: 'original with figures' }); await illustrating;
+  assert.equal(h.$('editor').value, 'new edit');
+});
+
+test('Word export automatically adds available figures to a text-only note', async () => {
+  const h = harness(); mockWord(h);
+  h.$('editor').value = 'Text-only legacy note';
+  h.api.illustrate = async (id, notes) => ({ notes: notes + '\n\n![Figure 1](figure:f001)' });
+  h.context.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  await h.exportWord();
+  const blocks = h.exported.sections[0].children;
+  assert.ok(blocks.some(b => b.children && b.children.some(c => c.kind === 'ImageRun')));
+});
+
+test('Word export reports a missing image instead of silently exporting text only', async () => {
+  const h = harness(); mockWord(h);
+  h.$('editor').value = '![Figure 1](figure:f001)';
+  h.context.fetch = async () => ({ ok: false });
+  await h.exportWord();
+  assert.equal(h.exported, undefined);
+  assert.match(h.$('toast').textContent, /无法导出图片/);
 });

@@ -20,7 +20,7 @@ HEADING = re.compile(
     r"摘要|引言|背景|材料与方法|方法|结果|讨论|结论|参考文献)(?:\s|[:：.]|$)",
     re.I,
 )
-CAPTION = re.compile(r"^(?:fig(?:ure)?\.?\s*([sS]?\d+)|图\s*([sS]?\d+))\b[\s.:：|–—-]*", re.I)
+CAPTION = re.compile(r"^(?:(?:supplementary|supplemental|extended\s+data)\s+)?(?:fig(?:ure)?\.?\s*([sS]?\d+)|图\s*([sS]?\d+))\b[\s.:：|–—-]*", re.I)
 FOOTER = re.compile(r"\bet\s+al\b.*(?:doi\s*:|10\.\d{4,9}/)|^(?:copyright|©|downloaded from)", re.I)
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.I)
 RENDER_SCALE = 2
