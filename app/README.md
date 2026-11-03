@@ -42,6 +42,7 @@ pdfplumber、pypdfium2、Pillow）。
 ## 功能
 
 ### 文献库
+- **正文 + 补充 PDF**：先导入正文，再在该文献的阅读器中点击「添加补充 PDF」（支持多份）。下拉框在各文件间切换，页码分别计算；生成笔记联合读取正文、补充方法和补图，并保留文件来源。添加材料不会自动改写旧笔记，需重新生成以更新分析。重复文件会提示，错误文件不会替换正文。
 - **导入 PDF**：点击或拖拽（≤80MB）；几何解析器自动产出**双栏正确阅读顺序**的全文（含章节标题识别），
   并按图注锚定**提取全部主图与子图**（图注合并整理、期刊页眉页脚过滤、面板字母切分）。
 - **DOI 导入**：贴 DOI / doi.org 链接 → CrossRef 拉取标题、作者、期刊、年份、摘要建条目 →
@@ -73,7 +74,9 @@ pdfplumber、pypdfium2、Pillow）。
   逐条「导入」按钮直接按 DOI 入库；结果缓存 7 天，可强制刷新。
 
 ### 导出
-- **Markdown**：Markdown 源文件。
+- **自动配图**：新生成笔记按有效引用放图，遗漏的主图与补图自动补到对应图标题或「原文图集」；速读只配实际提到的图。旧的纯文字笔记在 Word、Markdown ZIP 和公众号导出时也会自动配图。若想在编辑器中保存配图版，使用导出菜单的「为已有笔记自动配图」（不调用 AI）。
+- 自动配图只使用图库中实际存在的图片，不等于视觉核查；没有提取出图片时仍需手动取图。图片文件缺失会提示，避免悄悄导出无图版本。
+- **Markdown + 图片**：默认导出 ZIP，包含 `report.md` 与 `assets/*.png`；引用使用相对路径，解压后一起移动即可显示图片。
 - **Word 文档**：docx 文档（标题层级、可编辑表格、代码、图片内嵌），按需加载本地 docx 库。
 - **复制到公众号**：「导出」菜单中按所选主题排版并复制（4 套主题，菜单内下拉切换），
   mdnice 同款管线（CSS 全内联、伪元素转 span、代码 `<br>`+NBSP 加固、外链转脚注）；
@@ -86,6 +89,7 @@ app/data/
 ├── settings.json          # API 配置
 └── papers/<id>/           # 每篇一个目录
     ├── paper.pdf / text.txt / meta.json
+    ├── supplements/<id>.pdf / <id>.txt  # 独立补充文件及文本，清单在 meta.json
     ├── figures.json       # 图片清单（bbox、图注、读图观察）
     └── figures/*.png      # 裁取的图片
 ```
@@ -99,6 +103,11 @@ app/data/
 | GET/POST | `/api/papers` | 列表 / 上传 PDF |
 | POST | `/api/import/doi` | CrossRef 元数据入库（重复 DOI 409） |
 | POST | `/api/papers/{id}/file` | 附加/替换 PDF（保留已有元数据与手动图） |
+| POST | `/api/papers/{id}/supplements` | 添加补充 PDF，保留正文和旧笔记 |
+| GET | `/api/papers/{id}/file?document_id=<id>` | 获取指定补充 PDF；main 为正文 |
+| DELETE | `/api/papers/{id}/supplements/{id}` | 移除补充，保留旧笔记引用的图片 |
+| POST | `/api/papers/{id}/notes/illustrate` | 为传入笔记自动配图，不调用 AI |
+| POST | `/api/papers/{id}/export.zip` | 导出 Markdown 及图片 |
 | POST | `/api/papers/{id}/enrich` | CrossRef 补全元数据 |
 | GET | `/api/papers/{id}/related` | S2 参考文献/被引（缓存 7 天） |
 | GET/POST | `/api/papers/{id}/figures` `/extract` `/crop` | 图库 / 重提取 / 手动裁图 |

@@ -16,13 +16,15 @@ import json
 import os
 import re
 import shutil
+import tempfile
+import hashlib
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel
@@ -30,6 +32,7 @@ from pypdf import PdfReader
 
 from external import LookupError_, fetch_crossref, fetch_related, normalize_doi
 from figures import crop_figure, load_figures, parse_pdf, save_figures
+from note_assets import illustrate_notes, markdown_bundle
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -137,6 +140,7 @@ def read_meta(d: Path) -> dict:
     meta.setdefault("has_file", (d / "paper.pdf").is_file())
     meta.setdefault("tags", [])
     meta.setdefault("journal", "")
+    meta.setdefault("supplements", [])
     return meta
 
 
@@ -208,22 +212,89 @@ def _year_from_pdf(pdf_path: Path) -> str:
         return ""
 
 
+def document_path(d: Path, document_id: str = "main") -> Path:
+    if document_id == "main":
+        return d / "paper.pdf"
+    if not re.fullmatch(r"[0-9a-f]{32}", document_id):
+        raise HTTPException(404, "补充材料不存在")
+    if not any(f["id"] == document_id for f in read_meta(d).get("supplements", [])):
+        raise HTTPException(404, "补充材料不存在")
+    return d / "supplements" / f"{document_id}.pdf"
+
+
+def store_document(d: Path, content: bytes, filename: str, document_id: str):
+    """Parse first; keep each source separate and preserve stable figure IDs."""
+    reader = PdfReader(io.BytesIO(content))
+    if reader.is_encrypted or not 0 < len(reader.pages) <= 600:
+        raise ValueError("PDF 必须未加密且包含 1–600 页")
+    previous = load_figures(d)
+    own = [f for f in previous if f.get("document_id", "main") == document_id]
+    others = [f for f in previous if f.get("document_id", "main") != document_id]
+    def identity(f):
+        return (f.get("label"), f.get("page"), tuple(f.get("bbox", [])), bool(f.get("parent")))
+    old_by_key = {identity(f): f for f in own if f.get("source") != "manual"}
+    occupied = [int(p.stem[1:]) for p in (d / "figures").glob("*.png") if re.fullmatch(r"[a-z]\d{3,6}", p.stem)]
+    counter = max(occupied + [int(f["id"][1:]) for f in previous], default=0)
+    with tempfile.TemporaryDirectory(prefix=".parse-", dir=d) as tmp:
+        stage = Path(tmp)
+        source = stage / "paper.pdf"
+        source.write_bytes(content)
+        try:
+            parsed = parse_pdf(source, stage / "figures")
+        except Exception:
+            parsed = _pypdf_fallback(source)
+        mapping = {}
+        fresh = []
+        for fig in parsed["figures"]:
+            old = old_by_key.get(identity(fig))
+            if old:
+                fid = old["id"]
+            else:
+                counter += 1
+                fid = f"{'f' if document_id == 'main' else 's'}{counter:03d}"
+            mapping[fig["id"]] = fid
+            item = dict(fig, id=fid, document_id=document_id, document_name="正文" if document_id == "main" else filename)
+            if old:
+                item["observation"] = old.get("observation", "")
+                if old.get("caption_edited"):
+                    item.update(caption=old["caption"], caption_edited=True)
+            fresh.append(item)
+        for item, original in zip(fresh, parsed["figures"]):
+            item["parent"] = mapping.get(original.get("parent"))
+        destination = d / "paper.pdf" if document_id == "main" else d / "supplements" / f"{document_id}.pdf"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        (d / "figures").mkdir(exist_ok=True)
+        for original in parsed["figures"]:
+            shutil.copy2(stage / "figures" / f"{original['id']}.png", d / "figures" / f"{mapping[original['id']]}.png")
+        # Manual crops are not overwritten by automatic extraction.
+        figures = others + fresh + [f for f in own if f.get("source") == "manual"]
+        text = "\n\n".join(f"[Page {page['number']}]\n{page['text']}" for page in parsed["pages"])
+        shutil.copy2(source, destination)
+        destination.with_suffix('.txt').write_text(text, "utf-8")
+        if document_id == "main":
+            (d / "text.txt").write_text(text, "utf-8")
+        save_figures(d, figures)
+    return parsed, figures
+
+
+def reading_text(d: Path, meta: dict) -> str:
+    sections = ["[正文 PDF：" + meta.get("filename", "") + "]\n" + (d / "text.txt").read_text("utf-8")]
+    offset = meta.get("pages", 0)
+    for supplement in meta.get("supplements", []):
+        text = document_path(d, supplement["id"]).with_suffix('.txt').read_text("utf-8")
+        text = re.sub(r"\[Page (\d+)\]", lambda m: f"[Page {offset + int(m[1])}] 补充材料 {supplement['filename']} 原文件第 {m[1]} 页", text)
+        sections.append(f"[补充 PDF：{supplement['filename']}]\n{text}")
+        offset += supplement["pages"]
+    return "\n\n".join(sections)
+
+
 def ingest_pdf(d: Path, content: bytes, filename: str, meta: dict) -> dict:
     """Write paper.pdf, extract column-ordered text + figures, merge metadata into `meta`.
     Existing non-empty metadata (e.g. from CrossRef) wins over PDF guesses."""
+    parsed, figures = store_document(d, content, filename, "main")
     pdf_path = d / "paper.pdf"
-    pdf_path.write_bytes(content)
-    figures_dir = d / "figures"
-    if figures_dir.is_dir():
-        shutil.rmtree(figures_dir, ignore_errors=True)
-    try:
-        parsed = parse_pdf(pdf_path, figures_dir)
-    except Exception:  # noqa: BLE001 - geometry parser is best effort
-        parsed = _pypdf_fallback(pdf_path)
-
+    full_text = (d / "text.txt").read_text("utf-8")
     pages_text = [f"[Page {p['number']}]\n{p['text']}" for p in parsed["pages"]]
-    full_text = "\n\n".join(pages_text)
-    (d / "text.txt").write_text(full_text, "utf-8")
 
     pdf_meta = parsed["metadata"]
     first_page = parsed["pages"][0]["text"] if parsed["pages"] else ""
@@ -236,11 +307,6 @@ def ingest_pdf(d: Path, content: bytes, filename: str, meta: dict) -> dict:
                 break
     head = "\n".join(pages_text[:3])
     doi_match = DOI_RE.search(head)
-
-    # Keep manual figures from a previous ingest of this paper (same geometry).
-    previous = [f for f in load_figures(d) if f.get("source") == "manual"]
-    figures = parsed["figures"] + previous
-    save_figures(d, figures)
 
     meta["filename"] = filename
     meta["has_file"] = True
@@ -332,6 +398,7 @@ class CropIn(BaseModel):
     bbox: list[float]
     label: Optional[str] = ""
     caption: Optional[str] = ""
+    document_id: str = "main"
 
 
 class FigurePatch(BaseModel):
@@ -485,6 +552,48 @@ async def attach_file(paper_id: str, file: UploadFile = File(...)):
     return meta
 
 
+@app.post("/api/papers/{paper_id}/supplements")
+async def add_supplement(paper_id: str, file: UploadFile = File(...)):
+    d = paper_dir(paper_id)
+    meta = read_meta(d)
+    filename = Path(file.filename or "supplement.pdf").name
+    content = await file.read()
+    _validate_pdf_upload(filename, content)
+    digest = hashlib.sha256(content).hexdigest()
+    if any(f.get("sha256") == digest for f in meta["supplements"]):
+        raise HTTPException(409, "该补充 PDF 已添加")
+    if (d / "paper.pdf").is_file() and hashlib.sha256((d / "paper.pdf").read_bytes()).hexdigest() == digest:
+        raise HTTPException(409, "该 PDF 已是正文，不必重复添加")
+    sid = uuid.uuid4().hex
+    try:
+        parsed, figures = store_document(d, content, filename, sid)
+    except Exception as exc:
+        raise HTTPException(400, f"补充 PDF 解析失败：{exc}") from exc
+    meta["supplements"].append({"id": sid, "filename": filename, "pages": len(parsed["pages"]),
+                                "sha256": digest, "warnings": parsed.get("warnings", [])})
+    meta["figures_count"] = len(figures)
+    write_meta(d, meta)
+    return meta
+
+
+@app.delete("/api/papers/{paper_id}/supplements/{document_id}")
+def delete_supplement(paper_id: str, document_id: str):
+    d = paper_dir(paper_id)
+    path = document_path(d, document_id)
+    if document_id == "main":
+        raise HTTPException(400, "此接口只移除补充材料")
+    meta = read_meta(d)
+    figures = [f for f in load_figures(d) if f.get("document_id", "main") != document_id]
+    # Keep image files referenced by existing notes. New readings no longer use them.
+    save_figures(d, figures)
+    path.unlink(missing_ok=True)
+    path.with_suffix('.txt').unlink(missing_ok=True)
+    meta["supplements"] = [f for f in meta["supplements"] if f["id"] != document_id]
+    meta["figures_count"] = len(figures)
+    write_meta(d, meta)
+    return meta
+
+
 @app.post("/api/papers/{paper_id}/enrich")
 async def enrich_paper(paper_id: str, body: EnrichIn):
     """Fill authors / year / journal (and title when asked) from CrossRef."""
@@ -536,11 +645,14 @@ async def related_papers(paper_id: str, refresh: int = 0, limit: int = 25):
 
 
 @app.get("/api/papers/{paper_id}/file")
-def get_paper_file(paper_id: str):
+def get_paper_file(paper_id: str, document_id: str = "main"):
     d = paper_dir(paper_id)
-    if not (d / "paper.pdf").is_file():
+    path = document_path(d, document_id)
+    if not path.is_file():
         raise HTTPException(404, "该文献尚未附加 PDF")
-    return FileResponse(d / "paper.pdf", media_type="application/pdf", filename=read_meta(d)["filename"] or "paper.pdf")
+    meta = read_meta(d)
+    filename = meta["filename"] if document_id == "main" else next(f["filename"] for f in meta["supplements"] if f["id"] == document_id)
+    return FileResponse(path, media_type="application/pdf", filename=filename or "paper.pdf")
 
 
 @app.get("/api/papers/{paper_id}/text")
@@ -556,6 +668,28 @@ def export_markdown(paper_id: str):
     return PlainTextResponse(meta.get("notes", ""), media_type="text/markdown; charset=utf-8", headers=headers)
 
 
+class NoteExport(BaseModel):
+    notes: str
+
+
+@app.post("/api/papers/{paper_id}/export.zip")
+def export_note_bundle(paper_id: str, body: NoteExport):
+    try:
+        d = paper_dir(paper_id)
+        notes = illustrate_existing_notes(paper_id, body)["notes"]
+        data = markdown_bundle(notes, d)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return Response(data, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="notes.zip"'})
+
+
+@app.post("/api/papers/{paper_id}/notes/illustrate")
+def illustrate_existing_notes(paper_id: str, body: NoteExport, all_figures: int = 0):
+    d = paper_dir(paper_id)
+    figures = [f for f in load_figures(d) if (d / 'figures' / f"{f['id']}.png").is_file()]
+    return {"notes": illustrate_notes(body.notes, figures, "deep" if all_figures else read_meta(d).get("notes_mode", "deep"), drop_unknown=False)}
+
+
 # ---------- figures ----------
 
 def _figure_file(d: Path, fid: str) -> Path:
@@ -567,8 +701,9 @@ def _figure_file(d: Path, fid: str) -> Path:
     return f
 
 
-def _next_fid(figures: list[dict]) -> str:
-    nums = [int(f["id"][1:]) for f in figures if re.fullmatch(r"[a-z]\d+", f.get("id", ""))]
+def _next_fid(figures: list[dict], d: Path) -> str:
+    nums = [int(p.stem[1:]) for p in (d / "figures").glob("*.png") if re.fullmatch(r"[a-z]\d{3,6}", p.stem)]
+    nums += [int(f["id"][1:]) for f in figures if re.fullmatch(r"[a-z]\d+", f.get("id", ""))]
     return f"m{(max(nums) + 1) if nums else 1:03d}"
 
 
@@ -584,28 +719,17 @@ def get_figures(paper_id: str):
 
 
 @app.post("/api/papers/{paper_id}/figures/extract")
-def reextract_figures(paper_id: str):
+def reextract_figures(paper_id: str, document_id: str = "main"):
     d = paper_dir(paper_id)
-    if not (d / "paper.pdf").is_file():
+    path = document_path(d, document_id)
+    if not path.is_file():
         raise HTTPException(400, "该文献尚未附加 PDF")
-    previous = load_figures(d)
+    meta = read_meta(d)
+    filename = meta["filename"] if document_id == "main" else next(f["filename"] for f in meta["supplements"] if f["id"] == document_id)
     try:
-        parsed = parse_pdf(d / "paper.pdf", d / "figures")
-    except Exception as exc:  # noqa: BLE001
+        parsed, figures = store_document(d, path.read_bytes(), filename, document_id)
+    except Exception as exc:
         raise HTTPException(400, f"图片提取失败：{exc}") from exc
-    # Manual crops and already-written observations survive a re-run (ReadBox merge rule).
-    by_label = {f["label"]: f for f in previous if f.get("observation") or f.get("caption_edited")}
-    figures = []
-    for f in parsed["figures"]:
-        old = by_label.get(f["label"])
-        if old:
-            f["observation"] = old.get("observation", "")
-            if old.get("caption_edited"):
-                f["caption"] = old["caption"]
-                f["caption_edited"] = True
-        figures.append(f)
-    figures.extend(f for f in previous if f.get("source") == "manual")
-    save_figures(d, figures)
     _update_count(d, figures)
     return {"figures": figures, "warnings": parsed.get("warnings", [])}
 
@@ -613,17 +737,20 @@ def reextract_figures(paper_id: str):
 @app.post("/api/papers/{paper_id}/figures/crop")
 def crop_manual_figure(paper_id: str, body: CropIn):
     d = paper_dir(paper_id)
-    if not (d / "paper.pdf").is_file():
+    source = document_path(d, body.document_id)
+    if not source.is_file():
         raise HTTPException(400, "该文献尚未附加 PDF")
     figures = load_figures(d)
-    fid = _next_fid(figures)
+    fid = _next_fid(figures, d)
     try:
-        fig = crop_figure(d / "paper.pdf", d / "figures", body.page, body.bbox, fid)
+        fig = crop_figure(source, d / "figures", body.page, body.bbox, fid)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     fig["label"] = (body.label or "").strip()[:60] or f"手动取图 {fid[1:].lstrip('0') or '1'}"
     fig["caption"] = (body.caption or "").strip()
     fig["observation"] = ""
+    fig["document_id"] = body.document_id
+    fig["document_name"] = "正文" if body.document_id == "main" else next(f["filename"] for f in read_meta(d)["supplements"] if f["id"] == body.document_id)
     figures.append(fig)
     save_figures(d, figures)
     _update_count(d, figures)
@@ -683,7 +810,7 @@ def _image_payload(path: Path) -> dict:
 def _figures_to_read(d: Path, settings: dict, force: bool) -> tuple[list[dict], list[dict]]:
     figures = load_figures(d)
     parents = [f for f in figures if not f.get("parent")]
-    parents.sort(key=lambda f: (f.get("page", 0), f.get("id", "")))
+    parents.sort(key=lambda f: (f.get("document_id", "main") != "main", f.get("document_id", "main"), f.get("page", 0), f.get("id", "")))
     limit = int(settings.get("max_figures") or 0)
     selected = parents[:limit] if limit else []
     todo = [f for f in selected if force or not f.get("observation")]
@@ -799,7 +926,7 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
         raise HTTPException(400, "mode 只能是 deep 或 quick")
     if not meta.get("has_file"):
         raise HTTPException(400, "该文献只有元数据，请先附加 PDF 再生成笔记")
-    text = (d / "text.txt").read_text("utf-8")
+    text = reading_text(d, meta)
     if len(text.strip()) < 200:
         raise HTTPException(400, "PDF 提取到的文本过少（可能是扫描件），无法生成笔记")
     budget = int(settings["max_chars"])
@@ -844,6 +971,9 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
             yield _sse({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
             return
         notes = "".join(chunks).strip()
+        if use_figures:
+            available = [f for f in figures_for_prompt if (d / "figures" / f"{f['id']}.png").is_file()]
+            notes = illustrate_notes(notes, available, mode)
         current = read_meta(d)
         current["notes"] = notes
         current["notes_mode"] = mode

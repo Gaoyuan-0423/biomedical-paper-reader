@@ -48,13 +48,22 @@
       fd.append('file', file);
       return api.json(paperPath(id, '/file'), { method: 'POST', body: fd });
     },
+    supplement(id, file) {
+      const fd = new FormData(); fd.append('file', file);
+      return api.json(paperPath(id, '/supplements'), { method: 'POST', body: fd });
+    },
+    removeSupplement: (id, doc) => {
+      if (!ID_RE.test(doc)) throw new Error('无效的补充文件 ID');
+      return api.json(paperPath(id, '/supplements/' + encodeURIComponent(doc)), { method: 'DELETE' });
+    },
+    illustrate: (id, notes, all) => api.jsonBody('POST', paperPath(id, '/notes/illustrate' + (all ? '?all_figures=1' : '')), { notes }),
     importDoi: (doi) => api.jsonBody('POST', '/api/import/doi', { doi }),
     enrich: (id, body) => api.jsonBody('POST', paperPath(id, '/enrich'), body),
     related: (id, refresh) => api.json(paperPath(id, '/related') + (refresh ? '?refresh=1' : '')),
     patch: (id, body) => api.jsonBody('PATCH', paperPath(id), body),
     remove: (id) => api.json(paperPath(id), { method: 'DELETE' }),
     figures: (id) => api.json(paperPath(id, '/figures')),
-    reextract: (id) => api.json(paperPath(id, '/figures/extract'), { method: 'POST' }),
+    reextract: (id, doc) => api.json(paperPath(id, '/figures/extract?document_id=' + encodeURIComponent(doc || 'main')), { method: 'POST' }),
     cropFigure: (id, body) => api.jsonBody('POST', paperPath(id, '/figures/crop'), body),
     patchFigure: (id, fid, body) => api.jsonBody('PATCH', figPath(id, fid), body),
     removeFigure: (id, fid) => api.json(figPath(id, fid), { method: 'DELETE' }),
@@ -67,6 +76,8 @@
     settings: null,
     papers: [],
     current: null,
+    documentId: 'main',
+    materialBusy: false,
     favOnly: false,
     activeTag: '',
     query: '',
@@ -401,7 +412,7 @@
 
   async function deleteCurrent() {
     const paper = state.current;
-    if (!paper) return;
+    if (!paper || state.materialBusy) return;
     if (state.generating) { toast('请先停止生成再删除文献', 'error'); return; }
     if (!await flushSave()) return;
     if (!confirm('确定删除「' + paper.title + '」及其笔记与图片？此操作不可恢复。')) return;
@@ -450,13 +461,16 @@
 
   async function attachPdfFile(file) {
     const paper = state.current;
-    if (!paper || !file) return;
+    if (!paper || !file || state.generating || state.materialBusy) return;
     toast('正在解析 ' + file.name + ' …');
     try {
       const meta = await api.attach(paper.id, file);
+      if (state.current !== paper) { updateListItem(meta); return; }
       state.current = meta;
+      state.documentId = 'main';
       updateListItem(meta);
       renderHead();
+      renderDocuments();
       loadPdf();
       await fetchFigures();
       $('btn-generate').disabled = false;
@@ -601,6 +615,8 @@
 
   function clearWorkspace() {
     setSaveStatus('');
+    $('document-toolbar').hidden = true;
+    $('btn-illustrate').disabled = true;
     $('editor').value = '';
     $('editor').disabled = true;
     renderPreview('');
@@ -626,6 +642,7 @@
     state.pendingPaper = null;
     if (!target) return;
     if (state.current && state.current.id === target.id) { state.openToken++; return; }
+    if (state.materialBusy) { toast('正在处理补充材料，请稍候'); return; }
     if (state.generating) { toast('正在生成笔记，请先停止再切换文献', 'error'); return; }
     const token = ++state.openToken;
     if (!await flushSave() || token !== state.openToken) return;
@@ -635,6 +652,7 @@
       // The reader may have continued typing while the new paper loaded.
       if (!await flushSave() || token !== state.openToken) return;
       state.current = full;
+      state.documentId = 'main';
     } catch (e) {
       if (token === state.openToken) toast('打开失败：' + e.message, 'error');
       return;
@@ -656,9 +674,67 @@
     state.figures = [];
     state.figDataUrls = {};
     renderFigures();
+    renderDocuments();
+    updateNoteActions();
     if (window.matchMedia('(max-width: 900px)').matches) setWorkspaceView('pdf');
     if (hasFile) loadPdf(); else clearPdf();
     fetchFigures();
+  }
+
+  function renderDocuments() {
+    const paper = state.current;
+    $('document-toolbar').hidden = !paper;
+    if (!paper) return;
+    const docs = [{ id: 'main', filename: '正文 · ' + (paper.filename || '尚未附加'), pages: paper.pages },
+      ...(paper.supplements || []).map(d => ({ ...d, filename: '补充 · ' + d.filename }))];
+    $('document-select').innerHTML = docs.map(d => '<option value="' + d.id + '">' + escapeHtml(d.filename) + '（' + d.pages + ' 页）</option>').join('');
+    $('document-select').value = state.documentId;
+    $('btn-remove-supplement').hidden = state.documentId === 'main';
+    $('btn-supplement').disabled = state.materialBusy || !!state.generating;
+  }
+
+  async function changeSupplements(files, remove) {
+    const paper = state.current;
+    if (!paper || state.materialBusy || state.generating) return;
+    if (!await flushSave() || state.current !== paper) return;
+    if (remove && !confirm('移除当前补充 PDF？已有笔记和其中的图片会保留；重新生成笔记时将不再使用这份补充材料。')) return;
+    state.materialBusy = true;
+    state.openToken++;
+    $('editor').readOnly = true;
+    renderDocuments();
+    try {
+      if (remove) {
+        state.current = await api.removeSupplement(paper.id, state.documentId);
+        state.documentId = 'main';
+      } else {
+        for (const file of files) {
+          toast('正在解析补充材料 ' + file.name + ' …');
+          state.current = await api.supplement(paper.id, file);
+          state.documentId = state.current.supplements.at(-1).id;
+        }
+      }
+      toast('材料已更新；重新生成笔记即可结合最新材料分析', 'ok');
+    } catch (e) { toast('补充材料处理失败：' + e.message, 'error'); }
+    finally {
+      state.materialBusy = false;
+      $('editor').readOnly = false;
+      renderDocuments(); renderHead(); updateListItem(state.current);
+      await fetchFigures(); renderFigures(); loadPdf();
+    }
+  }
+
+  async function illustrateNotes() {
+    const paper = state.current;
+    if (!paper || state.generating || state.materialBusy) return;
+    const original = $('editor').value;
+    try {
+      const result = await api.illustrate(paper.id, original, true);
+      if (state.current !== paper || $('editor').value !== original) { toast('笔记已变化，请再次点击自动配图'); return; }
+      $('editor').value = result.notes;
+      scheduleSave(); renderPreview();
+      await flushSave();
+      toast(result.notes === original ? '没有需要补入的图片；可先检查图库' : '已自动补入原文图片', 'ok');
+    } catch (e) { toast('自动配图失败：' + e.message, 'error'); }
   }
 
   // ---------- notes ----------
@@ -749,6 +825,7 @@
     $('btn-export-md').disabled = empty;
     $('btn-export-word').disabled = empty;
     $('btn-copy-wechat').disabled = empty;
+    $('btn-illustrate').disabled = empty || !!state.generating;
   }
 
   function setGenerating(on, message, progress) {
@@ -773,7 +850,7 @@
 
   async function generateNotes() {
     const paper = state.current;
-    if (!paper || state.generating) return;
+    if (!paper || state.generating || state.materialBusy) return;
     if (!state.settings || !state.settings.has_api_key) {
       toast('请先在「设置」中填写 API Key', 'error');
       openSettings();
@@ -792,6 +869,7 @@
     const mode = $('read-mode').value;
     const ctrl = new AbortController();
     state.generating = ctrl;
+    renderDocuments();
     setSaveStatus('正在生成…', 'pending');
     setGenerating(true, '正在连接 ' + state.settings.model + ' …');
     switchTab('preview');
@@ -875,6 +953,7 @@
       toast(stopped ? '已停止生成' + (acc ? '，已保留部分内容' : '') : '生成未完成：' + e.message, stopped ? '' : 'error');
     } finally {
       state.generating = null;
+      renderDocuments(); updateNoteActions();
       setGenerating(false);
     }
   }
@@ -887,9 +966,14 @@
     const paper = state.current;
     if (!paper) return;
     const notes = $('editor').value;
-    await flushSave();
     if (!notes.trim()) { toast('还没有笔记可导出'); return; }
-    downloadBlob(safeFilename(paper.title) + '.md', notes, 'text/markdown;charset=utf-8');
+    try {
+      const resp = await fetch(paperPath(paper.id, '/export.zip'), { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes }) });
+      if (!resp.ok) throw new Error((await resp.json()).detail || '导出失败');
+      downloadRaw(safeFilename(paper.title) + '.zip', await resp.blob());
+      toast('已导出 Markdown 和图片；解压后打开 report.md', 'ok');
+    } catch (e) { toast('导出失败：' + e.message, 'error'); }
   }
 
   async function figureArrayBuffer(fid, paperId) {
@@ -915,7 +999,7 @@
   async function exportWord() {
     const paper = state.current;
     if (!paper) return;
-    const md = $('editor').value;
+    let md = $('editor').value;
     const figures = state.figures.slice();
     await flushSave();
     if (!md.trim()) { toast('还没有笔记可导出'); return; }
@@ -924,6 +1008,7 @@
     if (!ok || !window.docx) { toast('Word 导出组件加载失败，请重新启动应用', 'error'); return; }
     const D = window.docx;
     try {
+      md = (await api.illustrate(paper.id, md)).notes;
       const figRefs = figureMarkdownRefs(md);
       const buffers = {};
       const figMeta = {};
@@ -932,7 +1017,7 @@
           buffers[m[2]] = await figureArrayBuffer(m[2], paper.id);
           const fig = figures.find((f) => f.id === m[2]);
           figMeta[m[2]] = fig || { label: m[1], caption: '', page: 0 };
-        } catch (e) { /* broken image is skipped below */ }
+        } catch (e) { throw new Error('无法导出图片：' + e.message); }
       }));
 
       const children = [];
@@ -1027,14 +1112,15 @@
     if (name === 'edit') $('editor').focus();
   }
 
-  async function figureDataUrl(fid) {
-    if (state.figDataUrls[fid]) return state.figDataUrls[fid];
-    const resp = await fetch(api.figUrl(state.current.id, fid));
+  async function figureDataUrl(fid, paperId) {
+    const cacheKey = paperId + ":" + fid;
+    if (state.figDataUrls[cacheKey]) return state.figDataUrls[cacheKey];
+    const resp = await fetch(api.figUrl(paperId, fid));
     if (!resp.ok) throw new Error('figure ' + fid + ' unavailable');
     const blob = await resp.blob();
     return await new Promise((resolve, reject) => {
       const fr = new FileReader();
-      fr.onload = () => { state.figDataUrls[fid] = fr.result; resolve(fr.result); };
+      fr.onload = () => { state.figDataUrls[cacheKey] = fr.result; resolve(fr.result); };
       fr.onerror = () => reject(new Error('read failed'));
       fr.readAsDataURL(blob);
     });
@@ -1042,16 +1128,19 @@
 
   async function buildWechatHtml() {
     // Embed figure images as data URLs so the copied HTML survives outside the app.
-    const md = $('editor').value;
-    if (!md.trim()) return '';
+    const paper = state.current;
+    const original = $('editor').value;
+    if (!paper || !original.trim()) return '';
+    const theme = $('wechat-theme').value;
+    const md = (await api.illustrate(paper.id, original)).notes;
     let prepared = md;
     for (const m of figureMarkdownRefs(md)) {
       try {
-        const url = await figureDataUrl(m[2]);
+        const url = await figureDataUrl(m[2], paper.id);
         prepared = prepared.split('(figure:' + m[2] + ')').join('(' + url + ')');
-      } catch (e) { /* leave the placeholder */ }
+      } catch (e) { throw new Error('图片无法加载：' + e.message); }
     }
-    return WechatExport.render(prepared, $('wechat-theme').value);
+    return WechatExport.render(prepared, theme);
   }
 
   async function copyWechat() {
@@ -1102,7 +1191,7 @@
       return '<div class="fig-card' + child + '" data-fid="' + f.id + '">' +
         '<button class="fig-thumb" data-zoom="' + f.id + '" aria-label="放大 ' + escapeHtml(f.label) + '"><img loading="lazy" src="' + api.figUrl(state.current.id, f.id) + '" alt="' + escapeHtml(f.label) + '"></button>' +
         '<div class="fig-body">' +
-        '<div class="fig-label">' + escapeHtml(f.label) + '<span class="badge">' + (f.source === 'manual' ? '手动' : '自动') + '</span><span class="badge">p.' + f.page + '</span></div>' +
+        '<div class="fig-label">' + escapeHtml(f.label) + '<span class="badge">' + escapeHtml(f.document_name || '正文') + '</span><span class="badge">' + (f.source === 'manual' ? '手动' : '自动') + '</span><span class="badge">p.' + f.page + '</span></div>' +
         '<div class="fig-caption" data-caption="' + f.id + '" title="点击展开 / 收起" role="button" tabindex="0" aria-expanded="false">' + escapeHtml(f.caption || '（无图注）') + '</div>' + obs +
         '<div class="fig-actions">' +
         '<button class="btn btn-read" data-read-fig="' + f.id + '" title="让读图模型观察这张图，可带追问">' + icon('eye') + ' 读图</button>' +
@@ -1210,7 +1299,7 @@
     if (!state.current) return;
     toast('正在重新提取图片 …');
     try {
-      const res = await api.reextract(state.current.id);
+      const res = await api.reextract(state.current.id, state.documentId);
       state.figures = res.figures;
       state.figDataUrls = {};
       renderFigures();
@@ -1329,7 +1418,7 @@
     try {
       // Fetch the bytes through the validated path helper, then hand pdf.js a
       // buffer — no dynamically built URL is ever passed to getDocument().
-      const resp = await fetch(paperPath(paper.id, '/file'));
+      const resp = await fetch(paperPath(paper.id, '/file?document_id=' + encodeURIComponent(state.documentId)));
       if (!resp.ok) throw new Error('PDF 下载失败 HTTP ' + resp.status);
       const data = await resp.arrayBuffer();
       const doc = await pdfjsLib.getDocument({ data, cMapUrl: 'vendor/cmaps/', cMapPacked: true, standardFontDataUrl: 'vendor/standard_fonts/' }).promise;
@@ -1514,7 +1603,7 @@
     if (!state.current) return;
     toast('正在截取第 ' + page + ' 页的选区 …');
     try {
-      const fig = await api.cropFigure(state.current.id, { page, bbox, label: '', caption: '' });
+      const fig = await api.cropFigure(state.current.id, { page, bbox, label: '', caption: '', document_id: state.documentId });
       state.figures.push(fig);
       if (state.tab === 'figures') renderFigures();
       else renderFigures();
@@ -1689,6 +1778,15 @@
     $('head-star').addEventListener('click', () => state.current && toggleFavorite(state.current.id));
     $('btn-delete').addEventListener('click', deleteCurrent);
     $('btn-enrich').addEventListener('click', enrichCurrent);
+    $('btn-supplement').addEventListener('click', () => $('supplement-input').click());
+    $('supplement-input').addEventListener('change', (e) => { const files = [...e.target.files]; e.target.value = ''; if (files.length) changeSupplements(files, false); });
+    $('btn-remove-supplement').addEventListener('click', () => changeSupplements([], true));
+    $('document-select').addEventListener('change', (e) => {
+      const id = e.target.value;
+      if (id !== 'main' && !(state.current.supplements || []).some(d => d.id === id)) return;
+      state.documentId = id; renderDocuments(); loadPdf();
+    });
+    $('btn-illustrate').addEventListener('click', illustrateNotes);
     $('btn-generate').addEventListener('click', generateNotes);
     $('btn-stop').addEventListener('click', stopGenerating);
     $('btn-export-md').addEventListener('click', exportMarkdown);

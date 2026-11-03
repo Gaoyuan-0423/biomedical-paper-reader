@@ -130,13 +130,20 @@ def build_messages(
         header_lines.append(f"期刊：{meta['journal']}")
     if direction:
         header_lines.append(f"读者研究方向：{direction}（第 1 与第 9 模块的相关度判断以此为准）")
-    header_lines.append(f"页数：{meta.get('pages', '?')}；提取文本约 {len(paper_text)} 字符")
+    supplement_pages = sum(f.get("pages", 0) for f in meta.get("supplements", []))
+    header_lines.append(f"正文页数：{meta.get('pages', '?')}；补充页数：{supplement_pages}；提取文本约 {len(paper_text)} 字符")
 
+    supplements = meta.get("supplements", [])
+    if supplements:
+        header_lines.append("本篇同时提供正文和以下补充 PDF：" + "；".join(f["filename"] for f in supplements))
+        header_lines.append("正文与补充材料分别标明来源；结合补充方法、对照和补图解释对应主结论，不把未读取内容称为已经核查。")
     if figures:
         lines = ["", "## 自动提取的图片清单（题注；带「视觉观察」的条目由读图模型生成，需结合图注核对）"]
         for f in figures:
             cap = " ".join((f.get("caption") or "").split())
-            lines.append(f"- {f['label']}（第 {f['page']} 页）：{cap[:600] or '无题注'}")
+            source = f.get("document_name") or "正文"
+            lines.append(f"- {f['label']}（{source}，原文件第 {f['page']} 页）：{cap[:600] or '无题注'}")
+            lines.append(f"  - 插图引用：![{f['label']}](figure:{f['id']})")
             obs = " ".join((f.get("observation") or "").split())
             if obs:
                 lines.append(f"  - 视觉观察：{obs[:1200]}")
@@ -149,7 +156,7 @@ def build_messages(
         + paper_text
         + "\n<<<论文文本结束>>>"
     )
-    system = {"role": "system", "content": SYSTEM_PROMPT + "\n\n" + structure}
+    system = {"role": "system", "content": SYSTEM_PROMPT + "\n\n" + structure + "\n\n在对应图的解释处独立一行插入清单给出的 Markdown 插图引用，严格使用原 ID，不编造路径或 ID；速读只插入实际讨论的图。插入图片不等于完成视觉核查：无视觉观察时仍只依据正文与图注，不补写图内视觉细节。"}
     if images:
         parts: list[dict] = [{"type": "text", "text": user + "\n\n上面清单中的部分图片以截图形式附在本消息末尾，顺序与清单一致，请结合图注解读。"}]
         for img in images:

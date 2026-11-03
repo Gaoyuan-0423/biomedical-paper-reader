@@ -38,6 +38,7 @@
         </div>
         <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
         <input type="file" id="attach-input" accept="application/pdf,.pdf" hidden>
+        <input type="file" id="supplement-input" accept="application/pdf,.pdf" multiple hidden>
         <div class="search-row"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="search" type="search" aria-label="搜索文献" placeholder="搜索标题、作者、标签…"><kbd title="快捷键">⌘ K</kbd></div>
         <div class="library-filters" aria-label="文献筛选">
           <button id="btn-all-filter" class="filter-btn active" aria-pressed="true">全部文献</button>
@@ -70,6 +71,11 @@
           </div>
           <button id="pdf-crop" class="btn btn-ghost" title="框选页面中的图表并保存到图库" disabled><svg class="icon" aria-hidden="true"><use href="#i-crop"></use></svg>取图</button>
         </div>
+        <div class="document-toolbar" id="document-toolbar" hidden>
+          <select id="document-select" aria-label="阅读文件"></select>
+          <button id="btn-supplement" class="btn btn-ghost">添加补充 PDF</button>
+          <button id="btn-remove-supplement" class="btn btn-ghost" hidden>移除补充</button>
+        </div>
         <div class="pdf-scroll" id="pdf-scroll">
           <div id="pdf-pages" class="pdf-pages"></div>
           <div class="empty pdf-welcome" id="pdf-empty">
@@ -95,7 +101,8 @@
           </div>
           <details id="export-menu" class="export-menu"><summary class="btn btn-ghost"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>导出</summary><div class="export-popover">
             <div class="popover-label">保存笔记</div>
-            <button id="btn-export-md" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span>Markdown</span><small>.md</small></button>
+            <button id="btn-illustrate" class="btn menu-action" disabled>为已有笔记自动配图</button>
+            <button id="btn-export-md" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span>Markdown + 图片</span><small>.zip</small></button>
             <button id="btn-export-word" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span>Word 文档</span><small>.docx</small></button>
             <div class="popover-divider"></div><label class="popover-label" for="wechat-theme">公众号排版</label><select id="wechat-theme" aria-label="公众号主题"></select>
             <button id="btn-copy-wechat" class="btn btn-wechat" disabled><svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>复制到公众号</button>
