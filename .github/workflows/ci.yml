@@ -13,11 +13,18 @@ jobs:
         with:
           python-version: '3.11'
       - name: Link, anchor and recorded-artifact integrity
-        run: python3 evals/validate_repo.py
+        run: |
+          python3 evals/validate_repo.py --self-test
+          python3 evals/validate_repo.py
       - name: Reading-record validator regression
         run: python3 evals/test_reading_record.py -v
       - name: Release metadata regression
         run: python3 evals/test_prepare_release.py -v
+      - name: Frontend syntax and async reading regressions
+        run: |
+          node --check app/frontend/app.js
+          node --check app/frontend/export.js
+          node --test app/tests/test_frontend.cjs
       - name: Helper scripts compile
         run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py
 

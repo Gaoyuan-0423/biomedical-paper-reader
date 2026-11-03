@@ -79,6 +79,9 @@
     generating: null,
     saveTimer: null,
     pendingSave: null,
+    saveInFlight: null,
+    openToken: 0,
+    pdfRenderTasks: new Set(),
     figures: [],
     figDataUrls: {},
     figReading: false,
@@ -399,10 +402,13 @@
   async function deleteCurrent() {
     const paper = state.current;
     if (!paper) return;
+    if (state.generating) { toast('请先停止生成再删除文献', 'error'); return; }
+    if (!await flushSave()) return;
     if (!confirm('确定删除「' + paper.title + '」及其笔记与图片？此操作不可恢复。')) return;
     try {
       await api.remove(paper.id);
       state.papers = state.papers.filter((p) => p.id !== paper.id);
+      state.openToken++;
       state.current = null;
       clearWorkspace();
       renderList();
@@ -619,13 +625,18 @@
     const target = state.pendingPaper;
     state.pendingPaper = null;
     if (!target) return;
+    if (state.current && state.current.id === target.id) { state.openToken++; return; }
     if (state.generating) { toast('正在生成笔记，请先停止再切换文献', 'error'); return; }
-    await flushSave();
+    const token = ++state.openToken;
+    if (!await flushSave() || token !== state.openToken) return;
     try {
       const full = await api.paper(target.id);
+      if (token !== state.openToken) return;
+      // The reader may have continued typing while the new paper loaded.
+      if (!await flushSave() || token !== state.openToken) return;
       state.current = full;
     } catch (e) {
-      toast('打开失败：' + e.message, 'error');
+      if (token === state.openToken) toast('打开失败：' + e.message, 'error');
       return;
     }
     renderList();
@@ -642,6 +653,9 @@
     $('btn-copy-wechat').disabled = !state.current.notes;
     history.replaceState(null, '', '?paper=' + encodeURIComponent(state.current.id));
     state.relatedData = null;
+    state.figures = [];
+    state.figDataUrls = {};
+    renderFigures();
     if (window.matchMedia('(max-width: 900px)').matches) setWorkspaceView('pdf');
     if (hasFile) loadPdf(); else clearPdf();
     fetchFigures();
@@ -692,32 +706,49 @@
     clearTimeout(state.saveTimer);
     state.pendingSave = { id, notes };
     setSaveStatus('待保存', 'pending');
+    updateNoteActions();
     state.saveTimer = setTimeout(flushSave, 800);
   }
 
   async function flushSave() {
     clearTimeout(state.saveTimer);
-    const pending = state.pendingSave;
-    if (!pending) return true;
-    state.pendingSave = null;
-    setSaveStatus('正在保存…', 'pending');
-    try {
-      const updated = await api.patch(pending.id, { notes: pending.notes });
-      updateListItem(updated);
-      if (state.current && state.current.id === pending.id) {
-        state.current.notes_updated_at = updated.notes_updated_at;
-        renderHead();
-        $('btn-export-md').disabled = !pending.notes;
-        $('btn-export-word').disabled = !pending.notes;
-        $('btn-copy-wechat').disabled = !pending.notes;
-        if (!state.pendingSave && $('editor').value === pending.notes) setSaveStatus('已保存', 'saved');
+    // All callers await the same drain: older writes cannot finish after newer ones.
+    if (state.saveInFlight) return state.saveInFlight;
+    state.saveInFlight = drainSaves();
+    try { return await state.saveInFlight; }
+    finally { state.saveInFlight = null; }
+  }
+
+  async function drainSaves() {
+    while (state.pendingSave) {
+      const pending = state.pendingSave;
+      state.pendingSave = null;
+      setSaveStatus('正在保存…', 'pending');
+      try {
+        const updated = await api.patch(pending.id, { notes: pending.notes });
+        updateListItem(updated);
+        if (state.current && state.current.id === pending.id) {
+          state.current.notes_updated_at = updated.notes_updated_at;
+          renderHead();
+          updateNoteActions();
+          if (!state.pendingSave && $('editor').value === pending.notes) setSaveStatus('已保存', 'saved');
+        }
+      } catch (e) {
+        // Retain the newest draft for Cmd/Ctrl+S or the next autosave attempt.
+        if (!state.pendingSave) state.pendingSave = pending;
+        if (state.current && state.current.id === pending.id) setSaveStatus('保存失败 · 按 ⌘/Ctrl+S 重试', 'error');
+        toast('保存笔记失败，内容仍保留在编辑器中：' + e.message, 'error');
+        return false;
       }
-      return true;
-    } catch (e) {
-      if (state.current && state.current.id === pending.id) setSaveStatus('保存失败', 'error');
-      toast('保存笔记失败：' + e.message, 'error');
-      return false;
     }
+    return true;
+  }
+
+  function updateNoteActions() {
+    const empty = !$('editor').value.trim();
+    $('btn-export-md').disabled = empty;
+    $('btn-export-word').disabled = empty;
+    $('btn-copy-wechat').disabled = empty;
   }
 
   function setGenerating(on, message, progress) {
@@ -754,7 +785,9 @@
       return;
     }
     if ((paper.notes || '').trim() && !confirm('这篇文献已有笔记，重新生成会覆盖当前内容。继续？')) return;
-    await flushSave();
+    if (!await flushSave() || state.current !== paper || state.generating) return;
+    state.openToken++; // Invalidate any earlier paper-open request.
+    const previousNotes = $('editor').value;
 
     const mode = $('read-mode').value;
     const ctrl = new AbortController();
@@ -769,6 +802,7 @@
     let acc = '';
     let buffer = '';
     let lastRender = 0;
+    let completed = false;
     try {
       const resp = await fetch(paperPath(paper.id, '/read?mode=' + encodeURIComponent(mode)), { method: 'POST', signal: ctrl.signal });
       if (!resp.ok) {
@@ -803,11 +837,14 @@
             } else if (event.type === 'error') {
               throw new Error(event.message);
             } else if (event.type === 'done') {
+              if (typeof event.notes !== 'string') throw new Error('笔记完成响应无效');
               acc = event.notes;
+              completed = true;
             }
           }
         }
       }
+      if (!completed) throw new Error('连接提前结束，未收到保存确认');
       paper.notes = acc;
       paper.notes_mode = mode;
       paper.notes_updated_at = new Date().toISOString();
@@ -821,22 +858,21 @@
       setSaveStatus('已保存', 'saved');
       toast('笔记生成完成', 'ok');
     } catch (e) {
-      editor.value = acc;
-      renderPreview(acc);
-      if (e.name === 'AbortError') {
-        setSaveStatus(acc ? '正在保存…' : '已停止', acc ? 'pending' : '');
-        toast('已停止生成' + (acc ? '，已保留部分内容' : ''));
-        if (acc) {
-          paper.notes = acc;
-          api.patch(paper.id, { notes: acc }).then((updated) => {
-            updateListItem(updated);
-            if (state.current && state.current.id === paper.id) setSaveStatus('已保存', 'saved');
-          }).catch(() => { if (state.current && state.current.id === paper.id) setSaveStatus('保存失败', 'error'); });
-        }
+      const stopped = e.name === 'AbortError';
+      // A failed request must not erase the previous note. Partial output is
+      // saved through the same queue as manual edits, before switching is allowed.
+      editor.value = acc || previousNotes;
+      paper.notes = editor.value;
+      renderPreview();
+      updateNoteActions();
+      if (acc) {
+        state.pendingSave = { id: paper.id, notes: acc };
+        const saved = await flushSave();
+        if (saved) setSaveStatus('部分内容已保存 · 未完成', 'saved');
       } else {
-        setSaveStatus(acc ? '内容尚未保存' : '生成失败', 'error');
-        toast('生成失败：' + e.message, 'error', 6000);
+        setSaveStatus(previousNotes ? '已保留原笔记' : (stopped ? '已停止' : '生成失败'), previousNotes ? 'saved' : '');
       }
+      toast(stopped ? '已停止生成' + (acc ? '，已保留部分内容' : '') : '生成未完成：' + e.message, stopped ? '' : 'error');
     } finally {
       state.generating = null;
       setGenerating(false);
@@ -850,23 +886,38 @@
   async function exportMarkdown() {
     const paper = state.current;
     if (!paper) return;
-    await flushSave();
     const notes = $('editor').value;
+    await flushSave();
     if (!notes.trim()) { toast('还没有笔记可导出'); return; }
     downloadBlob(safeFilename(paper.title) + '.md', notes, 'text/markdown;charset=utf-8');
   }
 
-  async function figureArrayBuffer(fid) {
-    const resp = await fetch(api.figUrl(state.current.id, fid));
+  async function figureArrayBuffer(fid, paperId) {
+    const resp = await fetch(api.figUrl(paperId, fid));
     if (!resp.ok) throw new Error('图片 ' + fid + ' 加载失败');
     return await resp.arrayBuffer();
+  }
+
+  function wordTable(token, D) {
+    return new D.Table({
+      width: { size: 100, type: D.WidthType.PERCENTAGE },
+      rows: [token.header, ...token.rows].map((cells, index) => new D.TableRow({
+        tableHeader: index === 0,
+        children: cells.map((cell) => new D.TableCell({
+          children: [new D.Paragraph({
+            children: [new D.TextRun({ text: cell.text, bold: index === 0, size: 22 })],
+          })],
+        })),
+      })),
+    });
   }
 
   async function exportWord() {
     const paper = state.current;
     if (!paper) return;
-    await flushSave();
     const md = $('editor').value;
+    const figures = state.figures.slice();
+    await flushSave();
     if (!md.trim()) { toast('还没有笔记可导出'); return; }
     toast('正在生成 Word …');
     const ok = await ensureDocx();
@@ -878,8 +929,8 @@
       const figMeta = {};
       await Promise.all(figRefs.map(async (m) => {
         try {
-          buffers[m[2]] = await figureArrayBuffer(m[2]);
-          const fig = state.figures.find((f) => f.id === m[2]);
+          buffers[m[2]] = await figureArrayBuffer(m[2], paper.id);
+          const fig = figures.find((f) => f.id === m[2]);
           figMeta[m[2]] = fig || { label: m[1], caption: '', page: 0 };
         } catch (e) { /* broken image is skipped below */ }
       }));
@@ -901,8 +952,20 @@
         children.push(new D.Paragraph({ children: runs, spacing: { after: 120 } }));
       };
 
-      for (const line of md.split('\n')) {
+      const lines = md.split('\n');
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const line = lines[lineIndex];
         const t = line.trim();
+        // Use the same GFM parser as the preview, including escaped pipes and
+        // tables without outer pipes. Preserve real editable Word cells.
+        if (window.marked && t.includes('|') && /^[\s|:-]+$/.test(lines[lineIndex + 1] || '')) {
+          const token = marked.lexer(lines.slice(lineIndex).join('\n'), { gfm: true })[0];
+          if (token && token.type === 'table') {
+            children.push(wordTable(token, D));
+            lineIndex += token.raw.replace(/\n$/, '').split('\n').length - 1;
+            continue;
+          }
+        }
         const fm = /^!\[([^\]]*)\]\(figure:([a-z]\d+)\)$/.exec(t);
         if (fm && buffers[fm[2]]) {
           const fig = figMeta[fm[2]];
@@ -1011,10 +1074,14 @@
 
   // ---------- figures ----------
   async function fetchFigures() {
-    if (!state.current) return [];
+    const paper = state.current;
+    if (!paper) return [];
     try {
-      state.figures = await api.figures(state.current.id);
+      const figures = await api.figures(paper.id);
+      if (state.current !== paper) return [];
+      state.figures = figures;
     } catch (e) {
+      if (state.current !== paper) return [];
       state.figures = [];
     }
     if (state.tab === 'figures') renderFigures();
@@ -1236,6 +1303,7 @@
 
   function clearPdf() {
     state.renderToken++;
+    cancelPdfRenders();
     if (state.pdf) { try { state.pdf.destroy(); } catch (e) { /* ignore */ } }
     state.pdf = null;
     state.pageWrappers = [];
@@ -1253,8 +1321,8 @@
     clearPdf();
     const token = state.renderToken;
     if (!window.pdfjsLib) {
-      showPdfEmpty('error', 'PDF 阅读组件未能加载。请检查网络连接，刷新页面后再打开这篇文献。');
-      toast('PDF 阅读组件未能加载，请检查网络后刷新页面', 'error');
+      showPdfEmpty('error', 'PDF 阅读组件未能加载。请重新启动应用；若仍失败，请重新安装完整应用包。');
+      toast('PDF 阅读组件未能加载，请重新启动应用', 'error');
       return;
     }
     pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
@@ -1289,18 +1357,20 @@
     container.innerHTML = '';
     state.pageWrappers = [];
     const first = await doc.getPage(1);
+    if (token !== state.renderToken) return;
     const base = first.getViewport({ scale: 1 });
     if (state.fitWidth) {
       const avail = $('pdf-scroll').clientWidth - 40;
       state.scale = Math.max(0.3, Math.min(3, avail / base.width));
     }
-    $('pdf-zoom').textContent = Math.round(state.scale * 100) + '%';
+    const scale = state.scale;
+    $('pdf-zoom').textContent = Math.round(scale * 100) + '%';
     for (let i = 1; i <= doc.numPages; i++) {
       const w = document.createElement('div');
       w.className = 'pdf-page';
       w.dataset.page = i;
-      w.style.width = Math.floor(base.width * state.scale) + 'px';
-      w.style.height = Math.floor(base.height * state.scale) + 'px';
+      w.style.width = Math.floor(base.width * scale) + 'px';
+      w.style.height = Math.floor(base.height * scale) + 'px';
       container.appendChild(w);
       state.pageWrappers.push(w);
     }
@@ -1311,14 +1381,20 @@
       if (token !== state.renderToken) return;
       const page = i === 1 ? first : await doc.getPage(i);
       if (token !== state.renderToken) return;
-      const vp = page.getViewport({ scale: state.scale });
+      const vp = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(vp.width * dpr);
       canvas.height = Math.floor(vp.height * dpr);
       canvas.style.width = Math.floor(vp.width) + 'px';
       canvas.style.height = Math.floor(vp.height) + 'px';
       const ctx = canvas.getContext('2d');
-      await page.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null }).promise;
+      const task = page.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null });
+      state.pdfRenderTasks.add(task);
+      try { await task.promise; }
+      catch (e) {
+        if (token !== state.renderToken || e.name === 'RenderingCancelledException') return;
+        throw e;
+      } finally { state.pdfRenderTasks.delete(task); }
       if (token !== state.renderToken) return;
       const w = state.pageWrappers[i - 1];
       w.style.width = canvas.style.width;
@@ -1350,12 +1426,21 @@
     $('pdf-page').value = n;
   }
 
+  function cancelPdfRenders() {
+    state.pdfRenderTasks.forEach((task) => task.cancel());
+    state.pdfRenderTasks.clear();
+  }
+
   function rerenderPdf() {
     // A hidden narrow-screen view has no measurable width or page offsets.
     if (!state.pdf || !$('pdf-scroll').clientWidth || !$('pdf-scroll').clientHeight) return;
     const page = currentPage();
     state.renderToken++;
-    renderPages(state.renderToken, page);
+    cancelPdfRenders();
+    const token = state.renderToken;
+    renderPages(token, page).catch((e) => {
+      if (token === state.renderToken) toast('PDF 渲染失败，请重新打开文献：' + e.message, 'error');
+    });
   }
 
   function zoom(factor) {
@@ -1698,11 +1783,17 @@
       if (ev === 'drop' || e.target === document.documentElement || e.relatedTarget === null) sidebar.classList.remove('dragover');
     }));
 
-    window.addEventListener('beforeunload', () => { if (state.pendingSave) flushSave(); });
+    window.addEventListener('beforeunload', (e) => {
+      if (state.pendingSave || state.saveInFlight || state.generating) {
+        flushSave();
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
   }
 
   async function init() {
-    if (!window.marked) toast('Markdown 渲染库未能加载，请检查网络（CDN）', 'error');
+    if (!window.marked) toast('Markdown 渲染组件未能加载，请重新启动应用', 'error');
     initEvents();
     setWorkspaceView('library');
     $('editor').disabled = true;

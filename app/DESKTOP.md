@@ -41,11 +41,14 @@ v0.4.0 的桌面包用于预览试用。应用内部使用系统 WebKit 和本�
 
 本地已完成 Apple 芯片 Mac 的构建、应用包完整性与 Info.plist 检查。实际编译包在独立临时数据目录中通过启动、本地 PDF.js／字体／docx 资源加载、Cookie／Host／Origin 限制、PDF 上传／下载／删除及笔记持久化检查。图形界面自动检查曾超时，PDF 视觉显示、macOS 保存对话框、Word 导出和真实 AI 生成仍需人工验收，由 [Issue #6](https://github.com/Gaoyuan-0423/biomedical-paper-reader/issues/6) 跟踪。CI 包含 29 项阅读记录、发布元数据和桌面回归，不代表桌面 GUI 验收。
 
+当前开发分支补充了保存／切换／AI 中断回归和桌面窗口验收，具体范围见 [App 验证记录](tests/README.md)。上述 v0.4.0 发布快照不因分支修复而改变；更新构建仍未进行 Apple 开发者签名或公证。
+
 运行测试：
 
 ```bash
 python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7'
 python -m unittest discover -s app/tests -v
+node --test app/tests/test_frontend.cjs
 ```
 
 打包结果由构建机器的架构决定；本次发布预览包为 arm64。应用包作为 Release 附件提供，虚拟环境、个人论文库和编译产物不提交到源码仓库。

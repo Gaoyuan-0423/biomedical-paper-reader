@@ -38,7 +38,9 @@ def anchors(text):
 def check_links(root):
     errors, count, external = [], 0, set()
     for path in sorted(root.rglob('*.md')):
-        if any(p in {'.git', '.venv', '.validation', 'venv'} for p in path.relative_to(root).parts):
+        parts = path.relative_to(root).parts
+        if (any(p in {'.git', '.venv', '.desktop-venv', '.validation', 'venv'} for p in parts)
+                or parts[:2] in {('app', 'build'), ('app', 'dist')}):
             continue
         for match in LINK.finditer(prose(path.read_text(encoding='utf-8'))):
             target = match[1].strip('<>')
@@ -107,6 +109,23 @@ class IntegrityTests(unittest.TestCase):
             self.assertEqual(len(errors), 2)
             self.assertTrue(any('missing.png' in e for e in errors))
             self.assertTrue(any('absent' in e for e in errors))
+
+    def test_desktop_build_outputs_are_excluded(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / 'README.md').write_text('# Project\n')
+            for folder in ('app/.desktop-venv', 'app/build', 'app/dist'):
+                target = root / folder
+                target.mkdir(parents=True)
+                (target / 'dependency.md').write_text('[dependency link](missing.md)\n')
+            # Still validate vendored source documentation.
+            vendor = root / 'app/frontend/vendor'
+            vendor.mkdir(parents=True)
+            (vendor / 'README.md').write_text('[source link](missing.md)\n')
+            errors, count, _ = check_links(root)
+            self.assertEqual(count, 1)
+            self.assertEqual(len(errors), 1)
+            self.assertIn('app/frontend/vendor/README.md', errors[0])
 
     def test_tampered_output_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
