@@ -21,7 +21,8 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
+from urllib.parse import quote as url_quote
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse, Response
@@ -34,6 +35,12 @@ from external import LookupError_, fetch_crossref, fetch_related, normalize_doi
 from figures import crop_figure, load_figures, parse_pdf, save_figures
 from note_assets import illustrate_notes, markdown_bundle
 from reading_state import read_positions, save_position
+from reading_workflow import (DERIVED_FIELDS, SidecarError, annotate, atomic_json, defaults, evidence_lock,
+                      load_evidence, materials_changed, public_evidence, source_info, storage_lock)
+from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourcePatch, ensure_unique,
+                             load_resources, normalize_resource, public_resource, public_resources,
+                             related_resources, resource_summary, source_revision, validate_source)
+from research_export import append_research_appendix
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -137,16 +144,34 @@ def paper_dir(paper_id: str) -> Path:
 
 
 def read_meta(d: Path) -> dict:
-    meta = json.loads((d / "meta.json").read_text("utf-8"))
-    meta.setdefault("has_file", (d / "paper.pdf").is_file())
-    meta.setdefault("tags", [])
-    meta.setdefault("journal", "")
-    meta.setdefault("supplements", [])
+    with storage_lock:
+        meta = json.loads((d / "meta.json").read_text("utf-8"))
+        meta.setdefault("has_file", (d / "paper.pdf").is_file())
+        meta.setdefault("tags", [])
+        meta.setdefault("journal", "")
+        meta.setdefault("supplements", [])
+        return annotate_paper(d, meta)
+
+
+def annotate_paper(d: Path, meta: dict) -> dict:
+    annotate(d, meta)
+    try:
+        meta.update(resource_summary(d, meta))
+    except SidecarError as exc:
+        meta['resources_count'] = meta['resources_pending'] = None
+        meta['storage_warnings'].append({'kind': exc.kind, 'message': exc.message})
+    if meta['resources_pending']:
+        meta['tasks'].append({'id': 'resources', 'label': '核对数据与代码', 'count': meta['resources_pending']})
+    if meta['storage_warnings']:
+        meta['tasks'].append({'id': 'storage', 'label': '检查本地记录'})
     return meta
 
 
 def write_meta(d: Path, meta: dict) -> None:
-    (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), "utf-8")
+    with storage_lock:
+        defaults(meta)
+        atomic_json(d / "meta.json", {k: v for k, v in meta.items() if k not in DERIVED_FIELDS + RESOURCE_DERIVED_FIELDS})
+        annotate_paper(d, meta)
 
 
 def summary_of(meta: dict) -> dict:
@@ -315,6 +340,7 @@ def ingest_pdf(d: Path, content: bytes, filename: str, meta: dict) -> dict:
     meta["text_chars"] = len(full_text)
     meta["figures_count"] = len(figures)
     meta["parse_warnings"] = parsed.get("warnings", [])
+    materials_changed(meta, "main", hashlib.sha256(content).hexdigest())
     if not meta.get("title") or meta.get("title") == Path(meta.get("filename", "")).stem:
         meta["title"] = _clean_title(guessed_title, filename)
     if not meta.get("authors"):
@@ -383,6 +409,29 @@ class PaperPatch(BaseModel):
     year: Optional[str] = None
     journal: Optional[str] = None
     doi: Optional[str] = None
+    reading_status: Optional[Literal['unread', 'skimmed', 'reading', 'completed']] = None
+    reading_decision: Optional[Literal['pending', 'priority', 'reference', 'irrelevant']] = None
+    notes_incomplete: Optional[bool] = None
+    notes_reviewed: bool = False
+    notes_source_revision: Optional[int] = Field(default=None, ge=0)
+
+
+class EvidenceIn(BaseModel):
+    claim: str = Field(min_length=1, max_length=5000)
+    quote: str = Field(default='', max_length=12000)
+    document_id: str = 'main'
+    page: int = Field(ge=1, le=600)
+    figure_id: str = ''
+    status: Literal['pending', 'verified', 'rejected'] = 'pending'
+
+
+class EvidencePatch(BaseModel):
+    claim: Optional[str] = Field(default=None, min_length=1, max_length=5000)
+    quote: Optional[str] = Field(default=None, max_length=12000)
+    document_id: Optional[str] = None
+    page: Optional[int] = Field(default=None, ge=1, le=600)
+    figure_id: Optional[str] = None
+    status: Optional[Literal['pending', 'verified', 'rejected']] = None
 
 
 class DoiIn(BaseModel):
@@ -406,6 +455,159 @@ class FigurePatch(BaseModel):
     label: Optional[str] = None
     caption: Optional[str] = None
     observation: Optional[str] = None
+
+
+def validate_evidence(d: Path, meta: dict, record: dict) -> None:
+    if not record['claim'].strip():
+        raise HTTPException(422, '请填写需要核查的结论')
+    source, pages, _ = source_info(d, meta, record['document_id'])
+    if not source or not source.is_file():
+        raise HTTPException(404, '证据对应的 PDF 不存在')
+    if not 1 <= record['page'] <= pages:
+        raise HTTPException(422, '证据页码超出该 PDF 的范围')
+    fid = record.get('figure_id')
+    if fid:
+        fig = next((f for f in load_figures(d) if f['id'] == fid), None)
+        if not fig or fig.get('document_id', 'main') != record['document_id'] or fig['page'] != record['page']:
+            raise HTTPException(422, '图片不属于所选文件和页码')
+
+
+@app.get('/api/papers/{paper_id}/evidence')
+def get_evidence(paper_id: str):
+    d = paper_dir(paper_id)
+    meta = read_meta(d)
+    return [public_evidence(d, meta, r) for r in load_evidence(d)]
+
+
+@app.post('/api/papers/{paper_id}/evidence')
+def add_evidence(paper_id: str, body: EvidenceIn):
+    d = paper_dir(paper_id)
+    with evidence_lock:
+        meta = read_meta(d)
+        record = body.model_dump()
+        validate_evidence(d, meta, record)
+        record.update(id=uuid.uuid4().hex, claim=record['claim'].strip(), created_at=_now(), updated_at=_now(),
+                      source_revision=meta['document_revisions'].get(record['document_id'], 'legacy'))
+        records = load_evidence(d)
+        records.append(record)
+        atomic_json(d / 'evidence.json', records)
+        return public_evidence(d, meta, record)
+
+
+@app.patch('/api/papers/{paper_id}/evidence/{evidence_id}')
+def patch_evidence(paper_id: str, evidence_id: str, body: EvidencePatch):
+    d = paper_dir(paper_id)
+    with evidence_lock:
+        meta = read_meta(d)
+        records = load_evidence(d)
+        record = next((r for r in records if r['id'] == evidence_id), None)
+        if record is None:
+            raise HTTPException(404, '证据记录不存在')
+        updates = body.model_dump(exclude_none=True)
+        content_changed = any(k in updates and updates[k] != record.get(k) for k in ('claim', 'quote', 'document_id', 'page', 'figure_id'))
+        changed_source = any(k in updates and updates[k] != record.get(k) for k in ('document_id', 'page', 'figure_id'))
+        record.update(updates)
+        if content_changed and 'status' not in updates:
+            record['status'] = 'pending'
+        # Pending/rejected records may still be retained after their source is removed.
+        explicitly_verified = updates.get('status') == 'verified'
+        if changed_source or explicitly_verified:
+            validate_evidence(d, meta, record)
+        elif not record['claim'].strip():
+            raise HTTPException(422, '请填写需要核查的结论')
+        explicitly_rejected = updates.get('status') == 'rejected' and public_evidence(d, meta, record)['source_available']
+        if changed_source or explicitly_verified or explicitly_rejected:
+            record['source_revision'] = meta['document_revisions'].get(record['document_id'], 'legacy')
+        record.update(claim=record['claim'].strip(), updated_at=_now())
+        atomic_json(d / 'evidence.json', records)
+        return public_evidence(d, meta, record)
+
+
+@app.delete('/api/papers/{paper_id}/evidence/{evidence_id}')
+def delete_evidence(paper_id: str, evidence_id: str):
+    d = paper_dir(paper_id)
+    with evidence_lock:
+        records = load_evidence(d)
+        remaining = [r for r in records if r['id'] != evidence_id]
+        if len(records) == len(remaining):
+            raise HTTPException(404, '证据记录不存在')
+        atomic_json(d / 'evidence.json', remaining)
+    return {'ok': True}
+
+
+# ---------- data and code resources ----------
+
+@app.get('/api/papers/{paper_id}/resources')
+def get_paper_resources(paper_id: str):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        return public_resources(d, read_meta(d))
+
+
+@app.post('/api/papers/{paper_id}/resources')
+def add_paper_resource(paper_id: str, body: ResourceIn):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        record = normalize_resource(body.model_dump())
+        validate_source(d, meta, record)
+        records = load_resources(d)
+        ensure_unique(records, record)
+        record.update(id=uuid.uuid4().hex, created_at=_now(), updated_at=_now(),
+                      source_revision=source_revision(meta, record))
+        records.append(record)
+        atomic_json(d / 'resources.json', records)
+        return public_resource(d, meta, record)
+
+
+@app.patch('/api/papers/{paper_id}/resources/{resource_id}')
+def patch_paper_resource(paper_id: str, resource_id: str, body: ResourcePatch):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        records = load_resources(d)
+        index = next((i for i, r in enumerate(records) if r['id'] == resource_id), None)
+        if index is None:
+            raise HTTPException(404, '资源记录不存在')
+        old = records[index]
+        updates = body.model_dump(exclude_unset=True)
+        record = normalize_resource({**old, **updates})
+        content_changed = any(record.get(k) != old.get(k) for k in ResourceIn.model_fields if k != 'status')
+        source_changed = any(record[k] != old[k] for k in ('document_id', 'page'))
+        if content_changed and 'status' not in updates:
+            record['status'] = 'pending'
+        if source_changed or updates.get('status') == 'verified':
+            validate_source(d, meta, record)
+            record['source_revision'] = source_revision(meta, record)
+        ensure_unique(records, record)
+        record['updated_at'] = _now()
+        records[index] = record
+        atomic_json(d / 'resources.json', records)
+        return public_resource(d, meta, record)
+
+
+@app.delete('/api/papers/{paper_id}/resources/{resource_id}')
+def delete_paper_resource(paper_id: str, resource_id: str):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        records = load_resources(d)
+        remaining = [r for r in records if r['id'] != resource_id]
+        if len(records) == len(remaining):
+            raise HTTPException(404, '资源记录不存在')
+        atomic_json(d / 'resources.json', remaining)
+        return {'ok': True}
+
+
+@app.get('/api/resources')
+def get_library_resources(q: str = ''):
+    with storage_lock:
+        entries = []
+        if PAPERS_DIR.is_dir():
+            for d in sorted(PAPERS_DIR.iterdir()):
+                if (d / 'meta.json').is_file():
+                    meta = read_meta(d)
+                    entries.extend({**r, 'paper_id': meta['id'], 'paper_title': meta['title']} for r in public_resources(d, meta))
+        return related_resources(entries, q)
 
 
 # ---------- settings ----------
@@ -525,36 +727,50 @@ def update_reading_position(paper_id: str, body: ReadingPosition, document_id: s
 
 @app.patch("/api/papers/{paper_id}")
 def patch_paper(paper_id: str, body: PaperPatch):
-    d = paper_dir(paper_id)
-    meta = read_meta(d)
-    if body.title is not None and body.title.strip():
-        meta["title"] = body.title.strip()
-    if body.favorite is not None:
-        meta["favorite"] = body.favorite
-    if body.notes is not None:
-        meta["notes"] = body.notes
-        meta["notes_updated_at"] = _now()
-    if body.tags is not None:
-        seen: list[str] = []
-        for t in body.tags:
-            t = t.strip()[:40]
-            if t and t not in seen:
-                seen.append(t)
-        meta["tags"] = seen[:30]
-    for field in ("authors", "year", "journal"):
-        value = getattr(body, field)
-        if value is not None:
-            meta[field] = value.strip()
-    if body.doi is not None:
-        meta["doi"] = body.doi.strip()
-    write_meta(d, meta)
-    return meta
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        if body.title is not None and body.title.strip():
+            meta["title"] = body.title.strip()
+        if body.favorite is not None:
+            meta["favorite"] = body.favorite
+        if body.notes is not None:
+            if not meta.get("notes", "").strip():
+                meta["notes_material_revision"] = meta["material_revision"]
+            if body.notes_source_revision is not None:
+                if body.notes_source_revision > meta['material_revision']:
+                    raise HTTPException(422, '笔记来源版本不能超过当前材料版本')
+                meta['notes_material_revision'] = body.notes_source_revision
+            meta["notes"] = body.notes
+            meta["notes_updated_at"] = _now()
+        for field in ("reading_status", "reading_decision", "notes_incomplete"):
+            value = getattr(body, field)
+            if value is not None:
+                meta[field] = value
+        if body.notes_reviewed:
+            meta["notes_material_revision"] = meta["material_revision"]
+        if body.tags is not None:
+            seen: list[str] = []
+            for t in body.tags:
+                t = t.strip()[:40]
+                if t and t not in seen:
+                    seen.append(t)
+            meta["tags"] = seen[:30]
+        for field in ("authors", "year", "journal"):
+            value = getattr(body, field)
+            if value is not None:
+                meta[field] = value.strip()
+        if body.doi is not None:
+            meta["doi"] = body.doi.strip()
+        write_meta(d, meta)
+        return meta
 
 
 @app.delete("/api/papers/{paper_id}")
 def delete_paper(paper_id: str):
-    shutil.rmtree(paper_dir(paper_id))
-    return {"ok": True}
+    with storage_lock:
+        shutil.rmtree(paper_dir(paper_id))
+        return {"ok": True}
 
 
 @app.post("/api/papers/{paper_id}/file")
@@ -564,55 +780,60 @@ async def attach_file(paper_id: str, file: UploadFile = File(...)):
     filename = Path(file.filename or "paper.pdf").name
     content = await file.read()
     _validate_pdf_upload(filename, content)
-    meta = read_meta(d)
-    try:
-        meta = ingest_pdf(d, content, filename, meta)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(400, f"PDF 解析失败：{exc}") from exc
-    write_meta(d, meta)
-    return meta
+    with storage_lock:
+        meta = read_meta(d)
+        try:
+            meta = ingest_pdf(d, content, filename, meta)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(400, f"PDF 解析失败：{exc}") from exc
+        write_meta(d, meta)
+        return meta
 
 
 @app.post("/api/papers/{paper_id}/supplements")
 async def add_supplement(paper_id: str, file: UploadFile = File(...)):
     d = paper_dir(paper_id)
-    meta = read_meta(d)
     filename = Path(file.filename or "supplement.pdf").name
     content = await file.read()
     _validate_pdf_upload(filename, content)
     digest = hashlib.sha256(content).hexdigest()
-    if any(f.get("sha256") == digest for f in meta["supplements"]):
-        raise HTTPException(409, "该补充 PDF 已添加")
-    if (d / "paper.pdf").is_file() and hashlib.sha256((d / "paper.pdf").read_bytes()).hexdigest() == digest:
-        raise HTTPException(409, "该 PDF 已是正文，不必重复添加")
-    sid = uuid.uuid4().hex
-    try:
-        parsed, figures = store_document(d, content, filename, sid)
-    except Exception as exc:
-        raise HTTPException(400, f"补充 PDF 解析失败：{exc}") from exc
-    meta["supplements"].append({"id": sid, "filename": filename, "pages": len(parsed["pages"]),
-                                "sha256": digest, "warnings": parsed.get("warnings", [])})
-    meta["figures_count"] = len(figures)
-    write_meta(d, meta)
-    return meta
+    with storage_lock:
+        meta = read_meta(d)
+        if any(f.get("sha256") == digest for f in meta["supplements"]):
+            raise HTTPException(409, "该补充 PDF 已添加")
+        if (d / "paper.pdf").is_file() and hashlib.sha256((d / "paper.pdf").read_bytes()).hexdigest() == digest:
+            raise HTTPException(409, "该 PDF 已是正文，不必重复添加")
+        sid = uuid.uuid4().hex
+        try:
+            parsed, figures = store_document(d, content, filename, sid)
+        except Exception as exc:
+            raise HTTPException(400, f"补充 PDF 解析失败：{exc}") from exc
+        meta["supplements"].append({"id": sid, "filename": filename, "pages": len(parsed["pages"]),
+                                    "sha256": digest, "warnings": parsed.get("warnings", [])})
+        meta["figures_count"] = len(figures)
+        materials_changed(meta, sid, digest)
+        write_meta(d, meta)
+        return meta
 
 
 @app.delete("/api/papers/{paper_id}/supplements/{document_id}")
 def delete_supplement(paper_id: str, document_id: str):
-    d = paper_dir(paper_id)
-    path = document_path(d, document_id)
-    if document_id == "main":
-        raise HTTPException(400, "此接口只移除补充材料")
-    meta = read_meta(d)
-    figures = [f for f in load_figures(d) if f.get("document_id", "main") != document_id]
-    # Keep image files referenced by existing notes. New readings no longer use them.
-    save_figures(d, figures)
-    path.unlink(missing_ok=True)
-    path.with_suffix('.txt').unlink(missing_ok=True)
-    meta["supplements"] = [f for f in meta["supplements"] if f["id"] != document_id]
-    meta["figures_count"] = len(figures)
-    write_meta(d, meta)
-    return meta
+    with storage_lock:
+        d = paper_dir(paper_id)
+        path = document_path(d, document_id)
+        if document_id == "main":
+            raise HTTPException(400, "此接口只移除补充材料")
+        meta = read_meta(d)
+        figures = [f for f in load_figures(d) if f.get("document_id", "main") != document_id]
+        # Keep image files referenced by existing notes. New readings no longer use them.
+        save_figures(d, figures)
+        path.unlink(missing_ok=True)
+        path.with_suffix('.txt').unlink(missing_ok=True)
+        meta["supplements"] = [f for f in meta["supplements"] if f["id"] != document_id]
+        meta["figures_count"] = len(figures)
+        materials_changed(meta, document_id, 'removed')
+        write_meta(d, meta)
+        return meta
 
 
 @app.post("/api/papers/{paper_id}/enrich")
@@ -627,15 +848,17 @@ async def enrich_paper(paper_id: str, body: EnrichIn):
         record = await fetch_crossref(doi)
     except (LookupError_, UnsafeURLError) as exc:
         raise HTTPException(400, str(exc)) from exc
-    meta["doi"] = record["doi"]
-    meta["url"] = record["url"]
-    for field in ("authors", "year", "journal", "abstract"):
-        if record.get(field) and (body.overwrite or not meta.get(field)):
-            meta[field] = record[field]
-    if record["title"] and (body.overwrite or meta.get("title") == Path(meta.get("filename", "")).stem or not meta.get("title")):
-        meta["title"] = record["title"]
-    write_meta(d, meta)
-    return meta
+    with storage_lock:
+        meta = read_meta(d)
+        meta["doi"] = record["doi"]
+        meta["url"] = record["url"]
+        for field in ("authors", "year", "journal", "abstract"):
+            if record.get(field) and (body.overwrite or not meta.get(field)):
+                meta[field] = record[field]
+        if record["title"] and (body.overwrite or meta.get("title") == Path(meta.get("filename", "")).stem or not meta.get("title")):
+            meta["title"] = record["title"]
+        write_meta(d, meta)
+        return meta
 
 
 @app.get("/api/papers/{paper_id}/related")
@@ -683,22 +906,38 @@ def get_paper_text(paper_id: str):
 
 @app.get("/api/papers/{paper_id}/export.md")
 def export_markdown(paper_id: str):
-    meta = read_meta(paper_dir(paper_id))
-    safe_name = re.sub(r"[\\/:*?\"<>|]+", "_", meta["title"])[:80] or "notes"
-    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}.md"}
-    return PlainTextResponse(meta.get("notes", ""), media_type="text/markdown; charset=utf-8", headers=headers)
+    with storage_lock:
+        meta = read_meta(paper_dir(paper_id))
+        safe_name = re.sub(r"[\\/:*?\"<>|]+", "_", meta["title"])[:80] or "notes"
+        headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{url_quote(safe_name, safe='')}.md"}
+        notes = prepare_note_export(paper_id, NoteExport(notes=meta.get('notes', '')))['notes']
+        return PlainTextResponse(notes, media_type="text/markdown; charset=utf-8", headers=headers)
 
 
 class NoteExport(BaseModel):
     notes: str
 
 
+@app.post('/api/papers/{paper_id}/notes/export-preview')
+def prepare_note_export(paper_id: str, body: NoteExport):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        # Strip only our intact generated appendix before figure inference so
+        # literal resource fields cannot be mistaken for narrative citations.
+        raw_notes = append_research_appendix(body.notes, [], [])
+        notes = illustrate_existing_notes(paper_id, NoteExport(notes=raw_notes))['notes']
+        evidence = [public_evidence(d, meta, r) for r in load_evidence(d)]
+        return {'notes': append_research_appendix(notes, evidence, public_resources(d, meta))}
+
+
 @app.post("/api/papers/{paper_id}/export.zip")
 def export_note_bundle(paper_id: str, body: NoteExport):
     try:
-        d = paper_dir(paper_id)
-        notes = illustrate_existing_notes(paper_id, body)["notes"]
-        data = markdown_bundle(notes, d)
+        with storage_lock:
+            d = paper_dir(paper_id)
+            notes = prepare_note_export(paper_id, body)["notes"]
+            data = markdown_bundle(notes, d)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return Response(data, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="notes.zip"'})
@@ -729,9 +968,10 @@ def _next_fid(figures: list[dict], d: Path) -> str:
 
 
 def _update_count(d: Path, figures: list[dict]) -> None:
-    meta = read_meta(d)
-    meta["figures_count"] = len(figures)
-    write_meta(d, meta)
+    with storage_lock:
+        meta = read_meta(d)
+        meta["figures_count"] = len(figures)
+        write_meta(d, meta)
 
 
 @app.get("/api/papers/{paper_id}/figures")
@@ -741,74 +981,78 @@ def get_figures(paper_id: str):
 
 @app.post("/api/papers/{paper_id}/figures/extract")
 def reextract_figures(paper_id: str, document_id: str = "main"):
-    d = paper_dir(paper_id)
-    path = document_path(d, document_id)
-    if not path.is_file():
-        raise HTTPException(400, "该文献尚未附加 PDF")
-    meta = read_meta(d)
-    filename = meta["filename"] if document_id == "main" else next(f["filename"] for f in meta["supplements"] if f["id"] == document_id)
-    try:
-        parsed, figures = store_document(d, path.read_bytes(), filename, document_id)
-    except Exception as exc:
-        raise HTTPException(400, f"图片提取失败：{exc}") from exc
-    _update_count(d, figures)
-    return {"figures": figures, "warnings": parsed.get("warnings", [])}
+    with storage_lock:
+        d = paper_dir(paper_id)
+        path = document_path(d, document_id)
+        if not path.is_file():
+            raise HTTPException(400, "该文献尚未附加 PDF")
+        meta = read_meta(d)
+        filename = meta["filename"] if document_id == "main" else next(f["filename"] for f in meta["supplements"] if f["id"] == document_id)
+        try:
+            parsed, figures = store_document(d, path.read_bytes(), filename, document_id)
+        except Exception as exc:
+            raise HTTPException(400, f"图片提取失败：{exc}") from exc
+        _update_count(d, figures)
+        return {"figures": figures, "warnings": parsed.get("warnings", [])}
 
 
 @app.post("/api/papers/{paper_id}/figures/crop")
 def crop_manual_figure(paper_id: str, body: CropIn):
-    d = paper_dir(paper_id)
-    source = document_path(d, body.document_id)
-    if not source.is_file():
-        raise HTTPException(400, "该文献尚未附加 PDF")
-    figures = load_figures(d)
-    fid = _next_fid(figures, d)
-    try:
-        fig = crop_figure(source, d / "figures", body.page, body.bbox, fid)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    fig["label"] = (body.label or "").strip()[:60] or f"手动取图 {fid[1:].lstrip('0') or '1'}"
-    fig["caption"] = (body.caption or "").strip()
-    fig["observation"] = ""
-    fig["document_id"] = body.document_id
-    fig["document_name"] = "正文" if body.document_id == "main" else next(f["filename"] for f in read_meta(d)["supplements"] if f["id"] == body.document_id)
-    figures.append(fig)
-    save_figures(d, figures)
-    _update_count(d, figures)
-    return fig
+    with storage_lock:
+        d = paper_dir(paper_id)
+        source = document_path(d, body.document_id)
+        if not source.is_file():
+            raise HTTPException(400, "该文献尚未附加 PDF")
+        figures = load_figures(d)
+        fid = _next_fid(figures, d)
+        try:
+            fig = crop_figure(source, d / "figures", body.page, body.bbox, fid)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        fig["label"] = (body.label or "").strip()[:60] or f"手动取图 {fid[1:].lstrip('0') or '1'}"
+        fig["caption"] = (body.caption or "").strip()
+        fig["observation"] = ""
+        fig["document_id"] = body.document_id
+        fig["document_name"] = "正文" if body.document_id == "main" else next(f["filename"] for f in read_meta(d)["supplements"] if f["id"] == body.document_id)
+        figures.append(fig)
+        save_figures(d, figures)
+        _update_count(d, figures)
+        return fig
 
 
 @app.patch("/api/papers/{paper_id}/figures/{fid}")
 def patch_figure(paper_id: str, fid: str, body: FigurePatch):
-    d = paper_dir(paper_id)
-    figures = load_figures(d)
-    for f in figures:
-        if f["id"] == fid:
-            if body.label is not None and body.label.strip():
-                f["label"] = body.label.strip()[:60]
-            if body.caption is not None:
-                f["caption"] = body.caption.strip()
-                f["caption_edited"] = True
-            if body.observation is not None:
-                f["observation"] = body.observation.strip()
-            save_figures(d, figures)
-            return f
-    raise HTTPException(404, "figure not found")
+    with storage_lock:
+        d = paper_dir(paper_id)
+        figures = load_figures(d)
+        for f in figures:
+            if f["id"] == fid:
+                if body.label is not None and body.label.strip():
+                    f["label"] = body.label.strip()[:60]
+                if body.caption is not None:
+                    f["caption"] = body.caption.strip()
+                    f["caption_edited"] = True
+                if body.observation is not None:
+                    f["observation"] = body.observation.strip()
+                save_figures(d, figures)
+                return f
+        raise HTTPException(404, "figure not found")
 
 
 @app.delete("/api/papers/{paper_id}/figures/{fid}")
 def delete_figure(paper_id: str, fid: str):
-    d = paper_dir(paper_id)
-    figures = load_figures(d)
-    keep = [f for f in figures if f["id"] != fid and f.get("parent") != fid]
-    if len(keep) == len(figures):
-        raise HTTPException(404, "figure not found")
-    for f in figures:
-        if f not in keep:
-            (d / "figures" / f"{f['id']}.png").unlink(missing_ok=True)
-    save_figures(d, keep)
-    _update_count(d, keep)
-    return {"ok": True}
+    with storage_lock:
+        d = paper_dir(paper_id)
+        figures = load_figures(d)
+        keep = [f for f in figures if f["id"] != fid and f.get("parent") != fid]
+        if len(keep) == len(figures):
+            raise HTTPException(404, "figure not found")
+        for f in figures:
+            if f not in keep:
+                (d / "figures" / f"{f['id']}.png").unlink(missing_ok=True)
+        save_figures(d, keep)
+        _update_count(d, keep)
+        return {"ok": True}
 
 
 @app.get("/api/papers/{paper_id}/figures/{fid}.png")
@@ -938,24 +1182,26 @@ MODE_NAMES = {"deep": "完整精读", "quick": "速读筛选"}
 
 @app.post("/api/papers/{paper_id}/read")
 async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
-    d = paper_dir(paper_id)
-    meta = read_meta(d)
-    settings = load_settings()
-    if not settings.get("api_key"):
-        raise HTTPException(400, "尚未设置 API Key，请先在「设置」中填写")
-    if mode not in MODE_NAMES:
-        raise HTTPException(400, "mode 只能是 deep 或 quick")
-    if not meta.get("has_file"):
-        raise HTTPException(400, "该文献只有元数据，请先附加 PDF 再生成笔记")
-    text = reading_text(d, meta)
-    if len(text.strip()) < 200:
-        raise HTTPException(400, "PDF 提取到的文本过少（可能是扫描件），无法生成笔记")
-    budget = int(settings["max_chars"])
-    max_tokens = int(settings.get("max_tokens") or 0) or None
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        settings = load_settings()
+        if not settings.get("api_key"):
+            raise HTTPException(400, "尚未设置 API Key，请先在「设置」中填写")
+        if mode not in MODE_NAMES:
+            raise HTTPException(400, "mode 只能是 deep 或 quick")
+        if not meta.get("has_file"):
+            raise HTTPException(400, "该文献只有元数据，请先附加 PDF 再生成笔记")
+        text = reading_text(d, meta)
+        if len(text.strip()) < 200:
+            raise HTTPException(400, "PDF 提取到的文本过少（可能是扫描件），无法生成笔记")
+        budget = int(settings["max_chars"])
+        max_tokens = int(settings.get("max_tokens") or 0) or None
 
     async def generate():
         chunks: list[str] = []
-        yield _sse({"type": "start", "mode": mode, "model": settings["model"], "mode_name": MODE_NAMES[mode]})
+        yield _sse({"type": "start", "mode": mode, "model": settings["model"], "mode_name": MODE_NAMES[mode],
+                    "material_revision": meta["material_revision"]})
         try:
             figures_for_prompt: list[dict] = []
             if use_figures:
@@ -995,12 +1241,15 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
         if use_figures:
             available = [f for f in figures_for_prompt if (d / "figures" / f"{f['id']}.png").is_file()]
             notes = illustrate_notes(notes, available, mode)
-        current = read_meta(d)
-        current["notes"] = notes
-        current["notes_mode"] = mode
-        current["notes_updated_at"] = _now()
-        write_meta(d, current)
-        yield _sse({"type": "done", "notes": notes})
+        with storage_lock:
+            current = read_meta(d)
+            current["notes"] = notes
+            current["notes_mode"] = mode
+            current["notes_updated_at"] = _now()
+            current["notes_incomplete"] = False
+            current["notes_material_revision"] = meta["material_revision"]
+            write_meta(d, current)
+        yield _sse({"type": "done", "notes": notes, "paper": summary_of(current)})
 
     return StreamingResponse(
         generate(),
