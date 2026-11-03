@@ -24,7 +24,9 @@ jobs:
         run: |
           node --check app/frontend/app.js
           node --check app/frontend/export.js
-          node --test app/tests/test_frontend.cjs
+          node --check app/frontend/evidence.js
+          node --check app/frontend/resources.js
+          node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs
       - name: Helper scripts compile
         run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py
 

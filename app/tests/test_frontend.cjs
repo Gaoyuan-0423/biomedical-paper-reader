@@ -34,12 +34,13 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { state, api, updateNoteActions, visiblePapers, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   app.state.settings = { has_api_key: true, model: 'test' };
   app.api.figures = async () => [];
   app.api.illustrate = async (id, notes) => ({ notes });
+  app.api.prepareExport = (id, notes) => app.api.illustrate(id, notes);
   app.api.saveReading = async () => ({});
   $('read-mode').value = 'deep';
   return { ...app, $, context };
@@ -204,7 +205,7 @@ function mockWord(h) {
   const D = { WidthType: { PERCENTAGE: 'pct' }, HeadingLevel: {}, Packer: {
     async toBlob(doc) { h.exported = doc; return new Blob(['docx']); },
   } };
-  for (const kind of ['Table', 'TableRow', 'TableCell', 'Paragraph', 'TextRun', 'Document', 'ImageRun']) {
+  for (const kind of ['Table', 'TableRow', 'TableCell', 'Paragraph', 'TextRun', 'Document', 'ImageRun', 'ExternalHyperlink']) {
     D[kind] = class { constructor(options) { Object.assign(this, options); this.kind = kind; } };
   }
   h.context.window.docx = D;
@@ -429,4 +430,144 @@ test('fit width accommodates landscape pages in a mixed-orientation PDF', async 
   assert.equal(h.state.scale, 600 / 900);
   assert.ok(h.state.pageWrappers.every(page => parseFloat(page.style.width) <= 600));
   assert.equal(h.currentPage(), 2);
+});
+
+test('workflow filters intersect reading, decision, tasks and search, with safe legacy defaults', () => {
+  const h = harness();
+  h.state.papers = [
+    { id: A, title: 'Cancer atlas', reading_status: 'reading', reading_decision: 'priority', tasks: [{ id: 'resume' }] },
+    { id: B, title: 'Legacy paper' },
+    { id: C, title: 'Cancer methods', reading_status: 'reading', reading_decision: 'reference', tasks: [] },
+  ];
+  h.state.readingFilter = 'unread';
+  assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [B]);
+  h.state.readingFilter = 'reading'; h.state.decisionFilter = 'priority'; h.state.taskFilter = 'resume'; h.state.query = 'cancer';
+  assert.deepEqual(Array.from(h.visiblePapers(), p => p.id), [A]);
+  h.state.query = 'absent'; assert.equal(h.visiblePapers().length, 0);
+});
+
+test('workflow save waits for note persistence and does not replace a new draft', async () => {
+  const h = harness(), request = deferred(), writes = [];
+  h.api.patch = async (id, body) => {
+    writes.push(body);
+    if (body.notes) await request.promise;
+    return { id, ...body, notes: 'server snapshot', tasks: [] };
+  };
+  edit(h, 'keep draft');
+  const save = h.saveWorkflow({ reading_status: 'completed' });
+  assert.equal(writes.length, 1); assert.equal(writes[0].notes, 'keep draft');
+  request.resolve(); await save;
+  assert.equal(h.state.current.reading_status, 'completed');
+  assert.equal(h.$('editor').value, 'keep draft');
+  assert.equal(h.state.current.notes, 'keep draft');
+  assert.equal(writes[1].reading_status, 'completed');
+});
+
+test('failed status save restores persisted controls and late status response cannot modify another paper', async () => {
+  const h = harness(); h.state.current.reading_status = 'unread';
+  h.api.patch = async () => { throw new Error('offline'); };
+  await h.saveWorkflow({ reading_status: 'completed' });
+  assert.equal(h.state.current.reading_status, 'unread');
+  assert.equal(h.$('paper-reading').value, 'unread');
+  const request = deferred(); h.api.patch = () => request.promise;
+  const save = h.saveWorkflow({ reading_status: 'reading' }); await new Promise(setImmediate);
+  h.state.current = { id: B, reading_status: 'skimmed' };
+  request.resolve({ id: A, reading_status: 'reading', tasks: [] }); await save;
+  assert.equal(h.state.current.reading_status, 'skimmed');
+});
+
+test('late workflow refresh cannot undo a newer manual reading decision', async () => {
+  const h = harness(), request = deferred();
+  h.api.paper = () => request.promise;
+  const refresh = h.refreshWorkflow(A);
+  h.api.patch = async (id, body) => ({ id, ...body, tasks: [] });
+  await h.saveWorkflow({ reading_decision: 'priority' });
+  request.resolve({ id: A, reading_decision: 'pending' }); await refresh;
+  assert.equal(h.state.current.reading_decision, 'priority');
+});
+
+test('partial-generation marker survives retry edits and report generation never marks reading complete', async () => {
+  const h = harness(); let body;
+  h.state.current.reading_status = 'unread';
+  h.api.patch = async (id, value) => { body = value; return { id, ...value, tasks: [{ id: 'notes_incomplete' }] }; };
+  stream(h, [{ type: 'chunk', text: 'Partial text' }]);
+  await h.generateNotes();
+  assert.equal(body.notes_incomplete, true);
+  edit(h, 'Partial text plus manual edit'); await h.flushSave();
+  assert.equal(body.notes_incomplete, true);
+  assert.equal(h.state.current.reading_status, 'unread');
+});
+
+test('generation uses authoritative material freshness from done event', async () => {
+  const h = harness(); h.state.current.reading_status = 'skimmed';
+  stream(h, [{ type: 'done', notes: 'Finished report', paper: { notes_incomplete: false, notes_stale: true, tasks: [{ id: 'notes_stale' }] } }]);
+  await h.generateNotes();
+  assert.equal(h.state.current.notes_stale, true);
+  assert.equal(h.state.current.tasks[0].id, 'notes_stale');
+  assert.equal(h.state.current.reading_status, 'skimmed');
+});
+
+test('loading figures adds exact source links to an already saved note preview', async () => {
+  const h = harness(), created = [], originalCreate = h.context.document.createElement;
+  h.$('editor').value = '![Figure 1](figure:f001)';
+  h.context.window.marked = h.context.marked = { parse: () => '<p>figure</p>' };
+  h.context.document.createElement = () => {
+    const element = originalCreate(); element.after = sibling => created.push(sibling); return element;
+  };
+  const source = { alt: 'Figure 1', getAttribute: () => 'figure:f001', replaceWith() {} };
+  h.$('preview').querySelectorAll = selector => selector === 'img' ? [source] : [];
+  h.api.figures = async () => [{ id: 'f001', label: 'Figure 1', document_id: C, document_name: 'Supplement', page: 3 }];
+  await h.fetchFigures();
+  assert.equal(created.length, 1);
+  assert.equal(created[0].dataset.noteSourceFig, 'f001');
+  assert.equal(created[0].textContent, 'Supplement · 第 3 页 · 查看原文');
+});
+
+test('saved resources enable report exports even without a note and do not enable illustration', () => {
+  const h = harness(); h.state.current.resources_count = 1;
+  h.updateNoteActions();
+  assert.equal(h.$('btn-export-word').disabled, false);
+  assert.equal(h.$('btn-export-md').disabled, false);
+  assert.equal(h.$('btn-copy-wechat').disabled, false);
+  assert.equal(h.$('btn-illustrate').disabled, true);
+});
+
+test('Word export uses saved research appendix without modifying notes and keeps literal text and resource hyperlinks', async () => {
+  const h = harness(); mockWord(h); let requested;
+  h.state.current.resources_count = 1;
+  h.api.prepareExport = async (id, notes) => {
+    requested = { id, notes };
+    return { notes: '<!-- bioreader-research-appendix:v1 sha256=' + 'a'.repeat(64) + ' -->\n## 数据与代码\n\n- 与本文关系：复用已有数据\n- 名称：a\\_b &amp; c\n- 链接：[打开资源](https://example.org/data)\n<!-- /bioreader-research-appendix:v1 -->\n' };
+  };
+  await h.exportWord();
+  assert.deepEqual(requested, { id: A, notes: '' });
+  assert.equal(h.$('editor').value, '');
+  assert.equal(h.state.current.notes, '');
+  const serialized = JSON.stringify(h.exported);
+  assert.ok(serialized.includes('复用已有数据'));
+  const paragraphText = h.exported.sections[0].children.map(p => (p.children || []).map(r => r.text || '').join('')).join('\n');
+  assert.ok(paragraphText.includes('a_b & c'));
+  assert.ok(serialized.includes('ExternalHyperlink'));
+  assert.ok(serialized.includes('https://example.org/data'));
+  assert.ok(!serialized.includes('bioreader-research-appendix'));
+});
+
+test('unsaved resource draft blocks export instead of silently excluding it', async () => {
+  const h = harness(); mockWord(h);
+  h.context.window.BioResources = { canLeave: () => false };
+  h.$('editor').value = 'A note';
+  let requested = false;
+  h.api.prepareExport = async () => { requested = true; return { notes: 'bad' }; };
+  await h.exportWord();
+  assert.equal(requested, false);
+  assert.equal(h.exported, undefined);
+});
+
+test('failed research appendix preparation does not export a partial Word document', async () => {
+  const h = harness(); mockWord(h); h.$('editor').value = 'Keep note';
+  h.api.prepareExport = async () => { throw new Error('records unavailable'); };
+  await h.exportWord();
+  assert.equal(h.exported, undefined);
+  assert.equal(h.$('editor').value, 'Keep note');
+  assert.match(h.$('toast').textContent, /records unavailable/);
 });

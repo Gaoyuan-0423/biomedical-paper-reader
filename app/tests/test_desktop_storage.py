@@ -33,7 +33,7 @@ assert main.FRONTEND_DIR == (bundle_dir if sys.argv[4] == "frozen" else app_dir)
 protect_local_service(app, 18090)
 with TestClient(app, base_url="http://127.0.0.1:18090") as client:
     assert client.get("/").status_code == 200
-    for path in ("/app.js", "/styles.css", "/vendor/pdf.min.js",
+    for path in ("/app.js", "/styles.css", "/evidence.js", "/evidence.css", "/resources.js", "/resources.css", "/vendor/pdf.min.js",
                  "/vendor/pdf.worker.min.js", "/vendor/marked.min.js",
                  "/vendor/highlight.min.js", "/vendor/github.min.css", "/vendor/docx.umd.js"):
         response = client.get(path)

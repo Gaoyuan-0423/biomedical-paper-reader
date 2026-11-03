@@ -4,9 +4,9 @@
 
 ## 下载与安装预览包
 
-下载入口：[v0.4.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.4.0)。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
+下载入口：[v0.5.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.5.0)。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
 
-1. 下载 [BioReader-v0.4.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.4.0/BioReader-v0.4.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
+1. 下载 [BioReader-v0.5.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.5.0/BioReader-v0.5.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
 2. 解压 ZIP，将 `BioReader.app` 拖入“应用程序”，或从解压目录直接打开。更新旧版前先退出正在运行的 BioReader。
 3. 双击打开 App。无需另装 Python 或手动启动浏览器／终端。AI 笔记需要在设置中配置模型接口和 API Key。
 
@@ -37,6 +37,10 @@ BIOREADER_PYTHON=/path/to/python3 ./app/build-macos.sh
 
 ## 验证与限制
 
+v0.5.0 新增蓝白界面、人工阅读工作流、证据与资源整理、统一报告导出。当前源码已完成自动回归及隔离合成文献的 Chrome 交互／下载验收，覆盖桌面和窄窗口。新应用包通过构建、随包资源一致性与本地包完整性检查；本轮未单独复验原生 WebKit 窗口，也未调用真实 AI 或评测真实论文解读质量。详细记录见 [App 验证记录](tests/README.md)。
+
+### v0.4.0 历史发布快照
+
 v0.4.0 的桌面包用于预览试用。应用内部使用系统 WebKit 和本机后台，不依赖外部浏览器；不等于纯原生界面或完全离线 AI。
 
 本地已完成 Apple 芯片 Mac 的构建、应用包完整性与 Info.plist 检查。实际编译包在独立临时数据目录中通过启动、本地 PDF.js／字体／docx 资源加载、Cookie／Host／Origin 限制、PDF 上传／下载／删除及笔记持久化检查。图形界面自动检查曾超时，PDF 视觉显示、macOS 保存对话框、Word 导出和真实 AI 生成仍需人工验收，由 [Issue #6](https://github.com/Gaoyuan-0423/biomedical-paper-reader/issues/6) 跟踪。CI 包含 29 项阅读记录、发布元数据和桌面回归，不代表桌面 GUI 验收。
@@ -48,7 +52,7 @@ v0.4.0 的桌面包用于预览试用。应用内部使用系统 WebKit 和本�
 ```bash
 python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7'
 python -m unittest discover -s app/tests -v
-node --test app/tests/test_frontend.cjs
+node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs
 ```
 
 打包结果由构建机器的架构决定；本次发布预览包为 arm64。应用包作为 Release 附件提供，虚拟环境、个人论文库和编译产物不提交到源码仓库。

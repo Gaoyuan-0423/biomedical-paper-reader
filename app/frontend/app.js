@@ -5,6 +5,9 @@
   const PDF_WORKER = 'vendor/pdf.worker.min.js';
   const DOCX_SCRIPT = 'vendor/docx.umd.js';
   const MODE_NAMES = { deep: '精读', quick: '速读' };
+  const READING_NAMES = { unread: '未读', skimmed: '已速读', reading: '精读中', completed: '已完成' };
+  const DECISION_NAMES = { pending: '待判断', priority: '优先精读', reference: '留作参考', irrelevant: '暂不相关' };
+  const TASK_NAMES = { decision: '判断阅读价值', fulltext: '补充全文', resume: '继续精读', notes_incomplete: '补完笔记', notes_stale: '核对新材料', evidence: '核查证据', resources: '核对数据与代码', storage: '检查本地记录' };
 
   // ---------- API ----------
   // Paper/figure ids reach fetch URLs (including from the ?paper= query param),
@@ -60,6 +63,7 @@
       return api.json(paperPath(id, '/supplements/' + encodeURIComponent(doc)), { method: 'DELETE' });
     },
     illustrate: (id, notes, all) => api.jsonBody('POST', paperPath(id, '/notes/illustrate' + (all ? '?all_figures=1' : '')), { notes }),
+    prepareExport: (id, notes) => api.jsonBody('POST', paperPath(id, '/notes/export-preview'), { notes }),
     importDoi: (doi) => api.jsonBody('POST', '/api/import/doi', { doi }),
     enrich: (id, body) => api.jsonBody('POST', paperPath(id, '/enrich'), body),
     related: (id, refresh) => api.json(paperPath(id, '/related') + (refresh ? '?refresh=1' : '')),
@@ -84,6 +88,11 @@
     favOnly: false,
     activeTag: '',
     query: '',
+    readingFilter: '',
+    decisionFilter: '',
+    taskFilter: '',
+    workflowSaving: false,
+    workflowVersion: 0,
     tab: 'preview',
     pdf: null,
     pageWrappers: [],
@@ -315,6 +324,9 @@
     return state.papers.filter((p) => {
       if (state.favOnly && !p.favorite) return false;
       if (state.activeTag && !(p.tags || []).includes(state.activeTag)) return false;
+      if (state.readingFilter && (p.reading_status || 'unread') !== state.readingFilter) return false;
+      if (state.decisionFilter && (p.reading_decision || 'pending') !== state.decisionFilter) return false;
+      if (state.taskFilter && !(p.tasks || []).some(t => state.taskFilter === 'any' || t.id === state.taskFilter)) return false;
       if (!q) return true;
       return [p.title, p.authors, p.doi, p.filename, p.journal, (p.tags || []).join(' ')].join(' ').toLowerCase().includes(q);
     });
@@ -344,13 +356,16 @@
         p.notes_updated_at ? '<span class="badge badge-notes">有笔记</span>' : '',
         p.figures_count ? '<span class="badge badge-fig">图 ' + p.figures_count + '</span>' : '',
         p.source === 'doi' && !p.has_file ? '<span class="badge badge-src">缺 PDF</span>' : '',
+        '<span class="badge">' + (READING_NAMES[p.reading_status] || '未读') + '</span>',
+        '<span class="badge">' + (DECISION_NAMES[p.reading_decision] || '待判断') + '</span>',
       ].filter(Boolean).map((m) => '<span>' + m + '</span>').join('');
       const tagRow = (p.tags || []).length
         ? '<div class="paper-item-tags">' + p.tags.slice(0, 4).map((t) => '<span>#' + escapeHtml(t) + '</span>').join('') + '</div>' : '';
       return '<li class="paper-item' + active + '" data-id="' + p.id + '">' +
         '<button class="star' + (p.favorite ? ' on' : '') + '" data-star="' + p.id + '" title="' + (p.favorite ? '取消收藏' : '收藏文献') + '" aria-pressed="' + !!p.favorite + '">' + icon('star') + '</button>' +
         '<div class="paper-item-text"><button class="paper-open paper-item-title" data-id="' + p.id + '" title="' + escapeHtml(p.title) + '"' + (active ? ' aria-current="true"' : '') + '>' + escapeHtml(p.title) + '</button>' +
-        '<div class="paper-item-meta">' + meta + '</div>' + tagRow + '</div></li>';
+        '<div class="paper-item-meta">' + meta + '</div>' + tagRow +
+        '<div class="list-tasks">' + (p.tasks || []).filter(t => TASK_NAMES[t.id]).map(t => '<button class="task-link" data-task="' + t.id + '">' + TASK_NAMES[t.id] + '</button>').join('') + '</div></div></li>';
     }).join('');
     const favCount = state.papers.filter((p) => p.favorite).length;
     if ($('library-total')) $('library-total').textContent = state.papers.length;
@@ -363,12 +378,80 @@
       $('btn-all-filter').setAttribute('aria-pressed', String(!state.favOnly));
     }
     $('library-count').textContent = state.papers.length + ' 篇文献 · ' + favCount + ' 篇收藏' + (items.length !== state.papers.length ? ' · 显示 ' + items.length + ' 篇' : '');
+    $('task-total').textContent = state.papers.filter(p => (p.tasks || []).length).length + ' 篇';
+    const advancedCount = [state.readingFilter, state.decisionFilter, state.taskFilter, state.activeTag].filter(Boolean).length;
+    $('active-filter-count').textContent = advancedCount ? advancedCount + ' 项筛选' : state.papers.filter(p => (p.tasks || []).length).length + ' 篇待办';
+    $('clear-library-filters').hidden = ![state.query, state.favOnly, state.activeTag, state.readingFilter, state.decisionFilter, state.taskFilter].some(Boolean);
     if (!items.length) {
       list.innerHTML = '<li class="library-empty">' + (state.papers.length
-        ? emptyState('search', '没有找到文献', '试试其他关键词，或调整收藏与标签筛选。')
+        ? emptyState('search', '没有符合条件的文献', '试试其他关键词，或点击上方「清除筛选」。')
         : emptyState('book', '从第一篇文献开始', '导入 PDF，或通过 DOI 添加文献。')) + '</li>';
     }
     renderTagChips();
+  }
+
+  function mergeWorkflow(target, updated) {
+    for (const key of ['reading_status', 'reading_decision', 'tasks', 'notes_incomplete', 'notes_stale', 'evidence_pending', 'evidence_count', 'resources_count', 'resources_pending', 'storage_warnings', 'material_revision', 'notes_material_revision']) {
+      if (Object.prototype.hasOwnProperty.call(updated, key)) target[key] = updated[key];
+    }
+  }
+
+  function renderWorkflow() {
+    const p = state.current;
+    $('paper-workflow').hidden = !p;
+    if (!p) return;
+    $('paper-reading').value = p.reading_status || 'unread';
+    $('paper-decision').value = p.reading_decision || 'pending';
+    for (const id of ['paper-reading', 'paper-decision', 'notes-complete', 'notes-reviewed']) $(id).disabled = state.workflowSaving || !!state.generating || state.materialBusy;
+    $('workflow-save').textContent = state.workflowSaving ? '正在保存…' : '由你标记阅读进度';
+    $('storage-warning').hidden = !(p.storage_warnings || []).length;
+    $('storage-warning').textContent = (p.storage_warnings || []).map(w => w.message).join(' ');
+    $('paper-tasks').innerHTML = (p.tasks || []).filter(t => TASK_NAMES[t.id]).map(t => '<button class="task-link" data-task="' + t.id + '">' + TASK_NAMES[t.id] + '</button>').join('');
+    $('notes-complete').hidden = !p.notes_incomplete;
+    $('notes-reviewed').hidden = !p.notes_stale;
+  }
+
+  async function saveWorkflow(patch) {
+    const paper = state.current;
+    if (!paper || state.workflowSaving || state.generating || state.materialBusy) { renderWorkflow(); return; }
+    state.workflowSaving = true;
+    state.workflowVersion++;
+    renderWorkflow();
+    try {
+      if (!await flushSave() || state.current !== paper) return;
+      const updated = await api.patch(paper.id, patch);
+      updateListItem(updated);
+      if (state.current === paper) mergeWorkflow(paper, updated);
+      toast('阅读记录已保存', 'ok');
+    } catch (e) { toast('阅读记录保存失败：' + e.message, 'error'); }
+    finally { state.workflowSaving = false; renderWorkflow(); }
+  }
+
+  async function refreshWorkflow(id) {
+    const version = ++state.workflowVersion;
+    const updated = await api.paper(id);
+    if (state.workflowVersion !== version) return;
+    const summary = state.papers.find(p => p.id === id);
+    if (summary) mergeWorkflow(summary, updated);
+    if (state.current && state.current.id === id) { mergeWorkflow(state.current, updated); renderWorkflow(); updateNoteActions(); }
+    renderList();
+  }
+
+  async function openTask(id, task) {
+    const paper = state.papers.find(p => p.id === id);
+    if (!paper || !TASK_NAMES[task]) return;
+    state.pendingPaper = paper;
+    await openPaper();
+    if (!state.current || state.current.id !== id) return;
+    if (task === 'storage') { switchTab('preview'); toast((state.current.storage_warnings || []).map(w => w.message).join(' '), 'error'); return; }
+    if (task === 'fulltext') { chooseAttachPdf(); return; }
+    if (task === 'resume') { setWorkspaceView('pdf'); return; }
+    if (task === 'evidence') { switchTab('evidence'); return; }
+    if (task === 'resources') { switchTab('resources'); return; }
+    if (task === 'notes_incomplete') { switchTab('edit'); return; }
+    switchTab('preview');
+    if (task === 'decision') $('paper-decision').focus();
+    if (task === 'notes_stale') toast('材料已变化，请核对笔记后点击「已核对新材料」，或重新生成笔记');
   }
 
   async function loadPapers() {
@@ -382,6 +465,7 @@
   }
 
   function updateListItem(paper) {
+    state.workflowVersion++;
     const idx = state.papers.findIndex((p) => p.id === paper.id);
     const summary = Object.assign({}, paper);
     delete summary.notes;
@@ -429,6 +513,7 @@
   async function deleteCurrent() {
     const paper = state.current;
     if (!paper || state.materialBusy) return;
+    if (!canLeaveResearch()) return;
     if (state.generating) { toast('请先停止生成再删除文献', 'error'); return; }
     if (!await flushSave()) return;
     if (!confirm('确定删除「' + paper.title + '」及其笔记与图片？此操作不可恢复。')) return;
@@ -478,6 +563,12 @@
   async function attachPdfFile(file) {
     const paper = state.current;
     if (!paper || !file || state.generating || state.materialBusy) return;
+    if (!canLeaveResearch()) return;
+    if (!await flushSave() || state.current !== paper) return;
+    state.materialBusy = true;
+    state.openToken++;
+    $('editor').readOnly = true;
+    renderDocuments(); renderWorkflow();
     toast('正在解析 ' + file.name + ' …');
     try {
       const meta = await api.attach(paper.id, file);
@@ -493,6 +584,14 @@
       toast('PDF 已附加，提取到 ' + (meta.figures_count || 0) + ' 张图', 'ok');
     } catch (e) {
       toast('附加失败：' + e.message, 'error');
+    } finally {
+      state.materialBusy = false;
+      $('editor').readOnly = false;
+      renderDocuments(); renderWorkflow();
+      if (window.BioEvidence) window.BioEvidence.clear();
+      if (window.BioResources) window.BioResources.clear();
+      if (state.tab === 'evidence') openEvidence();
+      if (state.tab === 'resources') openResources();
     }
   }
 
@@ -570,6 +669,8 @@
 
   // ---------- current paper ----------
   function renderHead() {
+    renderWorkflow();
+    $('btn-capture-evidence').disabled = !state.current;
     const paper = state.current;
     const head = $('paper-head');
     if (!paper) { head.hidden = true; return; }
@@ -630,6 +731,8 @@
   }
 
   function clearWorkspace() {
+    if (window.BioEvidence) window.BioEvidence.clear();
+    if (window.BioResources) window.BioResources.clear();
     setSaveStatus('');
     $('document-toolbar').hidden = true;
     $('btn-illustrate').disabled = true;
@@ -658,6 +761,7 @@
     state.pendingPaper = null;
     if (!target) return;
     if (state.current && state.current.id === target.id) { state.openToken++; return; }
+    if (!canLeaveResearch()) return;
     if (state.materialBusy) { toast('正在处理补充材料，请稍候'); return; }
     if (state.generating) { toast('正在生成笔记，请先停止再切换文献', 'error'); return; }
     const token = ++state.openToken;
@@ -669,6 +773,8 @@
       if (!await flushSave() || token !== state.openToken) return;
       rememberReadingPosition();
       state.current = full;
+      if (window.BioEvidence) window.BioEvidence.clear();
+      if (window.BioResources) window.BioResources.clear();
       if (!state.readingCache.has(full.id)) state.readingCache.set(full.id, full.reading_position || { documents: {} });
       const active = state.readingCache.get(full.id).active_document;
       state.documentId = (full.supplements || []).some(d => d.id === active) ? active : 'main';
@@ -697,7 +803,10 @@
     updateNoteActions();
     if (window.matchMedia('(max-width: 900px)').matches) setWorkspaceView('pdf');
     if (hasFile || state.documentId !== 'main') loadPdf(); else clearPdf();
-    fetchFigures();
+    fetchFigures().then(() => {
+      if (state.tab === 'evidence') openEvidence();
+      if (state.tab === 'resources') openResources();
+    });
   }
 
   function renderDocuments() {
@@ -717,6 +826,7 @@
   async function changeSupplements(files, remove) {
     const paper = state.current;
     if (!paper || state.materialBusy || state.generating) return;
+    if (!canLeaveResearch()) return;
     if (!await flushSave() || state.current !== paper) return;
     if (remove && !confirm('移除当前补充 PDF？已有笔记和其中的图片会保留；重新生成笔记时将不再使用这份补充材料。')) return;
     state.materialBusy = true;
@@ -741,6 +851,10 @@
       $('editor').readOnly = false;
       renderDocuments(); renderHead(); updateListItem(state.current);
       await fetchFigures(); renderFigures(); loadPdf();
+      if (window.BioEvidence) window.BioEvidence.clear();
+      if (window.BioResources) window.BioResources.clear();
+      if (state.tab === 'evidence') openEvidence();
+      if (state.tab === 'resources') openResources();
     }
   }
 
@@ -774,6 +888,13 @@
       real.alt = (fig && fig.label) || img.alt;
       real.style.maxWidth = '100%';
       img.replaceWith(real);
+      if (fig) {
+        const jump = document.createElement('button');
+        jump.className = 'btn btn-ghost note-source-link';
+        jump.dataset.noteSourceFig = fig.id;
+        jump.textContent = (fig.document_name || '正文') + ' · 第 ' + fig.page + ' 页 · 查看原文';
+        real.after(jump);
+      }
     });
   }
 
@@ -801,7 +922,8 @@
     const notes = $('editor').value;
     state.current.notes = notes;
     clearTimeout(state.saveTimer);
-    state.pendingSave = { id, notes };
+    state.pendingSave = { id, notes, ...(state.current.notes_incomplete ? { notes_incomplete: true } : {}),
+      ...(Number.isInteger(state.current.notesDraftRevision) ? { notes_source_revision: state.current.notesDraftRevision } : {}) };
     setSaveStatus('待保存', 'pending');
     updateNoteActions();
     state.saveTimer = setTimeout(flushSave, 800);
@@ -822,10 +944,15 @@
       state.pendingSave = null;
       setSaveStatus('正在保存…', 'pending');
       try {
-        const updated = await api.patch(pending.id, { notes: pending.notes });
+        const body = { notes: pending.notes };
+        if (pending.notes_incomplete !== undefined) body.notes_incomplete = pending.notes_incomplete;
+        if (pending.notes_source_revision !== undefined) body.notes_source_revision = pending.notes_source_revision;
+        const updated = await api.patch(pending.id, body);
         updateListItem(updated);
         if (state.current && state.current.id === pending.id) {
           state.current.notes_updated_at = updated.notes_updated_at;
+          mergeWorkflow(state.current, updated);
+          if (pending.notes_source_revision !== undefined) delete state.current.notesDraftRevision;
           renderHead();
           updateNoteActions();
           if (!state.pendingSave && $('editor').value === pending.notes) setSaveStatus('已保存', 'saved');
@@ -843,9 +970,10 @@
 
   function updateNoteActions() {
     const empty = !$('editor').value.trim();
-    $('btn-export-md').disabled = empty;
-    $('btn-export-word').disabled = empty;
-    $('btn-copy-wechat').disabled = empty;
+    const noExport = empty && !hasResearchRecords(state.current);
+    $('btn-export-md').disabled = noExport;
+    $('btn-export-word').disabled = noExport;
+    $('btn-copy-wechat').disabled = noExport;
     $('btn-illustrate').disabled = empty || !!state.generating;
   }
 
@@ -858,6 +986,7 @@
     }
     $('btn-generate').hidden = on;
     $('btn-stop').hidden = !on;
+    renderWorkflow();
     $('read-mode').disabled = on;
     $('editor').readOnly = on;
   }
@@ -902,6 +1031,8 @@
     let buffer = '';
     let lastRender = 0;
     let completed = false;
+    let donePaper = null;
+    let sourceRevision = paper.material_revision;
     try {
       const resp = await fetch(paperPath(paper.id, '/read?mode=' + encodeURIComponent(mode)), { method: 'POST', signal: ctrl.signal });
       if (!resp.ok) {
@@ -929,6 +1060,7 @@
               const now = performance.now();
               if (now - lastRender > 250) { renderPreview(acc, true); lastRender = now; }
             } else if (event.type === 'start') {
+              if (Number.isInteger(event.material_revision)) sourceRevision = event.material_revision;
               setGenerating(true, event.model + ' 正在' + (event.mode_name || mode) + '，笔记会实时出现…');
             } else if (event.type === 'stage') {
               setStage(event.message || event.stage, event.total ? { done: event.done, total: event.total } : null);
@@ -938,6 +1070,7 @@
             } else if (event.type === 'done') {
               if (typeof event.notes !== 'string') throw new Error('笔记完成响应无效');
               acc = event.notes;
+              donePaper = event.paper || null;
               completed = true;
             }
           }
@@ -947,6 +1080,11 @@
       paper.notes = acc;
       paper.notes_mode = mode;
       paper.notes_updated_at = new Date().toISOString();
+      paper.notes_incomplete = false;
+      delete paper.notesDraftRevision;
+      paper.notes_stale = false;
+      paper.tasks = (paper.tasks || []).filter(t => !['notes_incomplete', 'notes_stale'].includes(t.id));
+      if (donePaper) mergeWorkflow(paper, donePaper);
       editor.value = acc;
       renderPreview(acc);
       $('btn-export-md').disabled = !acc;
@@ -965,7 +1103,10 @@
       renderPreview();
       updateNoteActions();
       if (acc) {
-        state.pendingSave = { id: paper.id, notes: acc };
+        paper.notes_incomplete = true;
+        paper.notesDraftRevision = sourceRevision;
+        state.pendingSave = { id: paper.id, notes: acc, notes_incomplete: true,
+          ...(Number.isInteger(sourceRevision) ? { notes_source_revision: sourceRevision } : {}) };
         const saved = await flushSave();
         if (saved) setSaveStatus('部分内容已保存 · 未完成', 'saved');
       } else {
@@ -974,7 +1115,7 @@
       toast(stopped ? '已停止生成' + (acc ? '，已保留部分内容' : '') : '生成未完成：' + e.message, stopped ? '' : 'error');
     } finally {
       state.generating = null;
-      renderDocuments(); updateNoteActions();
+      renderDocuments(); updateNoteActions(); renderWorkflow();
       setGenerating(false);
     }
   }
@@ -984,10 +1125,11 @@
   }
 
   async function exportMarkdown() {
+    if (!canLeaveResearch()) return;
     const paper = state.current;
     if (!paper) return;
     const notes = $('editor').value;
-    if (!notes.trim()) { toast('还没有笔记可导出'); return; }
+    if (!notes.trim() && !hasResearchRecords(paper)) { toast('还没有笔记或研究记录可导出'); return; }
     try {
       const resp = await fetch(paperPath(paper.id, '/export.zip'), { method: 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes }) });
@@ -1003,6 +1145,35 @@
     return await resp.arrayBuffer();
   }
 
+  function wordInlineRuns(text, D, options = {}) {
+    const decode = value => String(value).replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (raw, entity) => {
+      const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+      if (named[entity.toLowerCase()]) return named[entity.toLowerCase()];
+      const code = entity[1].toLowerCase() === 'x' ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : raw;
+    });
+    if (!window.marked || !marked.Lexer) return [new D.TextRun({ text, ...options })];
+    const visit = (tokens, style) => tokens.flatMap(token => {
+      if (token.type === 'strong' || token.type === 'em' || token.type === 'del') {
+        return visit(token.tokens || [], { ...style, [token.type === 'strong' ? 'bold' : token.type === 'em' ? 'italics' : 'strike']: true });
+      }
+      if (token.type === 'link') {
+        let url;
+        try { url = new URL(token.href); } catch (e) { /* plain label below */ }
+        const children = visit(token.tokens || [{ type: 'text', text: token.text }], style);
+        if (url && ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && D.ExternalHyperlink) {
+          return [new D.ExternalHyperlink({ link: url.href, children })];
+        }
+        return children;
+      }
+      if (token.tokens) return visit(token.tokens, style);
+      if (token.type === 'br') return [new D.TextRun({ break: 1, ...style })];
+      return [new D.TextRun({ text: decode(token.text || token.raw || ''), ...style,
+        ...(token.type === 'codespan' ? { font: 'Menlo', size: 22 } : {}) })];
+    });
+    return visit(marked.Lexer.lexInline(text), options);
+  }
+
   function wordTable(token, D) {
     return new D.Table({
       width: { size: 100, type: D.WidthType.PERCENTAGE },
@@ -1010,7 +1181,7 @@
         tableHeader: index === 0,
         children: cells.map((cell) => new D.TableCell({
           children: [new D.Paragraph({
-            children: [new D.TextRun({ text: cell.text, bold: index === 0, size: 22 })],
+            children: wordInlineRuns(cell.text, D, { bold: index === 0, size: 22 }),
           })],
         })),
       })),
@@ -1018,18 +1189,19 @@
   }
 
   async function exportWord() {
+    if (!canLeaveResearch()) return;
     const paper = state.current;
     if (!paper) return;
     let md = $('editor').value;
     const figures = state.figures.slice();
     await flushSave();
-    if (!md.trim()) { toast('还没有笔记可导出'); return; }
+    if (!md.trim() && !hasResearchRecords(paper)) { toast('还没有笔记或研究记录可导出'); return; }
     toast('正在生成 Word …');
     const ok = await ensureDocx();
     if (!ok || !window.docx) { toast('Word 导出组件加载失败，请重新启动应用', 'error'); return; }
     const D = window.docx;
     try {
-      md = (await api.illustrate(paper.id, md)).notes;
+      md = (await api.prepareExport(paper.id, md)).notes;
       const figRefs = figureMarkdownRefs(md);
       const buffers = {};
       const figMeta = {};
@@ -1044,17 +1216,7 @@
       const children = [];
       const pushText = (text, opts) => {
         if (!text.trim()) return;
-        // Minimal inline rendering: **bold** and `code` within a paragraph.
-        const runs = [];
-        const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
-        let last = 0, m;
-        while ((m = re.exec(text))) {
-          if (m.index > last) runs.push(new D.TextRun({ text: text.slice(last, m.index), ...opts }));
-          if (m[0].startsWith('**')) runs.push(new D.TextRun({ text: m[0].slice(2, -2), bold: true, ...opts }));
-          else runs.push(new D.TextRun({ text: m[0].slice(1, -1), font: 'Menlo', size: 22, ...opts }));
-          last = m.index + m[0].length;
-        }
-        if (last < text.length) runs.push(new D.TextRun({ text: text.slice(last), ...opts }));
+        const runs = wordInlineRuns(text, D, opts);
         children.push(new D.Paragraph({ children: runs, spacing: { after: 120 } }));
       };
 
@@ -1083,11 +1245,11 @@
           if (fig.caption) children.push(new D.Paragraph({ children: [new D.TextRun({ text: fig.caption, italics: true, color: '6b7280', size: 21 })], spacing: { after: 160 } }));
           continue;
         }
-        if (!t) continue;
+        if (!t || /^<!-- (?:bioreader-research-appendix:v1 sha256=[0-9a-f]{64}|\/bioreader-research-appendix:v1) -->$/.test(t)) continue;
         let hm;
         if ((hm = /^#{1,6}\s+(.*)$/.exec(t))) {
           const level = Math.min(4, t.match(/^#+/)[0].length);
-          children.push(new D.Paragraph({ text: hm[1], heading: [D.HeadingLevel.HEADING_1, D.HeadingLevel.HEADING_2, D.HeadingLevel.HEADING_3, D.HeadingLevel.HEADING_4][level - 1], spacing: { before: 240, after: 120 } }));
+          children.push(new D.Paragraph({ children: wordInlineRuns(hm[1], D), heading: [D.HeadingLevel.HEADING_1, D.HeadingLevel.HEADING_2, D.HeadingLevel.HEADING_3, D.HeadingLevel.HEADING_4][level - 1], spacing: { before: 240, after: 120 } }));
         } else if (/^(\||[-:| ]+\|)/.test(t)) {
           if (/^\|[-: |]+\|$/.test(t)) continue;
           const cells = t.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
@@ -1119,18 +1281,48 @@
 
   // ---------- tabs ----------
   function switchTab(name) {
-    if (!['preview', 'edit', 'figures'].includes(name)) return;
+    if (!['preview', 'edit', 'figures', 'evidence', 'resources'].includes(name)) return;
     state.tab = name;
+    document.body.dataset.noteTab = name;
     document.querySelectorAll('#tabs .tab').forEach((b) => {
       const active = b.dataset.tab === name;
       b.classList.toggle('active', active);
       b.setAttribute('aria-selected', String(active));
       b.tabIndex = active ? 0 : -1;
     });
-    ['preview', 'edit', 'figures'].forEach((t) => { $('tab-' + t).hidden = t !== name; });
+    ['preview', 'edit', 'figures', 'evidence', 'resources'].forEach((t) => { $('tab-' + t).hidden = t !== name; });
     if (window.matchMedia('(max-width: 900px)').matches) setWorkspaceView('notes');
     if (name === 'figures') renderFigures();
+    if (name === 'preview') renderPreview();
     if (name === 'edit') $('editor').focus();
+    if (name === 'evidence') openEvidence();
+    if (name === 'resources') openResources();
+  }
+
+  function canLeaveResearch() {
+    return (!window.BioEvidence || window.BioEvidence.canLeave()) && (!window.BioResources || window.BioResources.canLeave());
+  }
+
+  function openResources() {
+    if (window.BioResources) window.BioResources.open(state.current);
+  }
+
+  function hasResearchRecords(paper) {
+    return !!(paper && (paper.evidence_count || paper.resources_count));
+  }
+
+  function openEvidence() {
+    if (window.BioEvidence) window.BioEvidence.open(state.current, state.figures);
+  }
+
+  async function captureEvidence() {
+    if (!state.current || !window.BioEvidence) return;
+    const editor = $('editor');
+    const selection = window.getSelection();
+    const text = state.tab === 'edit' ? editor.value.slice(editor.selectionStart, editor.selectionEnd)
+      : (selection && $('preview').contains(selection.anchorNode) ? selection.toString() : '');
+    switchTab('evidence');
+    window.BioEvidence.start({ claim: text.slice(0, 4000), document_id: state.documentId, page: currentPage() });
   }
 
   async function figureDataUrl(fid, paperId) {
@@ -1151,9 +1343,9 @@
     // Embed figure images as data URLs so the copied HTML survives outside the app.
     const paper = state.current;
     const original = $('editor').value;
-    if (!paper || !original.trim()) return '';
+    if (!paper || (!original.trim() && !hasResearchRecords(paper))) return '';
     const theme = $('wechat-theme').value;
-    const md = (await api.illustrate(paper.id, original)).notes;
+    const md = (await api.prepareExport(paper.id, original)).notes;
     let prepared = md;
     for (const m of figureMarkdownRefs(md)) {
       try {
@@ -1165,9 +1357,10 @@
   }
 
   async function copyWechat() {
+    if (!canLeaveResearch()) return;
     if (!state.current) return;
     const notes = $('editor').value;
-    if (!notes.trim()) { toast('还没有笔记可复制'); return; }
+    if (!notes.trim() && !hasResearchRecords(state.current)) { toast('还没有笔记或研究记录可复制'); return; }
     const btn = $('btn-copy-wechat');
     btn.disabled = true;
     try {
@@ -1195,6 +1388,7 @@
       state.figures = [];
     }
     if (state.tab === 'figures') renderFigures();
+    if (state.tab === 'preview' && !state.generating) renderPreview();
     return state.figures;
   }
 
@@ -1826,6 +2020,33 @@
 
   // ---------- wiring ----------
   function initEvents() {
+    for (const [id, key] of [['filter-reading', 'readingFilter'], ['filter-decision', 'decisionFilter'], ['filter-task', 'taskFilter']]) {
+      $(id).addEventListener('change', e => { state[key] = e.target.value; renderList(); });
+    }
+    $('clear-library-filters').addEventListener('click', () => {
+      state.query = state.activeTag = state.readingFilter = state.decisionFilter = state.taskFilter = '';
+      state.favOnly = false;
+      for (const id of ['search', 'filter-reading', 'filter-decision', 'filter-task']) $(id).value = '';
+      renderList();
+    });
+    $('paper-reading').addEventListener('change', e => saveWorkflow({ reading_status: e.target.value }));
+    $('paper-decision').addEventListener('change', e => saveWorkflow({ reading_decision: e.target.value }));
+    $('notes-complete').addEventListener('click', () => saveWorkflow({ notes_incomplete: false }));
+    $('btn-library-resources').addEventListener('click', async () => {
+      if (window.BioResources && !window.BioResources.canLeave()) return;
+      switchTab('resources');
+      if (window.BioResources) await window.BioResources.showAll();
+    });
+    $('notes-reviewed').addEventListener('click', () => saveWorkflow({ notes_reviewed: true }));
+    $('btn-capture-evidence').addEventListener('click', captureEvidence);
+    $('preview').addEventListener('click', e => {
+      const button = e.target.closest('[data-note-source-fig]');
+      if (button) showFigureSource(button.dataset.noteSourceFig);
+    });
+    $('paper-tasks').addEventListener('click', e => {
+      const task = e.target.closest('[data-task]');
+      if (task && state.current) openTask(state.current.id, task.dataset.task);
+    });
     document.querySelector('.upload-btn').addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file-input').click(); }
     });
@@ -1900,6 +2121,8 @@
       if (star) { e.stopPropagation(); toggleFavorite(star.dataset.star); return; }
       const item = e.target.closest('.paper-item');
       if (item && item.dataset.id) {
+        const task = e.target.closest('[data-task]');
+        if (task) { openTask(item.dataset.id, task.dataset.task); return; }
         const paper = state.papers.find((p) => p.id === item.dataset.id);
         if (paper) { state.pendingPaper = paper; openPaper(); }
       }
@@ -2044,7 +2267,7 @@
     window.addEventListener('beforeunload', (e) => {
       rememberReadingPosition();
       flushReadingPositions();
-      if (state.pendingSave || state.saveInFlight || state.generating) {
+      if (state.pendingSave || state.saveInFlight || state.generating || !canLeaveResearch()) {
         flushSave();
         e.preventDefault();
         e.returnValue = '';
@@ -2054,6 +2277,24 @@
   }
 
   async function init() {
+    if (window.BioResources) window.BioResources.init({
+      request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
+      jump: async (documentId, page) => { setWorkspaceView('pdf'); await switchDocument(documentId, page); },
+      openPaper: async (id) => {
+        const paper = state.papers.find(p => p.id === id);
+        if (!paper) { toast('文献不在当前文献库，请刷新后重试', 'error'); return false; }
+        state.pendingPaper = paper; await openPaper();
+        if (!state.current || state.current.id !== id) return false;
+        switchTab('resources'); return true;
+      },
+      onChanged: refreshWorkflow, toast,
+    });
+    if (window.BioEvidence) window.BioEvidence.init({
+      request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
+      jump: async (documentId, page) => { setWorkspaceView('pdf'); await switchDocument(documentId, page); },
+      onChanged: refreshWorkflow,
+      toast,
+    });
     if (!window.marked) toast('Markdown 渲染组件未能加载，请重新启动应用', 'error');
     initEvents();
     setWorkspaceView('library');
