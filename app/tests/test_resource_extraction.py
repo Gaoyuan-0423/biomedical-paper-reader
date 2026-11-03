@@ -70,9 +70,10 @@ class ResourceExtractionTests(unittest.TestCase):
         for item in body['resources']:
             self.assertEqual(item['status'], 'pending')
             self.assertEqual((item['document_id'], item['page'], item['quote']), ('', None, ''))
-            self.assertIn('尚未核对原文', item['notes'])
+            self.assertEqual(item['notes'], '来自精读笔记自动整理。')
         self.assertEqual(body['paper']['resources_pending'], 13)
-        self.assertIn('resources', {task['id'] for task in body['paper']['tasks']})
+        self.assertNotIn('resources', {task['id'] for task in body['paper']['tasks']})
+        self.assertNotIn('核查', body['message'])
 
     def test_official_accession_url_merges_without_binding_unrelated_links(self):
         self.save_notes('''## 结果
@@ -208,7 +209,7 @@ https://doi.org/10.5061/dryad.abc123
                 self.assertEqual(self.client.get(self.url + '/export.md').status_code, 409)
                 self.assertEqual(self.client.get(self.url).status_code, 200)
 
-    def test_notes_never_mutated_and_exports_label_pending_without_pdf_provenance(self):
+    def test_notes_never_mutated_and_exports_keep_source_without_resource_status(self):
         notes = '## 数据与代码\n[本研究生成 GSE12345](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE12345)\n'
         self.save_notes(notes)
         before = (self.directory / 'meta.json').read_bytes()
@@ -217,9 +218,10 @@ https://doi.org/10.5061/dryad.abc123
         self.assertEqual((self.directory / 'meta.json').read_bytes(), before)
         exported = self.client.get(self.url + '/export.md')
         self.assertEqual(exported.status_code, 200, exported.text)
-        self.assertIn('待核查', exported.text)
+        self.assertNotIn('核查状态', exported.text)
         self.assertIn('未关联原文', exported.text)
-        self.assertIn('尚未核对原文', exported.text)
+        self.assertIn('整理来源：精读笔记自动整理', exported.text)
+        self.assertNotIn('尚未核对原文', exported.text)
         self.assertNotIn('PDF 第', exported.text)
         # Exported appendices re-imported as notes must not recreate deleted items.
         self.assertEqual(extract_resources('## 精读\n没有资源。\n\n## 阅读核查与资源记录\n### 数据与代码\nGSE99999'), [])
@@ -321,6 +323,23 @@ https://doi.org/10.5061/dryad.abc123
         self.assertEqual((repeated['added_count'], repeated['updated_count']), (0, 0))
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(len(list(self.directory.glob('resources.backup-*.json'))), 1)
+        # v2 records used the old short notice in their fingerprints. A notice
+        # wording update remains recognizable as automatic, with a backup, and
+        # cannot make edited or previously verified rows replaceable.
+        from resource_extraction import resource_fingerprint
+        previous_version = json.loads(path.read_text())
+        automatic = next(record for record in previous_version if record.get('auto_extraction'))
+        automatic['notes'] = '来自精读笔记自动整理，尚未核对原文。'
+        automatic['auto_extraction']['fingerprint'] = resource_fingerprint(automatic)
+        path.write_text(json.dumps(previous_version, ensure_ascii=False))
+        migrated = self.extract().json()
+        self.assertEqual((migrated['added_count'], migrated['updated_count']), (1, 1))
+        self.assertEqual(len(migrated['resources']), 5)
+        migrated_raw = json.loads(path.read_text())
+        for preserved in original[2:]:
+            self.assertEqual(next(record for record in migrated_raw if record['id'] == preserved['id']), preserved)
+        self.assertEqual(next(record for record in migrated_raw if record.get('auto_extraction'))['notes'], '来自精读笔记自动整理。')
+        self.assertEqual(self.extract().json()['updated_count'], 0)
 
     def test_new_auto_updates_preserve_manual_edits_and_status(self):
         template = '''| 资源 | 用途 | 编号/链接 | 影响使用的条件 |

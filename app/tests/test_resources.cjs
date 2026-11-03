@@ -28,7 +28,6 @@ function harness() {
     mode(value) { return handlers.click({ target: { closest: selector => selector === '[data-resource-mode]' ? { dataset: { resourceMode: value } } : null } }); },
     input(field, value) { return handlers.input({ target: { dataset: { resourceField: field }, value } }); },
     field(field, value) { return handlers.change({ target: { dataset: { resourceField: field }, value } }); },
-    status(value, resourceKey = A + ':' + R) { return handlers.change({ target: { dataset: { resourceStatus: resourceKey }, value } }); },
     query(value) { return handlers.input({ target: { dataset: {}, value, matches: selector => selector === '#resource-search input' } }); },
     submit(id = 'resource-form') { return handlers.submit({ target: { id }, preventDefault() {} }); },
   };
@@ -54,7 +53,7 @@ test('a metadata-only paper can save a resource with no PDF source', async () =>
   const posted = h.calls.find(c => c.method === 'POST');
   assert.equal(posted.body.document_id, ''); assert.equal(posted.body.page, null);
   assert.equal(posted.body.kind, 'code'); assert.equal(posted.body.role, 'implementation');
-  assert.equal(posted.body.status, 'pending'); assert.equal(h.ui.canLeave(), true);
+  assert.equal(Object.hasOwn(posted.body, 'status'), false); assert.equal(h.ui.canLeave(), true);
   assert.deepEqual(h.changes, [A]);
 });
 
@@ -133,13 +132,13 @@ test('invalid URLs and source pages fail before any write', async () => {
   assert.equal(h.calls.length, 1); assert.match(h.panel.innerHTML, /有效的原文文件和 PDF 页码/);
 });
 
-test('missing sources cannot jump or verify; edits can detach an unavailable source', async () => {
+test('missing sources cannot jump; edits can detach an unavailable source without changing legacy status', async () => {
   const h = harness(); h.hooks.request = async method => { assert.equal(method, 'GET'); return [record({ document_id: B, page: 1, source_available: false })]; };
-  await h.ui.open(paper()); await h.status('verified'); await h.click('jump', { resourceKey: A + ':' + R });
-  assert.equal(h.navigation.length, 0); assert.match(h.panel.innerHTML, /value="verified" disabled/);
+  await h.ui.open(paper()); await h.click('jump', { resourceKey: A + ':' + R });
+  assert.equal(h.navigation.length, 0); assert.match(h.panel.innerHTML, /原文来源已移除或页码失效/);
   await h.click('edit', { resourceKey: A + ':' + R });
   h.hooks.request = async (method, url, body) => { h.calls.push({ method, url, body }); return record(body); };
-  await h.submit(); assert.equal(h.calls[0].body.document_id, ''); assert.equal(h.calls[0].body.page, null);
+  await h.submit(); assert.equal(h.calls[0].body.document_id, ''); assert.equal(h.calls[0].body.page, null); assert.equal(Object.hasOwn(h.calls[0].body, 'status'), false);
 });
 
 test('global source jump opens its paper first and respects failed navigation', async () => {
@@ -150,10 +149,19 @@ test('global source jump opens its paper first and respects failed navigation', 
   await h.click('jump', { resourceKey: B + ':' + R }); assert.equal(h.navigation.length, 0);
 });
 
-test('status failure reverts to authoritative state and changed sources require reverification', async () => {
-  const h = harness(); h.hooks.request = async method => { if (method === 'GET') return [record({ source_changed: true, status: 'verified' })]; throw new Error('offline'); };
-  await h.ui.open(paper()); assert.match(h.panel.innerHTML, /原文文件已更新/); assert.match(h.panel.innerHTML, /value="pending" selected/);
-  await h.status('verified'); assert.match(h.panel.innerHTML, /value="pending" selected/); assert.match(h.panel.innerHTML, /保存失败/);
+test('legacy statuses have no UI while source warnings, manual notes, edit and delete remain', async () => {
+  const h = harness(); h.hooks.request = async () => [record({ source_changed: true, status: 'verified', notes: '人工备注保留' }), record({ id: S, status: 'pending', auto_extraction: { version: 2 }, notes: '来自精读笔记自动整理，尚未核对原文。' }), record({ id: B, notes: '来自精读笔记自动整理。' })];
+  await h.ui.open(paper());
+  assert.match(h.panel.innerHTML, /原文文件已更新/); assert.match(h.panel.innerHTML, /人工备注保留/); assert.match(h.panel.innerHTML, /笔记整理/);
+  assert.match(h.panel.innerHTML, /data-resource-action="edit"/); assert.match(h.panel.innerHTML, /data-resource-action="delete"/);
+  assert.doesNotMatch(h.panel.innerHTML, /resource-status|data-resource-status|待核对|已核对|资源核对状态/);
+  assert.doesNotMatch(h.panel.innerHTML, /来自精读笔记自动整理/);
+  await h.click('edit', { resourceKey: A + ':' + R });
+  assert.doesNotMatch(h.panel.innerHTML, /保存后为|待核对|已核对|data-resource-status/);
+  h.hooks.request = async (method, url, body) => { h.calls.push({ method, url, body }); return record({ ...body, status: 'verified' }); };
+  h.input('purpose', '更新用途'); await h.submit();
+  assert.equal(Object.hasOwn(h.calls[0].body, 'status'), false);
+  assert.doesNotMatch(h.panel.innerHTML, /resource-status|data-resource-status|待核对|已核对/);
 });
 
 test('empty draft can be left while meaningful unsaved changes block navigation', async () => {

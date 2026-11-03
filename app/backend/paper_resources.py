@@ -252,8 +252,9 @@ def public_resource(directory, meta, record):
         path, pages, name = source_info(directory, meta, record['document_id'])
         available = bool(path and path.is_file() and 1 <= record['page'] <= pages)
         changed = available and record.get('source_revision', 'legacy') != source_revision(meta, record)
-    status = 'pending' if (not available or changed) and record['status'] == 'verified' else record['status']
-    return {**record, 'source_available': available, 'source_changed': changed, 'source_name': name, 'status': status}
+    # Status is retained only for old clients and migration protection. Resource
+    # use no longer requires verification; provenance availability is independent.
+    return {**record, 'source_available': available, 'source_changed': changed, 'source_name': name}
 
 
 def public_resources(directory, meta):

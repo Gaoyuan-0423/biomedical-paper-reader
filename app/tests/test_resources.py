@@ -44,7 +44,7 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()['supplements'][0]
 
-    def test_old_libraries_empty_and_manual_resource_roundtrip_tasks(self):
+    def test_manual_resource_roundtrip_has_no_verification_task_and_preserves_legacy_status(self):
         self.assertEqual(self.client.get(self.url + '/resources').json(), [])
         self.assertEqual(self.client.get('/api/resources').json(), [])
         original_notes = self.client.get(self.url).json()['notes']
@@ -54,13 +54,13 @@ class ResourceTests(unittest.TestCase):
         meta = self.client.get(self.url).json()
         self.assertEqual(meta['resources_count'], 1)
         self.assertEqual(meta['resources_pending'], 1)
-        self.assertIn('resources', {t['id'] for t in meta['tasks']})
+        self.assertNotIn('resources', {t['id'] for t in meta['tasks']})
         url = self.url + '/resources/' + resource['id']
         checked = self.client.patch(url, json={'status': 'verified'}).json()
         self.assertEqual(checked['status'], 'verified')
         self.assertNotIn('resources', {t['id'] for t in self.client.get(self.url).json()['tasks']})
         changed = self.client.patch(url, json={'organism': 'mouse'}).json()
-        self.assertEqual(changed['status'], 'pending')
+        self.assertEqual(changed['status'], 'verified')
         self.assertEqual(self.client.get(self.url).json()['notes'], original_notes)
         self.assertEqual(self.client.delete(url).status_code, 200)
         self.assertEqual(self.client.get(self.url).json()['resources_count'], 0)
@@ -158,7 +158,7 @@ class ResourceTests(unittest.TestCase):
         self.client.delete(self.url + '/supplements/' + supplement['id'])
         retained = self.client.get(self.url + '/resources').json()[0]
         self.assertFalse(retained['source_available'])
-        self.assertEqual(retained['status'], 'pending')
+        self.assertEqual(retained['status'], 'verified')  # Legacy state is not a workflow.
         url = self.url + '/resources/' + record['id']
         self.assertEqual(self.client.patch(url, json={'status': 'verified'}).status_code, 404)
         self.assertEqual(self.client.patch(url, json={'notes': 'Need to recover source'}).status_code, 200)
@@ -167,13 +167,14 @@ class ResourceTests(unittest.TestCase):
         self.assertTrue(detached['source_available'])
         self.assertEqual(detached['document_id'], '')
 
-    def test_replaced_source_needs_explicit_reverification(self):
+    def test_replaced_source_warns_without_resetting_legacy_status(self):
         record = self.add(document_id='main', page=1, status='verified')
         self.client.post(self.url + '/file', files={'file': ('replacement.pdf', fixture_pdf(marker='REPLACED'))})
         url = self.url + '/resources/' + record['id']
         changed = self.client.patch(url, json={}).json()
         self.assertTrue(changed['source_changed'])
-        self.assertEqual(changed['status'], 'pending')
+        self.assertEqual(changed['status'], 'verified')
+        self.assertNotIn('resources', {t['id'] for t in self.client.get(self.url).json()['tasks']})
         checked = self.client.patch(url, json={'status': 'verified'}).json()
         self.assertEqual(checked['status'], 'verified')
         self.assertFalse(checked['source_changed'])

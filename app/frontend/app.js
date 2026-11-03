@@ -5,7 +5,7 @@
   const PDF_WORKER = 'vendor/pdf.worker.min.js';
   const DOCX_SCRIPT = 'vendor/docx.umd.js';
   const MODE_NAMES = { deep: '精读', quick: '速读' };
-  const TASK_NAMES = { fulltext: '补充全文', notes_incomplete: '补完笔记', notes_stale: '核对新材料', evidence: '核查证据', resources: '核对数据与复现', storage: '检查本地记录' };
+  const TASK_NAMES = { fulltext: '补充全文', notes_incomplete: '补完笔记', notes_stale: '核对新材料', evidence: '核查证据', storage: '检查本地记录' };
 
   // ---------- API ----------
   // Paper/figure ids reach fetch URLs (including from the ?paper= query param),
@@ -93,7 +93,6 @@
     extractingResources: new Map(),
     resourceExtractionRefresh: new Set(),
     query: '',
-    taskFilter: '',
     workflowSaving: false,
     workflowVersion: 0,
     tab: 'preview',
@@ -331,7 +330,6 @@
     return state.papers.filter((p) => {
       if (state.favOnly && !p.favorite) return false;
       if (state.activeTag && !(p.tags || []).includes(state.activeTag)) return false;
-      if (state.taskFilter && !paperTasks(p).some(t => state.taskFilter === 'any' || t.id === state.taskFilter)) return false;
       if (!q) return true;
       return [p.title, p.authors, p.doi, p.filename, p.journal, (p.tags || []).join(' ')].join(' ').toLowerCase().includes(q);
     });
@@ -367,8 +365,7 @@
       return '<li class="paper-item' + active + '" data-id="' + p.id + '">' +
         '<button class="star' + (p.favorite ? ' on' : '') + '" data-star="' + p.id + '" title="' + (p.favorite ? '取消收藏' : '收藏文献') + '" aria-pressed="' + !!p.favorite + '">' + icon('star') + '</button>' +
         '<div class="paper-item-text"><button class="paper-open paper-item-title" data-id="' + p.id + '" title="' + escapeHtml(p.title) + '"' + (active ? ' aria-current="true"' : '') + '>' + escapeHtml(p.title) + '</button>' +
-        '<div class="paper-item-meta">' + meta + '</div>' + tagRow +
-        '<div class="list-tasks">' + paperTasks(p).map(t => '<button class="task-link" data-task="' + t.id + '">' + TASK_NAMES[t.id] + '</button>').join('') + '</div></div></li>';
+        '<div class="paper-item-meta">' + meta + '</div>' + tagRow + '</div></li>';
     }).join('');
     const favCount = state.papers.filter((p) => p.favorite).length;
     if ($('library-total')) $('library-total').textContent = state.papers.length;
@@ -381,17 +378,20 @@
       $('btn-all-filter').setAttribute('aria-pressed', String(!state.favOnly));
     }
     $('library-count').textContent = state.papers.length + ' 篇文献 · ' + favCount + ' 篇收藏' + (items.length !== state.papers.length ? ' · 显示 ' + items.length + ' 篇' : '');
-    const taskCount = state.papers.filter(p => paperTasks(p).length).length;
-    $('task-total').textContent = taskCount + ' 篇';
-    const advancedCount = [state.taskFilter, state.activeTag].filter(Boolean).length;
-    $('active-filter-count').textContent = advancedCount ? advancedCount + ' 项筛选' : taskCount + ' 篇待办';
-    $('clear-library-filters').hidden = ![state.query, state.favOnly, state.activeTag, state.taskFilter].some(Boolean);
+    $('clear-library-filters').hidden = ![state.query.trim(), state.favOnly, state.activeTag].some(Boolean);
     if (!items.length) {
       list.innerHTML = '<li class="library-empty">' + (state.papers.length
-        ? emptyState('search', '没有符合条件的文献', '试试其他关键词，或展开下方「筛选与待办」并点击「清除筛选」。')
+        ? emptyState('search', '没有符合条件的文献', '试试其他关键词，或点击上方「清除筛选」恢复全部文献。')
         : emptyState('book', '从第一篇文献开始', '导入 PDF，或通过 DOI 添加文献。')) + '</li>';
     }
     renderTagChips();
+  }
+
+  function clearLibraryFilters() {
+    state.query = state.activeTag = '';
+    state.favOnly = false;
+    $('search').value = '';
+    renderList();
   }
 
   function mergeWorkflow(target, updated) {
@@ -448,7 +448,6 @@
     if (task === 'storage') { switchTab('preview'); toast((state.current.storage_warnings || []).map(w => w.message).join(' '), 'error'); return; }
     if (task === 'fulltext') { chooseAttachPdf(); return; }
     if (task === 'evidence') { switchTab('evidence'); return; }
-    if (task === 'resources') { switchTab('resources'); return; }
     if (task === 'notes_incomplete') { switchTab('edit'); return; }
     switchTab('preview');
     if (task === 'notes_stale') toast('材料已变化，请核对笔记后点击「已核对新材料」，或重新生成笔记');
@@ -2196,17 +2195,10 @@
 
   // ---------- wiring ----------
   function initEvents() {
-    $('filter-task').addEventListener('change', e => { state.taskFilter = e.target.value; renderList(); });
-    $('clear-library-filters').addEventListener('click', () => {
-      state.query = state.activeTag = state.taskFilter = '';
-      state.favOnly = false;
-      for (const id of ['search', 'filter-task']) $(id).value = '';
-      renderList();
-    });
+    $('clear-library-filters').addEventListener('click', clearLibraryFilters);
     $('notes-complete').addEventListener('click', () => saveWorkflow({ notes_incomplete: false }));
     $('btn-library-resources').addEventListener('click', async () => {
       if (window.BioResources && !window.BioResources.canLeave()) return;
-      $('library-refine').open = false;
       switchTab('resources');
       if (window.BioResources) await window.BioResources.showAll();
     });
@@ -2260,7 +2252,6 @@
           e.preventDefault();
           if (modal.id === 'input-modal') finishInput(null); else closeModal(modal.id);
         }
-        if (!modal && $('library-refine').open) { $('library-refine').open = false; $('library-refine').querySelector('summary').focus(); }
         if (exportMenu.open) { exportMenu.open = false; exportMenu.querySelector('summary').focus(); }
       }
       if (modal && e.key === 'Tab') {
@@ -2295,8 +2286,6 @@
       if (star) { e.stopPropagation(); toggleFavorite(star.dataset.star); return; }
       const item = e.target.closest('.paper-item');
       if (item && item.dataset.id) {
-        const task = e.target.closest('[data-task]');
-        if (task) { openTask(item.dataset.id, task.dataset.task); return; }
         const paper = state.papers.find((p) => p.id === item.dataset.id);
         if (paper) { state.pendingPaper = paper; openPaper(); }
       }

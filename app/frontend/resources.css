@@ -28,9 +28,7 @@
 .resource-table a { color: var(--primary-ink); text-decoration: underline; text-underline-offset: 2px; }
 .resource-table a:hover { color: var(--primary-hover); }
 .resource-unrecorded { color: var(--muted); }
-.resource-status, .resource-auto { display: inline-block; font-size: 10px; border-radius: 3px; padding: 1px 5px; margin: 0 4px 4px 0; background: var(--surface-hover); color: var(--muted); }
-.resource-status.verified { background: var(--ok-bg); color: var(--ok-text); }
-.resource-auto { background: var(--primary-soft); color: var(--primary-ink); }
+.resource-auto { display: inline-block; font-size: 10px; border-radius: 3px; padding: 1px 5px; margin: 0 4px 4px 0; background: var(--primary-soft); color: var(--primary-ink); }
 .resource-long summary, .resource-related summary, .resource-row-details summary, .resource-geo summary { cursor: pointer; }
 .resource-long summary { color: var(--text); }
 .resource-long summary span { color: var(--primary-ink); }
@@ -45,7 +43,6 @@
 .resource-table blockquote { margin: 9px 0; padding: 6px 9px; border-left: 3px solid var(--primary-border); color: var(--muted); background: var(--surface-subtle); white-space: pre-wrap; overflow-wrap: anywhere; }
 .resource-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .resource-actions a { text-decoration: none; }
-.resource-actions select { padding: 5px; font-size: 11px; max-width: 100%; }
 .resource-actions .danger-ghost { margin-left: auto; }
 .resource-form { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--primary-border); border-radius: 9px; background: var(--surface-subtle); margin: 18px 0; }
 .resource-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; }

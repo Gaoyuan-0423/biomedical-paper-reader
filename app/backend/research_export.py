@@ -11,6 +11,7 @@ _STATUS = {'pending': '待核查', 'verified': '已核查', 'rejected': '不支�
 _KINDS = {'dataset': '数据集', 'code': '代码', 'other': '其他资源'}
 _ROLES = {'generated': '本文产生', 'reused': '复用已有数据', 'implementation': '方法实现', 'unknown': '关系待确认'}
 _LEGACY_RESOURCE_NOTICE = '来自精读笔记自动整理，尚未核对原文。笔记片段：\n'
+_RESOURCE_NOTICES = {'来自精读笔记自动整理，尚未核对原文。', '来自精读笔记自动整理。'}
 _GENERATED = re.compile(
     r'\n\n<!-- bioreader-research-appendix:v1 sha256=([0-9a-f]{64}) -->\n'
     r'(.*?)\n<!-- /bioreader-research-appendix:v1 -->\n\Z', re.S)
@@ -63,17 +64,18 @@ def _source(record):
     return value
 
 
-def _record_details(record):
+def _record_details(record, include_status=True):
     status = record.get('status', 'pending')
     unavailable = record.get('source_available') is False
     changed = bool(record.get('source_changed'))
     if status == 'verified' and (unavailable or changed):
         status = 'pending'
-    lines = ['- 核查状态：' + _STATUS.get(status, '待核查'), '- 原文位置：' + _source(record)]
+    lines = (['- 核查状态：' + _STATUS.get(status, '待核查')] if include_status else [])
+    lines.append('- 原文位置：' + _source(record))
     if unavailable:
-        lines.append('- 来源状态：来源已移除或页码失效，需要重新关联并核查。')
+        lines.append('- 来源状态：来源已移除或页码失效，' + ('需要重新关联并核查。' if include_status else '原文位置不可用。'))
     if changed:
-        lines.append('- 来源状态：来源文件已更新，需要重新核查。')
+        lines.append('- 来源状态：来源文件已更新，' + ('需要重新核查。' if include_status else '已记录内容可能对应旧版本。'))
     if record.get('quote'):
         lines.extend(['', '原文摘录或图表观察：', ''])
         lines.extend('> ' + line for line in _text(record['quote']).split('\n'))
@@ -132,9 +134,9 @@ def append_research_appendix(notes, evidence, resources):
             if record.get('url'):
                 link = _safe_url(record['url'])
                 sections.append('- 链接：' + ('[打开资源](' + link + ')' if link else '未导出（仅支持有效的 HTTP/HTTPS 地址）'))
-            sections.extend(_record_details(record))
+            sections.extend(_record_details(record, include_status=False))
             notes_value = record.get('notes') or ''
-            if isinstance(notes_value, str) and notes_value.startswith(_LEGACY_RESOURCE_NOTICE):
+            if isinstance(notes_value, str) and (notes_value.startswith(_LEGACY_RESOURCE_NOTICE) or notes_value in _RESOURCE_NOTICES):
                 sections.extend(['', '- 整理来源：精读笔记自动整理。'])
             elif notes_value:
                 sections.extend(_literal_block('备注', notes_value))

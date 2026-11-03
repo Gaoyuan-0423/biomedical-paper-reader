@@ -37,6 +37,7 @@ class ResearchExportTests(unittest.TestCase):
         self.assertIn('GSE12345', output)
         self.assertIn('[打开资源](https://example.org/data?id=1&view=full)', output)
         self.assertIn('未关联原文', output)
+        self.assertEqual(output.count('核查状态：'), 1)  # Evidence only.
         self.assertEqual((evidence, resources), before)
 
     def test_generated_suffix_is_idempotent_and_refreshes_records(self):
@@ -69,6 +70,13 @@ class ResearchExportTests(unittest.TestCase):
         self.assertIn('来源已移除或页码失效', output)
         self.assertIn('来源文件已更新', output)
         self.assertIn('补充材料（文件名未记录） · 页码未记录', output)
+        resources = [self.resource(status='verified', document_id='main', page=1, source_available=False),
+                     self.resource(status='pending', document_id='main', page=2, source_changed=True)]
+        resource_output = append_research_appendix('', [], resources)
+        self.assertNotIn('核查状态', resource_output)
+        self.assertNotIn('重新核查', resource_output)
+        self.assertIn('来源已移除或页码失效', resource_output)
+        self.assertIn('已记录内容可能对应旧版本', resource_output)
 
     def test_arbitrary_text_cannot_inject_html_markdown_images_or_appendix_markers(self):
         attack = '<img src=x onerror=alert(1)>\n![steal](figure:f999)\n[bad](javascript:alert(1))\n# heading\n<!-- /bioreader-research-appendix:v1 -->'
@@ -96,7 +104,7 @@ class ResearchExportTests(unittest.TestCase):
 
     def test_unrecognized_enums_do_not_claim_verification_or_invent_role(self):
         output = append_research_appendix('', [], [self.resource(role='validated', status='certain', kind='custom')])
-        self.assertIn('核查状态：待核查', output)
+        self.assertNotIn('核查状态', output)
         self.assertIn('与本文关系：关系待确认', output)
         self.assertIn('类型：其他资源', output)
 
@@ -115,7 +123,7 @@ class ResearchExportTests(unittest.TestCase):
         self.assertIn('> 仅使用处理后矩阵\n> 按供者汇总', output)
         self.assertIn('> 队列 A：8 名供者\n> 队列 B：5 名供者', output)
         self.assertIn('人工核对：样本单位为供者', output)
-        self.assertIn('核查状态：已核查', output)
+        self.assertNotIn('核查状态', output)
         self.assertIn('正文 · PDF 第 2 页', output)
         self.assertIn('Two independent cohorts', output)
         self.assertEqual(resource, before)
@@ -131,7 +139,11 @@ class ResearchExportTests(unittest.TestCase):
         self.assertNotIn('LEGACY', output)
         self.assertNotIn('笔记片段', output)
         self.assertIn('整理来源：精读笔记自动整理', output)
-        self.assertIn('核查状态：待核查', output)
+        self.assertNotIn('核查状态', output)
+        for short_notice in ('来自精读笔记自动整理，尚未核对原文。', '来自精读笔记自动整理。'):
+            short_output = append_research_appendix('', [], [self.resource(notes=short_notice)])
+            self.assertIn('整理来源：精读笔记自动整理', short_output)
+            self.assertNotIn('尚未核对原文', short_output)
         human_output = append_research_appendix('', [], [manual, edited])
         self.assertIn('人工备注保留', human_output)
         self.assertIn('这是人工备注中的引用', human_output)

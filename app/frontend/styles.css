@@ -116,6 +116,7 @@ select { cursor: pointer; }
 .filter-btn span { font-weight: 400; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 #tag-chips { max-height: 88px; overflow-y: auto; overflow-x: hidden; align-content: flex-start; padding-right: 3px; scrollbar-gutter: stable; }
+.clear-library-filters { align-self: flex-end; min-height: 28px; padding: 4px 7px; font-size: 11px; }
 .chip { max-width: 100%; border: 1px solid var(--border); background: transparent; border-radius: 5px; padding: 2px 7px; font-size: 11px; color: var(--muted); cursor: pointer; line-height: 1.6; display: inline-flex; align-items: center; gap: 3px; overflow-wrap: anywhere; }
 .chip:hover, .chip.on { color: var(--primary); background: var(--primary-soft); border-color: var(--primary-border); }
 .chip .x { border: none; background: transparent; padding: 0; color: inherit; cursor: pointer; display: inline-flex; flex: 0 0 auto; opacity: .6; }
@@ -150,12 +151,6 @@ select { cursor: pointer; }
 .sidebar.dragover .drop-hint { background: var(--primary-tint); border-color: var(--primary); color: var(--primary); }
 .sidebar-foot { display: flex; align-items: center; gap: 7px; padding: 14px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); min-height: 42px; }
 .sidebar-tools { position: relative; flex: 0 0 auto; display: grid; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--panel); }
-.sidebar-tools .library-refine { position: relative; }
-.sidebar-tools .refine-fields { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 25; max-height: min(360px, 50dvh); overflow-y: auto; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); box-shadow: 0 -5px 24px var(--shadow-popover); }
-.sidebar-tools .library-refine[open] > summary { border-bottom: 0; background: var(--primary-soft); border-radius: var(--radius); }
-.sidebar-tools .library-refine > summary::before { transform: rotate(-135deg); margin-top: 3px; }
-.sidebar-tools .library-refine[open] > summary::before { transform: rotate(45deg); margin-top: -3px; }
-.sidebar-tools #clear-library-filters { justify-self: start; }
 .sidebar .drop-hint { flex: 0 0 auto; margin-bottom: 10px; padding-block: 9px; }
 .sidebar-foot { flex: 0 0 auto; padding-block: 9px; min-height: 35px; }
 .library-collapsed .sidebar { display: none; }
@@ -464,13 +459,9 @@ select { cursor: pointer; }
 .document-toolbar[hidden] { display: none; }
 .document-toolbar select { flex: 1; min-width: 120px; max-width: 100%; font: inherit; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
 
-/* Actionable gaps share the library filters. */
-.task-filter-label { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 11px; color: var(--muted); }
-.task-filter-label select { width: 100%; padding: 7px; font-size: 11px; }
-.task-filter-label span { margin-left: auto; }
+/* Keep reminders beside the affected paper and notes. */
 .sidebar-head { gap: 10px; padding-top: 16px; padding-bottom: 12px; max-height: 62%; overflow-y: auto; flex-shrink: 0; }
-.list-tasks, .paper-tasks { display: flex; flex-wrap: wrap; gap: 5px; }
-.list-tasks { margin-top: 7px; }
+.paper-tasks { display: flex; flex-wrap: wrap; gap: 5px; }
 .task-link { border: 1px solid var(--primary-border); border-radius: 5px; color: var(--primary-ink); background: var(--primary-soft); padding: 3px 6px; font-size: 11px; line-height: 1.5; }
 .task-link:hover { background: var(--primary-tint); }
 .paper-workflow { padding: 8px 18px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
@@ -482,22 +473,10 @@ select { cursor: pointer; }
 .note-source-link { display: block; margin: 4px 0 12px; font-size: 11px; }
 .tabs { flex-wrap: wrap; }
 
-/* Keep optional refinement controls out of the daily reading path. */
-.library-refine { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-subtle); }
-.library-refine > summary { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 8px 10px; color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; list-style: none; }
-.library-refine > summary::-webkit-details-marker { display: none; }
-.library-refine > summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin-right: 3px; }
-.library-refine[open] > summary { color: var(--primary-ink); border-bottom: 1px solid var(--border); }
-.library-refine[open] > summary::before { transform: rotate(45deg); margin-top: -3px; }
-.library-refine > summary:hover { color: var(--primary); background: var(--primary-soft); border-radius: var(--radius); }
-.refine-fields { display: grid; gap: 12px; padding: 12px 10px; }
-#active-filter-count { margin-left: auto; color: var(--primary-ink); background: var(--primary-tint); padding: 1px 6px; border-radius: 5px; font-size: 11px; font-variant-numeric: tabular-nums; }
-#active-filter-count:empty { display: none; }
 #btn-library-resources { justify-content: flex-start; color: var(--primary-ink); background: var(--primary-soft); border-color: var(--primary-border); }
 #btn-library-resources:hover { background: var(--primary-tint); }
 .paper-workflow { background: var(--surface-subtle); }
 .task-link { color: var(--primary-ink); }
-.task-filter-label select { color: var(--text); }
 .storage-warning { margin-top: 8px; padding: 9px 11px; border: 1px solid var(--warn-text); border-radius: var(--radius); color: var(--warn-text); background: var(--warn-bg); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 body[data-note-tab='evidence'] .reading-actions,
 body[data-note-tab='resources'] .reading-actions { display: none; }
