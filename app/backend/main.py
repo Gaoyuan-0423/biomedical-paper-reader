@@ -41,6 +41,7 @@ from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourcePatch,
                              load_resources, normalize_resource, public_resource, public_resources,
                              related_resources, resource_summary, source_revision, validate_source)
 from research_export import append_research_appendix
+from paper_tags import TEXT_LIMIT, TagFormatError, merge_tags, parse_tags, tag_messages, tag_snapshot
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -62,6 +63,7 @@ MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 DOI_RE = re.compile(r"\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)")
 RELATED_TTL_SECONDS = 7 * 24 * 3600
 VISION_MAX_SIDE = 1400
+TAG_TIMEOUT_SECONDS = 20.0
 
 DEFAULT_SETTINGS = {
     "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -148,6 +150,7 @@ def read_meta(d: Path) -> dict:
         meta = json.loads((d / "meta.json").read_text("utf-8"))
         meta.setdefault("has_file", (d / "paper.pdf").is_file())
         meta.setdefault("tags", [])
+        meta.setdefault("tags_revision", 0)
         meta.setdefault("journal", "")
         meta.setdefault("supplements", [])
         return annotate_paper(d, meta)
@@ -368,6 +371,7 @@ def blank_meta(paper_id: str) -> dict:
         "added_at": _now(),
         "favorite": False,
         "tags": [],
+        "tags_revision": 0,
         "notes": "",
         "notes_mode": "",
         "notes_updated_at": "",
@@ -755,7 +759,9 @@ def patch_paper(paper_id: str, body: PaperPatch):
                 t = t.strip()[:40]
                 if t and t not in seen:
                     seen.append(t)
-            meta["tags"] = seen[:30]
+            if meta['tags'] != seen[:30]:
+                meta['tags_revision'] += 1
+                meta["tags"] = seen[:30]
         for field in ("authors", "year", "journal"):
             value = getattr(body, field)
             if value is not None:
@@ -764,6 +770,61 @@ def patch_paper(paper_id: str, body: PaperPatch):
             meta["doi"] = body.doi.strip()
         write_meta(d, meta)
         return meta
+
+
+async def auto_tag_paper(paper_id: str):
+    """Infer labels independently; never modify notes or replace human tags."""
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        settings = load_settings()
+        if not settings.get('api_key'):
+            raise HTTPException(400, '尚未设置 API Key，请先在「设置」中填写')
+        snapshot = tag_snapshot(meta)
+        text = ''
+        text_path = d / 'text.txt'
+        if text_path.is_file():
+            with text_path.open(encoding='utf-8', errors='replace') as source:
+                text = source.read(TEXT_LIMIT)
+        try:
+            messages = tag_messages(meta, text)
+        except TagFormatError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    try:
+        output = await asyncio.wait_for(chat_once(
+            settings['base_url'], settings['api_key'], settings['model'], messages,
+            temperature=0.1, max_tokens=700, timeout=TAG_TIMEOUT_SECONDS,
+        ), timeout=TAG_TIMEOUT_SECONDS)
+        proposed = parse_tags(output)
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(504, '识别标签超过20秒，已有标签与笔记已保留，可稍后重试') from exc
+    except (UnsafeURLError, UpstreamError, TagFormatError) as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, '自动识别标签失败，已有标签与笔记已保留，请稍后重试') from exc
+    with storage_lock:
+        d = paper_dir(paper_id)
+        latest = read_meta(d)
+        if tag_snapshot(latest) != snapshot:
+            raise HTTPException(409, '识别期间标签、论文材料或笔记已变化，本次结果未写入，请重试')
+        merged, added = merge_tags(latest['tags'], proposed)
+        if added:
+            latest['tags'] = merged
+            latest['tags_revision'] += 1
+            write_meta(d, latest)
+            message = f'已自动添加 {len(added)} 个标签'
+        elif not proposed:
+            message = '未识别到有充分依据的标签，已有标签与笔记已保留'
+        elif len(latest['tags']) >= 30:
+            message = '标签已达到30个上限，已有标签保持不变'
+        else:
+            message = '识别出的标签已存在，无需重复添加'
+        return {'paper': summary_of(latest), 'added_tags': added, 'message': message}
+
+
+@app.post('/api/papers/{paper_id}/tags/auto')
+async def auto_tag_endpoint(paper_id: str):
+    return await auto_tag_paper(paper_id)
 
 
 @app.delete("/api/papers/{paper_id}")

@@ -18,7 +18,7 @@ function harness() {
       get innerHTML() { return this.html || ''; }, set innerHTML(value) { this.html = value; this.children = []; },
       get offsetTop() { return this.parent ? 20 + this.parent.children.slice(0, this.parent.children.indexOf(this)).reduce((n, el) => n + parseFloat(el.style.height || 0) + 18, 0) : 0; },
       classList: { toggle() {}, add() {}, remove() {} }, hidden: false,
-      setAttribute() {}, querySelector: () => element(), querySelectorAll: () => [],
+      setAttribute() {}, focus() {}, querySelector: () => element(), querySelectorAll: () => [],
       addEventListener(name, fn) { this['on' + name] = fn; }, before() {}, appendChild(child) { child.parent = this; this.children.push(child); },
       getContext: () => ({}), scrollTo({ top }) { this.scrollTop = Math.max(0, top); }, click() { this.onclick?.(); },
       remove() { if (this.parent) this.parent.children = this.parent.children.filter(el => el !== this); } };
@@ -34,14 +34,16 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, updateNoteActions, visiblePapers, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { state, api, addTag, removeTag, autoTags, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
+  $('head-tags').dataset.paperId = A;
   app.state.settings = { has_api_key: true, model: 'test' };
   app.api.figures = async () => [];
   app.api.illustrate = async (id, notes) => ({ notes });
   app.api.prepareExport = (id, notes) => app.api.illustrate(id, notes);
   app.api.saveReading = async () => ({});
+  app.api.autoTags = async id => ({ paper: { id, tags: app.state.current?.id === id ? app.state.current.tags || [] : [] }, added_tags: [] });
   $('read-mode').value = 'deep';
   return { ...app, $, context };
 }
@@ -57,6 +59,292 @@ function stream(h, events, ending) {
     } };
   } } });
 }
+
+test('rapid tag additions and removals serialize from the latest saved tags', async () => {
+  const h = harness(), first = deferred(), writes = [];
+  h.state.current.tags = ['original'];
+  h.api.patch = async (id, body) => {
+    writes.push([...body.tags]);
+    if (writes.length === 1) await first.promise;
+    return { id, tags: body.tags };
+  };
+  const one = h.addTag('first'), two = h.addTag('second'), three = h.removeTag('original');
+  await new Promise(setImmediate);
+  assert.deepEqual(writes, [['original', 'first']]);
+  first.resolve();
+  await Promise.all([one, two, three]);
+  assert.deepEqual(writes, [['original', 'first'], ['original', 'first', 'second'], ['first', 'second']]);
+  assert.deepEqual([...h.state.current.tags], ['first', 'second']);
+  assert.equal(h.state.tagWrites.size, 0);
+});
+
+test('a delayed tag response updates its paper without changing the newly opened paper', async () => {
+  const h = harness(), response = deferred();
+  const paperA = h.state.current;
+  h.state.papers = [{ ...paperA }, { id: B, title: 'Paper B', tags: ['B only'] }];
+  h.api.patch = () => response.promise;
+  const adding = h.addTag('A tag');
+  await new Promise(setImmediate);
+  h.state.current = { id: B, title: 'Paper B', notes: 'B note', tags: ['B only'] };
+  h.$('head-tags').innerHTML = 'B header';
+  response.resolve({ id: A, tags: ['A tag'] });
+  await adding;
+  assert.deepEqual([...h.state.current.tags], ['B only']);
+  assert.equal(h.$('head-tags').innerHTML, 'B header');
+  assert.deepEqual([...paperA.tags], ['A tag']);
+  assert.deepEqual([...h.state.papers.find(p => p.id === A).tags], ['A tag']);
+});
+
+test('tag responses merge only tags and preserve newer metadata and input', async () => {
+  const h = harness(), response = deferred();
+  h.state.papers = [{ ...h.state.current, reading_status: 'reading', notes_updated_at: 'latest' }];
+  h.api.patch = () => response.promise;
+  const adding = h.addTag('topic');
+  await new Promise(setImmediate);
+  h.state.current.notes = 'newer note';
+  h.state.current.reading_status = 'reading';
+  h.$('tag-input').value = 'next draft';
+  response.resolve({ id: A, tags: ['topic'], notes: 'old note', reading_status: 'unread', notes_updated_at: 'old' });
+  await adding;
+  assert.equal(h.state.current.notes, 'newer note');
+  assert.equal(h.state.current.reading_status, 'reading');
+  assert.equal(h.state.papers[0].reading_status, 'reading');
+  assert.equal(h.state.papers[0].notes_updated_at, 'latest');
+  assert.equal(h.$('tag-input').value, 'next draft');
+});
+
+test('a failed tag save keeps the draft and does not block the next queued operation', async () => {
+  const h = harness(); let count = 0;
+  h.api.patch = async (id, body) => { if (++count === 1) throw new Error('offline'); return { id, tags: body.tags }; };
+  const failed = h.addTag('retry me'), next = h.addTag('saved');
+  assert.equal(await failed, false);
+  assert.equal(await next, true);
+  assert.deepEqual([...h.state.current.tags], ['saved']);
+  assert.equal(h.$('tag-input').value, 'retry me');
+  assert.equal(h.state.tagWrites.size, 0);
+});
+
+test('completed deep and quick notes start automatic tags without waiting for recognition', async () => {
+  for (const mode of ['deep', 'quick']) {
+    const h = harness(), response = deferred(), calls = [];
+    h.$('read-mode').value = mode;
+    h.api.autoTags = id => { calls.push(id); return response.promise; };
+    stream(h, [{ type: 'done', notes: 'saved ' + mode, paper: { id: A, tags: ['manual'], tags_revision: 1 } }]);
+    await h.generateNotes();
+    assert.equal(h.state.generating, null);
+    assert.equal(h.$('save-status').textContent, '已保存');
+    assert.equal(h.$('editor').value, 'saved ' + mode);
+    assert.deepEqual(calls, [A]);
+    assert.match(h.$('head-tags').innerHTML, /正在识别/);
+    const identifying = h.state.autoTagging.get(A);
+    response.resolve({ paper: { id: A, tags: ['manual', 'RNA-seq'], tags_revision: 2 }, added_tags: ['RNA-seq'] });
+    assert.equal(await identifying, true);
+    assert.deepEqual([...h.state.current.tags], ['manual', 'RNA-seq']);
+    assert.equal(h.state.current.tags_revision, 2);
+    assert.equal(h.$('editor').value, 'saved ' + mode);
+    assert.equal(h.state.autoTagging.size, 0);
+  }
+});
+
+test('automatic tag failures leave successful notes saved and offer a separate retry', async () => {
+  const h = harness(), response = deferred();
+  h.api.autoTags = () => response.promise;
+  stream(h, [{ type: 'done', notes: 'saved note' }]);
+  await h.generateNotes();
+  const identifying = h.state.autoTagging.get(A);
+  response.reject(Object.assign(new Error('记录已变化，请重试'), { status: 409 }));
+  assert.equal(await identifying, false);
+  assert.equal(h.$('save-status').textContent, '已保存');
+  assert.equal(h.state.current.notes, 'saved note');
+  assert.equal(h.$('editor').value, 'saved note');
+  assert.equal(h.state.pendingSave, null);
+  assert.match(h.$('toast').textContent, /笔记已保存.*识别标签.*重试/);
+  assert.doesNotMatch(h.$('head-tags').innerHTML, /正在识别/);
+});
+
+test('partial and stopped generations never request automatic tags', async () => {
+  for (const ending of [undefined, Object.assign(new Error('stopped'), { name: 'AbortError' })]) {
+    const h = harness(); let calls = 0;
+    h.api.autoTags = async () => { calls++; throw new Error('unexpected recognition'); };
+    h.api.patch = async (id, body) => ({ id, ...body });
+    stream(h, [{ type: 'chunk', text: 'partial note' }], ending);
+    await h.generateNotes();
+    assert.equal(calls, 0);
+    assert.equal(h.state.current.notes_incomplete, true);
+  }
+});
+
+test('automatic tags deduplicate requests and update only their paper after switching', async () => {
+  const h = harness(), response = deferred(); let calls = 0;
+  const paperA = h.state.current;
+  h.state.papers = [{ ...paperA }, { id: B, tags: ['B only'] }];
+  h.api.autoTags = () => { calls++; return response.promise; };
+  const identifying = h.autoTags();
+  assert.equal(h.autoTags(), identifying);
+  await new Promise(setImmediate);
+  h.state.current = { id: B, tags: ['B only'], notes: 'B note' };
+  h.renderHeadTags();
+  assert.doesNotMatch(h.$('head-tags').innerHTML, /正在识别/);
+  h.state.current = paperA; h.renderHeadTags();
+  assert.match(h.$('head-tags').innerHTML, /正在识别/);
+  h.state.current = { id: B, tags: ['B only'], notes: 'B note' }; h.renderHeadTags();
+  response.resolve({ paper: { id: A, tags: ['cell atlas'], tags_revision: 1, notes: 'old A', reading_status: 'unread' }, added_tags: ['cell atlas'] });
+  await identifying;
+  assert.equal(calls, 1);
+  assert.deepEqual([...h.state.current.tags], ['B only']);
+  assert.equal(h.state.current.notes, 'B note');
+  assert.deepEqual([...h.state.papers[0].tags], ['cell atlas']);
+  assert.doesNotMatch(h.$('head-tags').innerHTML, /cell atlas/);
+});
+
+test('automatic and manual tag changes share a queue and retain both additions', async () => {
+  const h = harness(), first = deferred(), automatic = deferred(), writes = [];
+  h.api.patch = async (id, body) => {
+    writes.push([...body.tags]);
+    if (writes.length === 1) await first.promise;
+    return { id, tags: body.tags, tags_revision: writes.length === 1 ? 1 : 3 };
+  };
+  let autoCalls = 0;
+  h.api.autoTags = () => { autoCalls++; return automatic.promise; };
+  const manualFirst = h.addTag('before'), identifying = h.autoTags(), manualLast = h.addTag('after');
+  await new Promise(setImmediate);
+  assert.equal(autoCalls, 0);
+  first.resolve(); await manualFirst; await new Promise(setImmediate);
+  assert.equal(autoCalls, 1);
+  assert.deepEqual(writes, [['before']]);
+  automatic.resolve({ paper: { id: A, tags: ['before', 'inferred'], tags_revision: 2 }, added_tags: ['inferred'] });
+  await identifying; await manualLast;
+  assert.deepEqual(writes, [['before'], ['before', 'inferred', 'after']]);
+  assert.deepEqual([...h.state.current.tags], ['before', 'inferred', 'after']);
+});
+
+test('manual tag recognition without a key opens settings without changing notes', async () => {
+  const h = harness(); let calls = 0;
+  h.state.settings = { has_api_key: false };
+  h.state.current.notes = 'existing note';
+  h.$('settings-modal').hidden = true;
+  h.api.autoTags = async () => { calls++; };
+  assert.equal(await h.autoTags(), false);
+  assert.equal(calls, 0);
+  assert.equal(h.state.current.notes, 'existing note');
+  assert.equal(h.$('settings-modal').hidden, false);
+  assert.match(h.$('toast').textContent, /API Key/);
+});
+
+test('an older generation metadata revision cannot undo newer manual tags', async () => {
+  const h = harness();
+  h.state.current.tags = ['new manual']; h.state.current.tags_revision = 3;
+  stream(h, [{ type: 'done', notes: 'saved note', paper: { id: A, tags: ['old tag'], tags_revision: 2 } }]);
+  await h.generateNotes();
+  await h.state.autoTagging.get(A);
+  assert.deepEqual([...h.state.current.tags], ['new manual']);
+  assert.equal(h.state.current.tags_revision, 3);
+});
+
+test('manual recognition waits for note saving and skips recognition if saving fails', async () => {
+  const h = harness(), saving = deferred(), calls = [];
+  h.api.patch = () => saving.promise;
+  h.api.autoTags = async id => { calls.push(id); return { paper: { id, tags: ['saved text'] }, added_tags: ['saved text'] }; };
+  edit(h, 'latest note');
+  const identifying = h.autoTags();
+  await new Promise(setImmediate);
+  assert.deepEqual(calls, []);
+  saving.resolve({ id: A, notes_updated_at: 'now' });
+  assert.equal(await identifying, true);
+  assert.deepEqual(calls, [A]);
+  assert.equal(h.state.pendingSave, null);
+
+  h.api.patch = async () => { throw new Error('offline'); };
+  edit(h, 'keep this unsaved draft');
+  assert.equal(await h.autoTags(), false);
+  assert.deepEqual(calls, [A]);
+  assert.equal(h.$('editor').value, 'keep this unsaved draft');
+  assert.equal(h.state.pendingSave.notes, 'keep this unsaved draft');
+  assert.match(h.$('toast').textContent, /笔记尚未保存.*暂停识别/);
+});
+
+test('a delayed note-save summary cannot replace newer recognized tags in the library', async () => {
+  const h = harness(), saving = deferred();
+  h.state.papers = [{ ...h.state.current, tags: [], tags_revision: 0 }];
+  h.api.patch = () => saving.promise;
+  edit(h, 'new note'); const flushing = h.flushSave();
+  h.api.autoTags = async id => ({ paper: { id, tags: ['new topic'], tags_revision: 1 }, added_tags: ['new topic'] });
+  await h.autoTags(h.state.current, true);
+  saving.resolve({ id: A, notes_updated_at: 'now', tags: [], tags_revision: 0 });
+  await flushing;
+  assert.deepEqual([...h.state.papers[0].tags], ['new topic']);
+  assert.equal(h.state.papers[0].tags_revision, 1);
+});
+
+test('a delayed paper-open response cannot undo tags recognized while it was loading', async () => {
+  const h = harness(), opening = deferred(), recognition = deferred();
+  const paperA = h.state.current;
+  h.state.papers = [{ ...paperA, tags_revision: 0 }];
+  h.api.autoTags = () => recognition.promise;
+  const identifying = h.autoTags();
+  await new Promise(setImmediate);
+  h.state.current = { id: B, notes: '', tags: ['B'] };
+  h.api.paper = () => opening.promise;
+  h.state.pendingPaper = { id: A }; const switching = h.openPaper();
+  await new Promise(setImmediate);
+  recognition.resolve({ paper: { id: A, tags: ['latest topic'], tags_revision: 1 }, added_tags: ['latest topic'] });
+  await identifying;
+  opening.resolve({ id: A, notes: '', has_file: false, tags: [], tags_revision: 0 });
+  await switching;
+  assert.equal(h.state.current.id, A);
+  assert.deepEqual([...h.state.current.tags], ['latest topic']);
+  assert.equal(h.state.current.tags_revision, 1);
+});
+
+test('newly completed notes refresh an older recognition once and coalesce repeated completions', async () => {
+  const h = harness(), old = deferred(), fresh = deferred(); let calls = 0;
+  h.api.autoTags = () => ++calls === 1 ? old.promise : fresh.promise;
+  const identifying = h.autoTags();
+  await new Promise(setImmediate);
+  for (const note of ['first completed note', 'latest completed note']) {
+    stream(h, [{ type: 'done', notes: note }]);
+    await h.generateNotes();
+    assert.equal(h.$('save-status').textContent, '已保存');
+    assert.equal(h.state.generating, null);
+  }
+  assert.equal(calls, 1);
+  old.reject(Object.assign(new Error('记录已变化'), { status: 409 }));
+  await new Promise(setImmediate);
+  assert.equal(calls, 2);
+  assert.match(h.$('head-tags').innerHTML, /正在识别/);
+  assert.doesNotMatch(h.$('toast').textContent, /失败/);
+  fresh.resolve({ paper: { id: A, tags: ['latest topic'], tags_revision: 1 }, added_tags: ['latest topic'] });
+  assert.equal(await identifying, true);
+  assert.deepEqual([...h.state.current.tags], ['latest topic']);
+  assert.equal(h.state.current.notes, 'latest completed note');
+  assert.equal(h.state.autoTagging.size, 0);
+  assert.equal(h.state.autoTagRefresh.size, 0);
+});
+
+test('late material and metadata responses preserve newer recognized tags', async () => {
+  for (const kind of ['attach', 'enrich', 'supplement', 'removeSupplement']) {
+    const h = harness(), response = deferred();
+    h.state.current.supplements = [{ id: C, filename: 'supplement.pdf', pages: 0 }];
+    h.state.papers = [{ ...h.state.current, tags_revision: 0 }];
+    h.api[kind] = () => response.promise;
+    let changing;
+    if (kind === 'attach') changing = h.attachPdfFile({ name: 'new.pdf' });
+    else if (kind === 'enrich') changing = h.enrichCurrent();
+    else {
+      if (kind === 'removeSupplement') h.state.documentId = C;
+      changing = h.changeSupplements(kind === 'supplement' ? [{ name: 'supp.pdf' }] : [], kind === 'removeSupplement');
+    }
+    await new Promise(setImmediate);
+    h.api.autoTags = async id => ({ paper: { id, tags: ['latest topic'], tags_revision: 1 }, added_tags: ['latest topic'] });
+    await h.autoTags(h.state.current, true);
+    response.resolve({ id: A, title: 'Updated metadata', notes: '', tags: [], tags_revision: 0, has_file: false,
+      supplements: kind === 'removeSupplement' ? [] : [{ id: C, filename: 'supplement.pdf', pages: 0 }] });
+    await changing;
+    assert.deepEqual([...h.state.current.tags], ['latest topic'], kind);
+    assert.equal(h.state.current.tags_revision, 1, kind);
+    assert.deepEqual([...h.state.papers[0].tags], ['latest topic'], kind);
+  }
+});
 
 test('autosave serializes writes and flush waits for the newest edit', async () => {
   const h = harness(), first = deferred(), writes = [];
