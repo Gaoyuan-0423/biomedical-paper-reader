@@ -6,7 +6,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.9.0。新增专注原文、笔记对照和边读边问三种阅读布局，改进问答 Markdown 排版，支持当前阅读上下文的快捷问题，以及复制或追加已完成回答和来源到笔记；保留蓝白工作台、连续 PDF 阅读、样品整理、全库搜索和 Zotero MCP 导入。默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
+版本：v0.9.0。提供 macOS arm64 与 Windows x64 桌面预览包。新增专注原文、笔记对照和边读边问三种阅读布局，改进问答 Markdown 排版，支持当前阅读上下文的快捷问题，以及复制或追加已完成回答和来源到笔记；保留蓝白工作台、连续 PDF 阅读、样品整理、全库搜索和 Zotero MCP 导入。默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -43,11 +43,18 @@
 
 ### 使用
 
-#### Mac 桌面版（预览）
+#### macOS / Windows 桌面版（预览）
 
-下载入口：[v0.9.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)，其中 `BioReader-v0.9.0-macos-arm64.zip` 适用于 Apple 芯片 Mac。解压后打开 `BioReader.app`，无需手动运行浏览器、终端或安装 Python。附件以发布页实际提供为准。应用未做 Apple 开发者签名和公证；本轮回归、浏览器与打包结果见 [App 验证记录](app/tests/README.md)，不将旧版验收记为本版结果。
+下载入口：[v0.9.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)。按系统选择同版附件，以发布页实际提供为准：
 
-也可运行 `./app/build-macos.sh` 自行构建；数据独立保存在用户目录。安装、构建和当前验证范围见 [Mac 桌面版说明](app/DESKTOP.md)。AI 模型、DOI 和相关文献查询仍需联网。
+| 系统 | 下载与打开 |
+|---|---|
+| Apple 芯片 Mac（arm64） | [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip)，解压后打开 `BioReader.app` |
+| Windows 10 / 11（x64） | [BioReader-v0.9.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-windows-x64.zip)，完整解压文件夹后打开其中的 `BioReader.exe`，保留全部随附文件 |
+
+桌面包不需要另装 Python 或手动启动浏览器／终端。Windows 需要 Microsoft Edge WebView2 Runtime；缺少时安装[微软官方 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。用户数据独立保存：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`；退出旧版再替换程序，已有论文、笔记和设置保留。
+
+两平台使用同一版本、同一检查过的源码提交发布；更新时下载对应平台的新包。本版没有应用内自动更新或跨电脑文献库同步。安装、自行构建与平台限制见[桌面版说明](app/DESKTOP.md)，实际回归和打包结果见 [App 验证记录](app/tests/README.md)。macOS 包未做 Apple 开发者签名和公证。AI 模型、DOI 和相关文献查询仍需联网。
 
 ![BioReader v0.5.0 蓝白阅读工作台：文献库、补充 PDF 与数据资源记录](docs/screenshots/bioreader-v0.5.0-bluewhite.png)
 
@@ -146,7 +153,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.9.0. This desktop preview adds focused PDF, notes comparison and reading-with-chat layouts, readable Markdown answers, context-specific question starters, and copying or appending completed answers with sources to notes. It retains the blue-and-white workspace, continuous PDF reading, structured samples, local library search and Zotero MCP imports. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
+Version: v0.9.0. with macOS arm64 and Windows x64 desktop preview packages. This release adds focused PDF, notes comparison and reading-with-chat layouts, readable Markdown answers, context-specific question starters, and copying or appending completed answers with sources to notes. It retains the blue-and-white workspace, continuous PDF reading, structured samples, local library search and Zotero MCP imports. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -183,11 +190,18 @@ A full close-reading report follows this structure: opening guide → article in
 
 ### English quick start
 
-#### macOS desktop preview
+#### macOS / Windows desktop preview
 
-Download page: [v0.9.0 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0). The `BioReader-v0.9.0-macos-arm64.zip` asset targets Apple silicon Macs. Extract it and open `BioReader.app`; launching it does not require a browser, terminal, or Python installation. Availability depends on the assets actually published on that page. The app has no Apple Developer ID signature or notarization. See the [App validation record](app/tests/README.md) for this version’s regressions, browser checks and build results; older acceptance results are not counted as new checks.
+Download page: [v0.9.0 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0). Choose the matching platform asset from the files actually published:
 
-Build from source with `./app/build-macos.sh` if preferred. See the [desktop guide](app/DESKTOP.md) for installation, storage, and validation limits. AI, DOI lookup, and related-paper searches still require network access.
+| Platform | Download and open |
+|---|---|
+| Apple silicon Mac (arm64) | [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip); extract and open `BioReader.app` |
+| Windows 10 / 11 (x64) | [BioReader-v0.9.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-windows-x64.zip); extract the entire folder and open `BioReader.exe`, retaining all bundled files |
+
+Desktop packages do not require Python or manually starting a browser/terminal. Windows requires Microsoft Edge WebView2 Runtime; install the [official Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if it is missing. User data remains separate: `~/Library/Application Support/BioReader/` on macOS and `%LOCALAPPDATA%\BioReader` on Windows. Quit the old version before replacing program files; existing papers, notes and settings are preserved.
+
+Both platforms are released under the same version from the same checked source commit. Update by downloading the new package for your platform; there is no in-app updater or cross-device library sync. See the [desktop guide](app/DESKTOP.md) for installation, source builds and platform limits, and the [App validation record](app/tests/README.md) for actual regression/build results. The macOS app has no Apple Developer ID signature or notarization. AI, DOI lookup and related-paper searches still require network access.
 
 #### Read alongside notes and keep useful answers
 
@@ -246,7 +260,7 @@ For the selected mode, the skill builds and reuses an index of the paper's secti
 - `references/`: [report template](references/report-template.md), [modes and languages](references/reading-modes.md), [evidence rules](references/evidence-rules.md), [study checks](references/study-checks.md), [material handling](references/material-handling.md), and [figure reading record](references/reading-record.md).
 - `scripts/check_reading_record.py`: a Python standard-library validator for consistency between figure reading records and claims about what was read.
 - `scripts/render_pdf_page.py`: an optional PDF page-rendering helper; it requires pypdfium2 or PyMuPDF, neither of which is a required dependency for using the skill.
-- `app/`: [BioReader App](app/README.md), a local paper-reading application based on this skill's methodology (FastAPI + vanilla JavaScript). It supports two-column PDF parsing, figure extraction anchored to captions, streaming notes for close reading and quick screening, a vision model for figure interpretation, DOI import and related papers, and one-click copying/export for Markdown, Word, and WeChat Official Accounts. The app and the skill are independent; start the app with `./app/run.sh`. A macOS desktop preview can be built with `./app/build-macos.sh`; see the [desktop guide](app/DESKTOP.md) for storage, build instructions, and validation limits.
+- `app/`: [BioReader App](app/README.md), a local paper-reading application based on this skill's methodology (FastAPI + vanilla JavaScript). It supports two-column PDF parsing, figure extraction anchored to captions, streaming notes for close reading and quick screening, a vision model for figure interpretation, DOI import and related papers, and one-click copying/export for Markdown, Word, and WeChat Official Accounts. The app and the skill are independent; start the app with `./app/run.sh`. Desktop previews can be built on macOS with `./app/build-macos.sh` or on Windows with `app/build-windows.ps1`; see the [desktop guide](app/DESKTOP.md) for storage, build instructions, and validation limits.
 - `agents/openai.yaml`: optional Codex interface metadata.
 - `evals/cases.md`, `evals/fixtures/`: behavioral evaluation cases and original fictional materials.
 - `evals/PROTOCOL.md`: a protocol for reproducing behavioral evaluations with your own papers.

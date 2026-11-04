@@ -1,0 +1,82 @@
+name: Windows desktop build
+
+on:
+  push:
+    branches: [main, codex/windows-release]
+    paths: ['app/**', 'scripts/package_windows.py', '.github/workflows/windows-build.yml', 'SKILL.md', 'releases/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-desktop:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Validate release version
+        run: |
+          $match = [regex]::Match((Get-Content SKILL.md -Raw), '版本 (v\d+\.\d+\.\d+)')
+          if (-not $match.Success) { throw 'Missing version.' }
+          $version = $match.Groups[1].Value
+          python scripts/prepare_release.py $version --output "$env:RUNNER_TEMP/release-notes.md"
+          if ($LASTEXITCODE -ne 0) { throw 'Release metadata failed.' }
+          "BIOREADER_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Install build and test dependencies
+        run: |
+          python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7' 'pyinstaller>=6,<7'
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+      - name: Ensure Microsoft WebView2 Runtime
+        run: |
+          python -c "import sys; sys.path.insert(0, 'app'); from desktop_diagnostics import windows_webview_runtime; print(windows_webview_runtime())"
+          if ($LASTEXITCODE -ne 0) {
+            # Microsoft's Evergreen bootstrapper linked from its WebView2 download page.
+            $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+            $signature = Get-AuthenticodeSignature $installer
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation(?:,|$)') {
+              throw 'WebView2 installer signature is not valid Microsoft Authenticode.'
+            }
+            $process = Start-Process $installer -ArgumentList '/silent', '/install' -Wait -PassThru
+            Write-Host "WebView2 bootstrapper exit code: $($process.ExitCode)"
+            python -c "import sys; sys.path.insert(0, 'app'); from desktop_diagnostics import windows_webview_runtime; print(windows_webview_runtime())"
+            if ($LASTEXITCODE -ne 0) { throw 'WebView2 Runtime remains unavailable.' }
+          }
+      - name: Windows backend and frontend regression tests
+        run: |
+          python -m unittest discover -s app/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Backend regression failed.' }
+          node --test app/tests/test_frontend.cjs app/tests/test_chat.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_zotero.cjs app/tests/test_library_search.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend regression failed.' }
+      - name: Build Windows executable
+        run: ./app/build-windows.ps1 -SkipInstall
+      - name: Validate bundle, package and test extracted executable
+        run: |
+          python scripts/package_windows.py --version $env:BIOREADER_VERSION --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package validation failed.' }
+      - name: Upload checked Windows package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: BioReader-${{ env.BIOREADER_VERSION }}-windows-x64
+          path: |
+            app/dist/windows-release/*.zip
+            app/dist/windows-release/SHA256SUMS.txt
+            app/dist/windows-release/build-info.json
+            app/dist/windows-release/self-test.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

@@ -9,6 +9,10 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
+桌面用户可直接下载 [v0.9.0 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)：Apple 芯片 Mac 打开 `BioReader.app`；Windows 10 / 11 x64 完整解压文件夹后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+
+以下为源码启动方式：
+
 ```bash
 ./app/run.sh          # 默认 http://127.0.0.1:8765，可用 PORT=9000 ./app/run.sh 改端口
 ```
@@ -184,6 +188,8 @@ PDF 导入只支持配置目录中已经存在的 Zotero 存储附件（`importe
   笔记里 `![Figure X](figure:xxx)` 的图片自动内嵌 base64，粘贴进公众号编辑器不丢图。
 
 ## 数据位置
+
+桌面包默认使用独立的用户数据目录：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`。更新程序不会删除这些目录；`BIOREADER_DATA_DIR` 可覆盖桌面版默认位置。下列 `app/data/` 是源码服务的默认目录，不会自动迁移到桌面版，也不会跨电脑同步。
 
 ```
 app/data/

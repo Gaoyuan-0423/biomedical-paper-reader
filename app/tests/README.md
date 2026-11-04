@@ -183,3 +183,13 @@ Mac arm64 应用重新构建并校验随包前端与当前源文件一致，GEO 
 - 修复实际窄窗口检查发现的隐藏 PDF 页偏移全为 0、导致问答误用最后一页的问题。1280×800、900×844、390×844 无页面横向溢出，发送按钮底部分别为 786／830／834px；来源文件与页码提示均为 22px 高。脚本、结果与截图在忽略目录 `.validation/reading-companion/`，验收服务和浏览器已退出。
 - 验证只使用原创合成 PDF、模拟模型回复和独立数据目录，没有读取私人文献库或调用真实付费模型。未重新评测科学精读质量；上下文快捷问题不等于全文精读。原生 WebKit 及 macOS 保存对话框本轮未重新验收。
 - Mac arm64 应用构建通过，包内 227 个前端文件与源码逐字节一致，必要后端模块完整。40,519,023 字节 ZIP 解压后再次通过 `codesign --verify --deep --strict`；SHA256 为 `7655b61631d5c7966d35b3e900f7d0aec141fd41129d2c6c150e4a425f4b3ab7`。包完整性检查不代表 Apple 开发者签名或公证。
+
+
+### 同版 Windows 构建支持
+
+2026-11-05：新增 Windows x64 PyInstaller spec、PowerShell 构建脚本与 [Windows 构建工作流](../../.github/workflows/windows-build.yml)。Windows 使用 `%LOCALAPPDATA%\BioReader`（缺失时回退到用户目录下的 AppData/Local），macOS 保留原数据位置，显式 `BIOREADER_DATA_DIR` 继续优先。源码服务器的数据目录不变。
+
+- 本机完整后端回归为 178 项并通过（较阅读改版新增 4 项）；前端 194 项不变。新增平台路径和自检隔离回归，覆盖 macOS 路径保持、Windows 环境变量／回退、显式覆盖和已有文库不被自检访问。`--self-test REPORT_JSON` 只使用新建临时库，报告明确标记 `gui_tested: false`。
+- Windows 工作流运行完整 Python／JavaScript 回归，构建完整目录包，逐字节检查随包前端，生成 ZIP 后重新解压并实际运行 `BioReader.exe --self-test`。自检检查 WebView2／WinForms／pythonnet 加载与运行时、受保护的本地后端、原生 PDF 解析、笔记落盘、搜索与读取接口。
+- 每次工件携带源提交、版本、ZIP SHA256、字节数、前端文件数和自检 JSON。维护者必须核对同一源码构建的两平台包后才公开 Release；实际 Windows 运行状态见 [构建记录](https://github.com/Gaoyuan-0423/biomedical-paper-reader/actions/workflows/windows-build.yml)，不能仅凭本机 macOS 测试宣称 Windows 成功。
+- Windows 原生窗口、文件选择及保存对话框未在本轮自动自检中覆盖；首次使用需安装 WebView2 Runtime，应用没有 Windows 代码签名。两平台使用同一套阅读前端；同步发布不表示文献库跨设备同步。
