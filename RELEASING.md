@@ -10,7 +10,11 @@
 
 ### 当前桌面预览版 v0.9.0
 
-v0.9.0 继续使用 Pre-release 流程，下载附件为 `BioReader-v0.9.0-macos-arm64.zip` 与 `SHA256SUMS.txt`。使用 [v0.9.0 双语说明](releases/v0.9.0.md)，运行 `prepare_release.py v0.9.0`，将标签绑定到通过检查的源码提交，上传并核对附件后发布。保留 v0.3.4 稳定版，不运行稳定版工作流。
+v0.9.0 继续使用 Pre-release 流程，下载附件为 `BioReader-v0.9.0-macos-arm64.zip`、`BioReader-v0.9.0-windows-x64.zip` 与合并的 `SHA256SUMS.txt`。使用 [v0.9.0 双语说明](releases/v0.9.0.md)，运行 `prepare_release.py v0.9.0`，将标签绑定到通过检查的源码提交，上传并核对附件后发布。保留 v0.3.4 稳定版，不运行稳定版工作流。
+
+macOS 与 Windows 必须从同一个已检查的源码提交构建；两平台 ZIP 与校验清单齐备并核对后，才公开本次预览 Release。记录每个平台实际执行的检查，不能把 macOS 或浏览器检查替代 Windows 打包与启动检查。用户通过下载新版程序更新，文献数据独立保存；同步发布不表示提供应用内更新器或云端文库同步。
+
+Windows 构建入口为 [`app/build-windows.ps1`](app/build-windows.ps1) 和 [Windows 构建工作流](.github/workflows/windows-build.yml)。工作流只生成工件，不发布 Release。下载工件前核对 Actions 运行的源提交；核对 ZIP 中有 `BioReader/BioReader.exe` 及 `_internal`，保留整包。将 Windows ZIP 的 SHA-256 与 macOS ZIP 的值写入同一个 `SHA256SUMS.txt`，不要把仅含一个平台的清单作为最终附件。打包后的 `--self-test` 结果是隔离后端自检，不是 WebView2 窗口或 Windows 10 / 11 GUI 验收。
 
 本版发布范围为三种阅读布局、安全 Markdown 问答排版、当前阅读上下文的快捷问题，以及复制／追加已完成回答与来源到笔记。确认快捷问题仍需手动发送，限定材料范围，不宣传为全文通读或自主工具任务；同时验证原文定位、补充文件页码、窄窗口切换和已有笔记保留。将实际回归、浏览器与构建结果记录到 App 验证文件。
 
@@ -70,7 +74,11 @@ README, SKILL, and CHANGELOG on `main` describe the current source version; GitH
 
 ### Current desktop preview v0.9.0
 
-v0.9.0 remains a Pre-release. Use the [v0.9.0 notes](releases/v0.9.0.md), validate the version, bind the new tag to the checked source commit, and upload `BioReader-v0.9.0-macos-arm64.zip` plus `SHA256SUMS.txt` before publishing. Keep the stable v0.3.4 and do not run the stable-release workflow.
+v0.9.0 remains a Pre-release. Use the [v0.9.0 notes](releases/v0.9.0.md), validate the version, bind the new tag to the checked source commit, and upload `BioReader-v0.9.0-macos-arm64.zip`, `BioReader-v0.9.0-windows-x64.zip` and a combined `SHA256SUMS.txt` before publishing. Keep the stable v0.3.4 and do not run the stable-release workflow.
+
+Build macOS and Windows from the same checked source commit. Keep this preview Release in draft until both platform ZIPs and the combined hash list are present and verified. Record the checks actually run on each platform; macOS/browser checks do not substitute for Windows packaging and launch checks. Users update by downloading a new package, while user data stays separate. Synchronized releases do not provide an in-app updater or cloud library sync.
+
+Windows builds use [`app/build-windows.ps1`](app/build-windows.ps1) and the [Windows build workflow](.github/workflows/windows-build.yml). The workflow produces artifacts without publishing a Release. Check the Actions run's source commit before downloading its artifacts; verify that the ZIP contains `BioReader/BioReader.exe` and `_internal`, retaining the entire bundle. Combine the Windows and macOS ZIP SHA-256 values into one `SHA256SUMS.txt`; a platform-only hash file is not the final release asset. The packaged executable's `--self-test` is an isolated backend check, not WebView2 window or Windows 10 / 11 GUI acceptance.
 
 This release covers three reading layouts, safe Markdown answers, contextual question starters, and copying/appending completed answers with sources to notes. Starters require manual sending and use bounded source material; do not describe them as full-paper reading or autonomous tool tasks. Check source navigation, supplement page identity, narrow-window switching and preservation of existing notes. Record actual regressions, browser checks and build results in the App validation log.
 

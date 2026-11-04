@@ -44,7 +44,7 @@ class AutoTagTests(unittest.TestCase):
         return response, model
 
     def test_additive_tags_keep_human_labels_and_notes_unchanged(self):
-        before = json.loads((self.directory / 'meta.json').read_text())
+        before = json.loads((self.directory / 'meta.json').read_text(encoding='utf-8'))
         result, model = self.call('```json\n[" SCRNA-seq ", "肿瘤免疫", "巨噬细胞", "巨噬细胞"]\n```')
         self.assertEqual(result.status_code, 200, result.text)
         result = result.json()
@@ -52,7 +52,7 @@ class AutoTagTests(unittest.TestCase):
         self.assertEqual(result['paper']['tags'], ['人工标签', 'scRNA-seq', '肿瘤免疫', '巨噬细胞'])
         self.assertNotIn('notes', result['paper'])
         self.assertEqual(model.await_count, 1)
-        after = json.loads((self.directory / 'meta.json').read_text())
+        after = json.loads((self.directory / 'meta.json').read_text(encoding='utf-8'))
         self.assertEqual(after['tags_revision'], before['tags_revision'] + 1)
         for key in before:
             if key not in ('tags', 'tags_revision'):
@@ -155,7 +155,7 @@ class AutoTagTests(unittest.TestCase):
                 self.assertEqual(after['tags_revision'], before['tags_revision'])
 
     def test_context_uses_only_bounded_current_paper_and_saved_notes(self):
-        (self.directory / 'text.txt').write_text('P' * (TEXT_LIMIT + 100) + 'SECRET_TAIL')
+        (self.directory / 'text.txt').write_text('P' * (TEXT_LIMIT + 100) + 'SECRET_TAIL', encoding='utf-8')
         self.client.patch(self.url, json={'notes': 'N' * (NOTES_LIMIT + 100) + 'SECRET_NOTE_TAIL'})
         other_id, other = main.new_paper_dir()
         main.write_meta(other, {**main.blank_meta(other_id), 'notes': 'UNRELATED_PRIVATE_PAPER'})
@@ -234,9 +234,9 @@ class AutoTagTests(unittest.TestCase):
         tags = ['人工标签' + str(i) for i in range(29)]
         self.client.patch(self.url, json={'tags': tags})
         path = self.directory / 'meta.json'
-        raw = json.loads(path.read_text())
+        raw = json.loads(path.read_text(encoding='utf-8'))
         raw.pop('tags_revision')
-        path.write_text(json.dumps(raw))
+        path.write_text(json.dumps(raw), encoding='utf-8')
         self.assertEqual(self.client.get(self.url).json()['tags_revision'], 0)
         result, _ = self.call('["新标签一", "新标签二"]')
         self.assertEqual(result.status_code, 200)

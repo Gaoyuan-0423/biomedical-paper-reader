@@ -72,6 +72,21 @@ class DocumentTests(unittest.TestCase):
         self.assertEqual(saved['documents'], {'main': main_pos, sup['id']: sup_pos})
         self.assertEqual((self.directory / 'meta.json').read_bytes(), before)
 
+    def test_active_document_uses_save_order_when_clock_ticks_repeat_or_go_backwards(self):
+        supplement = self.attach()
+        position = {'page': 1, 'scale': 1, 'fit_width': True}
+        with patch('reading_state.time.time_ns', return_value=100):
+            self.client.put(self.url + '/reading-position', json=position)
+            self.client.put(self.url + '/reading-position', params={'document_id': supplement['id']}, json=position)
+        saved = self.client.get(self.url).json()['reading_position']
+        self.assertEqual(saved['active_document'], supplement['id'])
+        with patch('reading_state.time.time_ns', return_value=90):
+            self.client.put(self.url + '/reading-position', json=position)
+        self.assertEqual(self.client.get(self.url).json()['reading_position']['active_document'], 'main')
+        folder = self.directory / 'reading'
+        self.assertGreater(json.loads((folder / 'main.json').read_text('utf-8'))['updated'],
+                           json.loads((folder / (supplement['id'] + '.json')).read_text('utf-8'))['updated'])
+
     def test_reading_position_bounds_corruption_and_removed_material(self):
         sup = self.attach()
         pos = {'page': 600, 'scale': 1, 'fit_width': True}

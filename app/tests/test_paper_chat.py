@@ -126,16 +126,16 @@ class ChatTests(unittest.TestCase):
 
     def test_corrupt_history_and_cache_are_not_overwritten(self):
         for target, content in [(self.directory / 'chat.json', '[{}]'), (self.directory / 'blocks' / 'main.json', '{broken')]:
-            target.write_text(content)
+            target.write_text(content, encoding='utf-8')
             response = self.ask()
             self.assertEqual(response.status_code, 409, response.text)
-            self.assertEqual(target.read_text(), content)
+            self.assertEqual(target.read_text(encoding='utf-8'), content)
             if target.name == 'chat.json':
                 self.assertEqual(self.client.get(self.url + '/chat').status_code, 409)
                 target.unlink()
         # Replacing a PDF also leaves a damaged cache recoverable.
         self.client.post(self.url + '/file', files={'file': ('new.pdf', fixture_pdf(marker='NEW'))})
-        self.assertEqual((self.directory / 'blocks' / 'main.json').read_text(), '{broken')
+        self.assertEqual((self.directory / 'blocks' / 'main.json').read_text(encoding='utf-8'), '{broken')
 
     def test_missing_key_invalid_selection_page_and_scanned_pdf_do_not_create_messages(self):
         main.save_settings(main.DEFAULT_SETTINGS)
@@ -166,7 +166,9 @@ class ChatTests(unittest.TestCase):
         async def slow(*args, **kwargs):
             yield 'Waiting'
             await asyncio.sleep(1)
-        with patch.object(main, 'CHAT_TIMEOUT', .01):
+        # Windows timer granularity can exceed 10 ms; leave time to deliver the
+        # initial chunk before the one-second synthetic model wait times out.
+        with patch.object(main, 'CHAT_TIMEOUT', .1):
             stream = events(self.ask(model=slow))
         self.assertIn('超时', stream[-1]['message'])
         self.assertEqual(self.client.get(self.url + '/chat').json()['messages'][-1]['content'], 'Waiting')
@@ -230,11 +232,11 @@ class ChatTests(unittest.TestCase):
         self.assertTrue(all(source['bbox'] is None for source in stream[-1]['message']['sources']))
         # Existing v1 caches also rebuild via the same text-only path.
         cache_path = self.directory / 'blocks' / 'main.json'
-        cache = json.loads(cache_path.read_text()); cache['version'] = 1
+        cache = json.loads(cache_path.read_text(encoding='utf-8')); cache['version'] = 1
         cache['pages']['1'][0]['text'] = 'Old rotated geometry in incorrect reading order'
-        cache_path.write_text(json.dumps(cache))
+        cache_path.write_text(json.dumps(cache), encoding='utf-8')
         self.assertEqual(events(self.ask(selected))[-1]['type'], 'done')
-        self.assertEqual(json.loads(cache_path.read_text())['version'], 2)
+        self.assertEqual(json.loads(cache_path.read_text(encoding='utf-8'))['version'], 2)
 
     def test_disk_write_failure_keeps_original_and_releases_active_request(self):
         original_bytes = []
@@ -286,17 +288,17 @@ class ChatTests(unittest.TestCase):
         response = self.ask(model=rejected)
         self.assertIn('HTTP 429', events(response)[-1]['message'])
         self.assertNotIn('private echoed', response.text)
-        self.assertNotIn('private echoed', (self.directory / 'chat.json').read_text())
+        self.assertNotIn('private echoed', (self.directory / 'chat.json').read_text(encoding='utf-8'))
 
     def test_boolean_cache_page_is_rejected_before_it_can_poison_chat(self):
         cache_path = self.directory / 'blocks' / 'main.json'
-        cache = json.loads(cache_path.read_text())
+        cache = json.loads(cache_path.read_text(encoding='utf-8'))
         cache['pages']['1'][0]['page'] = True
         malformed = json.dumps(cache)
-        cache_path.write_text(malformed)
+        cache_path.write_text(malformed, encoding='utf-8')
         self.assertEqual(self.ask().status_code, 409)
         self.assertFalse((self.directory / 'chat.json').exists())
-        self.assertEqual(cache_path.read_text(), malformed)
+        self.assertEqual(cache_path.read_text(encoding='utf-8'), malformed)
 
 
 if __name__ == '__main__':

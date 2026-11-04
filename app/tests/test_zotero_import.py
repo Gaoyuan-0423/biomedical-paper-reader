@@ -88,7 +88,7 @@ class ZoteroImportTests(unittest.TestCase):
     def test_default_storage_uses_current_users_home_not_the_build_machine(self):
         with patch.object(zi.Path, 'home', return_value=Path('/Users/another-reader')):
             config = zi.read_config(self.directory / 'new-install')
-        self.assertEqual(config['storage_root'], '/Users/another-reader/Zotero/storage')
+        self.assertEqual(Path(config['storage_root']), Path('/Users/another-reader/Zotero/storage'))
         self.assertEqual(config['endpoint'], 'http://127.0.0.1:8000/mcp')
         self.assertEqual(config['token'], '')
 

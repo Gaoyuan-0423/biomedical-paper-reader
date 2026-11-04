@@ -1,18 +1,44 @@
-# BioReader macOS 桌面版
+# BioReader macOS / Windows 桌面版
 
-桌面版在独立窗口运行，关闭窗口会停止本地后台服务。PDF、笔记和设置默认保存在 `~/Library/Application Support/BioReader/`，不会随替换 App 一同删除。现有网页版的 `app/data/` 不会自动迁移；请先备份后再手动复制其中的内容到这个目录。
+桌面版在独立窗口运行，关闭窗口会停止本地后台服务。PDF、笔记和设置保存在用户数据目录，与程序文件分开：
+
+| 系统 | 默认数据目录 |
+|---|---|
+| macOS | `~/Library/Application Support/BioReader/` |
+| Windows | `%LOCALAPPDATA%\BioReader` |
+
+设置 `BIOREADER_DATA_DIR` 可使用自定义目录。更新前退出 BioReader，再替换程序文件，已有论文、笔记和设置继续保留。源码网页版的 `app/data/` 不会自动迁移；需要迁移时先备份，再复制其中的内容到对应用户数据目录。
 
 ## 下载与安装预览包
 
-下载入口：[v0.9.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)，附件以发布页实际提供为准。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
+下载入口：[v0.9.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)，附件以发布页实际提供为准。提供 Apple 芯片 Mac（arm64）与 Windows 10 / 11（x64）预览包；没有 Intel Mac、Windows ARM64 原生包或 Linux 安装包。桌面包不需要另装 Python 或手动启动浏览器／终端。
 
-1. 下载 [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
+### macOS
+
+1. 下载 [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip)。
 2. 解压 ZIP，将 `BioReader.app` 拖入“应用程序”，或从解压目录直接打开。更新旧版前先退出正在运行的 BioReader。
-3. 双击打开 App。无需另装 Python 或手动启动浏览器／终端。AI 笔记需要在设置中配置模型接口和 API Key。
+3. 双击打开 App。AI 笔记需要在设置中配置模型接口和 API Key。
 
-这是 GitHub Pre-release 预览包，未进行 Apple 开发者签名和公证。macOS 可能阻止首次打开；包完整性检查不代表 Apple 公证或所有 Mac 的安装验收。完整验证范围见下文。
+macOS 包未进行 Apple 开发者签名和公证。macOS 可能阻止首次打开；包完整性检查不代表 Apple 公证或所有 Mac 的安装验收。
 
-如已下载 ZIP 和校验文件，可在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt` 核对文件是否完整。
+### Windows
+
+1. 下载 [BioReader-v0.9.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-windows-x64.zip)，选择“全部解压缩”。将解压后的完整文件夹保存在你选择的位置。
+2. Windows 版使用 Microsoft Edge WebView2 Runtime。若电脑缺少它，从[微软官方页面](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)安装 **Evergreen Runtime**；可用 Evergreen Bootstrapper，离线安装选 x64 的 Evergreen Standalone Installer。该运行时是独立组件，安装 Edge 浏览器不等于已满足运行时要求，见[微软分发说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。
+3. 打开文件夹中的 `BioReader.exe`。保留 `_internal` 等全部随附文件，不要从 ZIP 内运行，也不要只复制 exe。需要桌面入口时为 exe 创建快捷方式。
+4. 更新时先关闭旧版，完整解压新版并从新文件夹启动；确认可用后可移除旧程序文件夹。`%LOCALAPPDATA%\BioReader` 中的数据保留，不要删除该数据目录。
+
+Windows ZIP 是便携程序包，不是安装向导；“便携”指程序文件可整体移动，文献库仍默认保存在用户数据目录。实际 Windows 构建与交互验证范围见 [App 验证记录](tests/README.md)。
+
+### 校验与同步发布
+
+发布页的 `SHA256SUMS.txt` 列出各平台 ZIP 的 SHA-256。macOS 可在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt`；若只下载了一个平台包，另一项会提示文件缺失，核对已下载包那一项即可。Windows 可用 PowerShell 计算并与清单中的同名文件比较：
+
+```powershell
+Get-FileHash .\BioReader-v0.9.0-windows-x64.zip -Algorithm SHA256
+```
+
+macOS 和 Windows 以同一个版本、同一个检查过的源码提交发布，更新功能保持一致。用户下载对应平台的新包即可更新；本版没有应用内自动更新器，也没有跨电脑同步论文库。每台电脑的模型和 Zotero 设置独立保存。
 
 ## 在 Mac 上构建
 
@@ -33,6 +59,18 @@ BIOREADER_PYTHON=/path/to/python3 ./app/build-macos.sh
 这个构建默认没有 Apple 开发者签名和公证。若要提供正式签名的安装包，需要另外完成相应签名、公证与安装测试。
 
 界面依赖已随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。AI 笔记需要在设置中配置可用的模型接口及 API Key；Key 以明文保存在本机设置文件中。导出文件时使用现有的下载／保存流程。
+
+## 在 Windows 上构建
+
+在 Windows x64 环境安装 64 位 Python 3.10 或更新版本，并准备网络连接以安装构建依赖。在项目根目录的 PowerShell 中运行：
+
+```powershell
+.\app\build-windows.ps1
+```
+
+脚本使用 `app/BioReader-windows.spec` 打包独立目录，完成后从 `app/dist/BioReader/BioReader.exe` 启动。分发时保留整个 `BioReader` 文件夹，包括 `_internal`。运行界面还需本机安装 WebView2 Runtime；在 macOS 上执行 Python 测试不能代替 Windows 构建。构建脚本不会自动公开 Release。
+
+仓库另有 [Windows 构建工作流](../.github/workflows/windows-build.yml)，在 Windows runner 上构建并保存下载工件。维护者发布时需核对运行的源码提交，与 macOS 包保持一致，再将同版两个平台包和合并的校验清单上传到 Release。实际构建、自检和 GUI 验收结果分别记录，不将未执行的步骤称为通过。
 
 ## 对照阅读与问答摘录
 
@@ -57,7 +95,7 @@ Zotero MCP 是独立运行的服务，不包含在 BioReader 安装包中。尚�
 
 ## 验证与限制
 
-v0.9.0 改进阅读布局、问答排版、上下文快捷问题和回答摘录，保留样品资源、全库搜索与 Zotero MCP 导入。验证范围及实际回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)；合成材料与模拟回答不等于真实模型或精读科学质量评测。问答仍限于所取原文片段，不包含整库 AI 问答或自主工具执行。原生 WebKit 与 macOS 保存对话框应以该验证记录列明的实际结果为准。
+v0.9.0 改进阅读布局、问答排版、上下文快捷问题和回答摘录，保留样品资源、全库搜索与 Zotero MCP 导入。验证范围及实际回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)；合成材料与模拟回答不等于真实模型或精读科学质量评测。问答仍限于所取原文片段，不包含整库 AI 问答或自主工具执行。原生 WebKit、Windows WebView2 与各系统保存对话框应以该验证记录列明的实际结果为准，不能把 Chrome 浏览器测试当作两平台原生窗口验收。
 
 ### v0.4.0 历史发布快照
 
@@ -75,4 +113,4 @@ python -m unittest discover -s app/tests -v
 node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs app/tests/test_zotero.cjs app/tests/test_library_search.cjs
 ```
 
-打包结果由构建机器的架构决定；本次发布预览包为 arm64。应用包作为 Release 附件提供，虚拟环境、个人论文库和编译产物不提交到源码仓库。
+macOS 包在 macOS 上构建，Windows 包在 Windows x64 环境中构建；跨系统编译结果不能替代对应平台验证。应用包作为 Release 附件提供，虚拟环境、个人论文库和编译产物不提交到源码仓库。

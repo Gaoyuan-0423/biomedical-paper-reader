@@ -1,6 +1,7 @@
 """Exercise desktop storage and bundled frontend without touching user data."""
 import os
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -69,7 +70,9 @@ class DesktopStorageTest(unittest.TestCase):
                 data = root / "data"
                 bundle = root / "bundle"
                 bundle.mkdir()
-                (bundle / "frontend").symlink_to(APP_DIR / "frontend", target_is_directory=True)
+                # A real copy also works on standard Windows accounts without
+                # symbolic-link privileges or Developer Mode enabled.
+                shutil.copytree(APP_DIR / "frontend", bundle / "frontend")
                 env = os.environ.copy()
                 env["BIOREADER_DATA_DIR"] = str(data)
                 result = subprocess.run(

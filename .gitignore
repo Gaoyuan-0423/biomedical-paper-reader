@@ -45,3 +45,4 @@ app/.desktop-venv/
 app/build/
 app/dist/
 app/*.spec
+!app/BioReader-windows.spec
