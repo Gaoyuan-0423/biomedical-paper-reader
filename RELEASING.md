@@ -8,9 +8,11 @@
 
 `main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 补发前核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。v0.3.3 现已正式发布。
 
-### 当前桌面预览版 v0.7.0
+### 当前桌面预览版 v0.8.0
 
-v0.7.0 继续使用 Pre-release 流程，下载附件为 `BioReader-v0.7.0-macos-arm64.zip` 与 `SHA256SUMS.txt`。使用 [v0.7.0 双语说明](releases/v0.7.0.md)，运行 `prepare_release.py v0.7.0`，将标签绑定到通过检查的源码提交，上传并核对附件后发布。保留 v0.3.4 稳定版，不运行稳定版工作流。
+v0.8.0 继续使用 Pre-release 流程，下载附件为 `BioReader-v0.8.0-macos-arm64.zip` 与 `SHA256SUMS.txt`。使用 [v0.8.0 双语说明](releases/v0.8.0.md)，运行 `prepare_release.py v0.8.0`，将标签绑定到通过检查的源码提交，上传并核对附件后发布。保留 v0.3.4 稳定版，不运行稳定版工作流。
+
+本版发布范围为样品结构字段与筛选、当前资源结果 CSV／编号 TXT 导出、全库正文／补充 PDF／已保存笔记搜索。确认发布说明区分 PDF 页定位和笔记打开，并将真实回归与构建结果记录到 App 验证文件；不把 BiblioCell 的其他功能或计划中的功能写成已交付。
 
 ### 桌面预览版 v0.4.0（历史）
 
@@ -66,9 +68,11 @@ ZIP 应保留 `BioReader.app` 的目录、权限和符号链接，解压后复�
 
 README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. Before the catch-up release on 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow. v0.3.3 has since been published.
 
-### Current desktop preview v0.7.0
+### Current desktop preview v0.8.0
 
-v0.7.0 remains a Pre-release. Use the [v0.7.0 notes](releases/v0.7.0.md), validate the version, bind the new tag to the checked source commit, and upload `BioReader-v0.7.0-macos-arm64.zip` plus `SHA256SUMS.txt` before publishing. Keep the stable v0.3.4 and do not run the stable-release workflow.
+v0.8.0 remains a Pre-release. Use the [v0.8.0 notes](releases/v0.8.0.md), validate the version, bind the new tag to the checked source commit, and upload `BioReader-v0.8.0-macos-arm64.zip` plus `SHA256SUMS.txt` before publishing. Keep the stable v0.3.4 and do not run the stable-release workflow.
+
+This release covers structured sample fields and filters, current-result CSV/accession TXT exports, and local search of main/supplementary PDFs and saved notes. Distinguish PDF page navigation from opening saved notes and record actual regression/build results in the App validation log. Do not present other BiblioCell features or future plans as delivered functionality.
 
 ### Desktop preview v0.4.0 (historical)
 

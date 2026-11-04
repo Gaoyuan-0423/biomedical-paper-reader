@@ -128,7 +128,9 @@ def append_research_appendix(notes, evidence, resources):
                     sections.extend(_literal_block(label, record[field]))
             sections.append('')
             for field, label in [('repository', '仓库'), ('accession', '编号'), ('organism', '研究对象'),
-                                 ('tissue', '组织'), ('modality', '技术类型')]:
+                                 ('tissue', '组织'), ('disease', '疾病／状态'), ('modality', '技术类型'),
+                                 ('platform', '平台'), ('sample_groups', '论文实验分组'),
+                                 ('sample_count', '论文实际样本量')]:
                 if record.get(field):
                     sections.append('- ' + label + '：' + _inline(record[field]))
             if record.get('url'):

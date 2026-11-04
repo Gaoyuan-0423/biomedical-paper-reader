@@ -66,6 +66,31 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(self.client.get(self.url).json()['resources_count'], 0)
         self.assertEqual(self.client.delete(url).status_code, 404)
 
+    def test_structured_sample_roundtrip_validation_and_legacy_defaults(self):
+        resource = self.add(organism='人', tissue='胃组织', disease=' 胃癌 ', modality='scRNA-seq',
+                            platform='10x', sample_groups='肿瘤、正常', sample_count='肿瘤 8 例；正常 5 例')
+        self.assertEqual(resource['disease'], '胃癌')
+        self.assertEqual(resource['sample_count'], '肿瘤 8 例；正常 5 例')
+        url = self.url + '/resources/' + resource['id']
+        for body in ({'sample_count': None}, {'platform': []}, {'disease': 'x' * 1001}, {'sample_groups': 10}):
+            result = self.client.patch(url, json=body)
+            self.assertEqual(result.status_code, 422, result.text)
+        saved = self.client.get(self.url + '/resources').json()[0]
+        self.assertEqual(saved['sample_count'], resource['sample_count'])
+        self.assertEqual(self.client.patch(url, json={'sample_groups': '', 'platform': ''}).status_code, 200)
+        saved = self.client.get(self.url + '/resources').json()[0]
+        self.assertEqual((saved['sample_groups'], saved['platform']), ('', ''))
+        # Old sidecars gain defaults when read, without rewriting the file.
+        path = self.directory / 'resources.json'
+        original = json.loads(path.read_text())
+        for field in ('disease', 'platform', 'sample_groups', 'sample_count'):
+            original[0].pop(field, None)
+        path.write_text(json.dumps(original))
+        before = path.read_bytes()
+        legacy = self.client.get(self.url + '/resources').json()[0]
+        self.assertEqual([legacy[field] for field in ('disease', 'platform', 'sample_groups', 'sample_count')], [''] * 4)
+        self.assertEqual(path.read_bytes(), before)
+
     def test_identifier_normalization_duplicates_and_edit_conflicts(self):
         first = self.add(repository='', accession=' gse123 ')
         self.assertEqual(first['repository'], 'GEO')

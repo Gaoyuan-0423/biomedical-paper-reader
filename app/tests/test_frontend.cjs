@@ -34,7 +34,7 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -49,6 +49,47 @@ function harness() {
   return { ...app, $, context };
 }
 function edit(h, notes) { h.$('editor').value = notes; h.scheduleSave(); }
+
+test('library search navigation preserves resource drafts and active generation', async () => {
+  const h = harness();
+  h.context.window.BioResources = {canLeave: () => false};
+  h.api.jsonBody = async () => { throw new Error('Must not navigate'); };
+  assert.equal(await h.openLibrarySearchResult({paper_id: B, kind: 'pdf', source: {}}), false);
+  assert.equal(h.state.current.id, A);
+  h.context.window.BioResources = {canLeave: () => true};
+  h.state.generating = true;
+  assert.equal(await h.openLibrarySearchResult({paper_id: B, kind: 'notes'}), false);
+  assert.equal(h.state.current.id, A);
+});
+
+test('library search refuses stale PDF provenance before switching paper', async () => {
+  const h = harness();
+  h.api.jsonBody = async () => { throw new Error('Source changed'); };
+  await assert.rejects(h.openLibrarySearchResult({paper_id: B, kind: 'pdf', source: {}}), /Source changed/);
+  assert.equal(h.state.current.id, A);
+});
+
+test('library search cannot leave notes when saving fails', async () => {
+  const h = harness();
+  edit(h, 'Unsaved note');
+  h.api.patch = async () => { throw new Error('Disk full'); };
+  assert.equal(await h.openLibrarySearchResult({paper_id: B, kind: 'notes'}), false);
+  assert.equal(h.state.current.id, A);
+  assert.equal(h.$('editor').value, 'Unsaved note');
+});
+
+test('closing search while the target paper loads cancels late navigation', async () => {
+  const h = harness(), pending = deferred();
+  h.state.papers = [{id: B, title: 'Other paper'}];
+  h.api.paper = () => pending.promise;
+  let active = true;
+  const navigation = h.openLibrarySearchResult({paper_id: B, kind: 'notes'}, {isCurrent: () => active});
+  await new Promise(setImmediate);
+  active = false;
+  pending.resolve({id: B, notes: 'Target notes', has_file: false});
+  assert.equal(await navigation, false);
+  assert.equal(h.state.current.id, A);
+});
 function stream(h, events, ending) {
   h.state.current.has_file = true;
   h.context.fetch = async () => ({ ok: true, body: { getReader() {

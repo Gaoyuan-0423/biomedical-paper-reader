@@ -4,9 +4,9 @@
 
 ## 下载与安装预览包
 
-下载入口：[v0.7.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.7.0)，附件以发布页实际提供为准。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
+下载入口：[v0.8.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.8.0)，附件以发布页实际提供为准。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
 
-1. 下载 [BioReader-v0.7.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.7.0/BioReader-v0.7.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
+1. 下载 [BioReader-v0.8.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.8.0/BioReader-v0.8.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
 2. 解压 ZIP，将 `BioReader.app` 拖入“应用程序”，或从解压目录直接打开。更新旧版前先退出正在运行的 BioReader。
 3. 双击打开 App。无需另装 Python 或手动启动浏览器／终端。AI 笔记需要在设置中配置模型接口和 API Key。
 
@@ -32,7 +32,13 @@ BIOREADER_PYTHON=/path/to/python3 ./app/build-macos.sh
 
 这个构建默认没有 Apple 开发者签名和公证。若要提供正式签名的安装包，需要另外完成相应签名、公证与安装测试。
 
-界面依赖已随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。AI 笔记需要在设置中配置可用的模型接口及 API Key；Key 以明文保存在本机设置文件中。导出 Markdown 或 Word 时，系统会显示保存文件对话框。
+界面依赖已随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。AI 笔记需要在设置中配置可用的模型接口及 API Key；Key 以明文保存在本机设置文件中。导出文件时使用现有的下载／保存流程。
+
+## 本机搜索与资源表
+
+侧栏「搜索正文与笔记」检索本机正文、补充 PDF 文本层和已保存笔记，不调用模型或联网。首次搜索旧 PDF 时生成本地文本缓存可能需要等待；无文本层的扫描件不能搜索。PDF 结果校验来源版本后跳页，有坐标时高亮；笔记结果打开已保存笔记，尚不定位笔记中的具体句子。
+
+「数据与复现」可直接保存 7 个样品字段，按物种、组织、疾病、技术、平台组合筛选，并将当前结果导出为资源 CSV 或去重编号 TXT。论文实际样本量与 GEO 收录总量分开，原来的队列分组和人工修改继续保留。详细步骤见 [App 使用说明](README.md#数据与复现)。本版没有新增备份／恢复界面或自动更新器；数据仍需按上述目录说明自行备份，更新 App 不会自动迁移其他位置的文献库。
 
 
 ## 可选的 Zotero 连接
@@ -45,7 +51,7 @@ Zotero MCP 是独立运行的服务，不包含在 BioReader 安装包中。尚�
 
 ## 验证与限制
 
-v0.7.0 增加针对 54yyyu/zotero-mcp 的检索、元数据与本机存储 PDF 导入；保留原文问答、星标、标签和数据与复现表。本轮验证采用模拟 MCP 响应和隔离合成文件；没有连接私人 Zotero 库，也没有安装或运行用户的 Zotero MCP 服务。模拟协议检查不等于所有服务版本兼容或真实库端到端验收；原生 WebKit 本轮未重新验收。具体自动回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)。
+v0.8.0 增加结构化样品整理、组合筛选、CSV／编号导出与全库本地搜索，保留 Zotero MCP 逐篇导入和原文问答。本轮验证使用隔离合成材料，不读取私人论文库或调用真实模型，未重新评测精读内容质量。搜索不包含 OCR、语义检索或跨论文 AI 问答；原生 WebKit 本轮未重新验收。具体自动回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)。
 
 ### v0.4.0 历史发布快照
 
@@ -60,7 +66,7 @@ v0.4.0 的桌面包用于预览试用。应用内部使用系统 WebKit 和本�
 ```bash
 python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7'
 python -m unittest discover -s app/tests -v
-node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs app/tests/test_zotero.cjs
+node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs app/tests/test_zotero.cjs app/tests/test_library_search.cjs
 ```
 
 打包结果由构建机器的架构决定；本次发布预览包为 arm64。应用包作为 Release 附件提供，虚拟环境、个人论文库和编译产物不提交到源码仓库。

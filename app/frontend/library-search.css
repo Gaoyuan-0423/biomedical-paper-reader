@@ -1,0 +1,25 @@
+#library-search-modal .modal { width: min(820px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
+.library-content-search { width: 100%; justify-content: flex-start; min-height: 28px; padding: 4px 8px; margin-top: 6px; font-size: 12px; }
+#library-search-body { min-height: 0; overflow-y: auto; }
+.library-search-form { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; gap: 8px; margin: 16px 0; }
+.library-search-form .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.library-search-form input, .library-search-form select { min-width: 0; width: 100%; border: 1px solid var(--border, #cddbf4); border-radius: 7px; padding: 10px; background: #fff; color: var(--text, #24314b); font: inherit; }
+.library-search-result { padding: 15px 0; border-top: 1px solid var(--border, #d5e0f4); }
+.library-search-result-meta, .library-search-summary { font-size: 12px; color: var(--muted, #60718f); }
+.library-search-title { border: 0; background: none; padding: 5px 0; color: #2458cd; font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.library-search-title:disabled { cursor: default; opacity: .65; }
+.library-search-title:focus-visible { outline: 2px solid #386bf3; outline-offset: 2px; border-radius: 2px; }
+.library-search-snippet { margin: 4px 0 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.library-search-error { color: #ad253a; overflow-wrap: anywhere; }
+.library-search-status, .library-search-empty { padding: 12px 0; color: var(--muted, #60718f); }
+.library-search-warnings { border: 1px solid #edd7ab; border-radius: 7px; background: #fffbf2; padding: 10px; font-size: 12px; overflow-wrap: anywhere; }
+.library-search-warnings summary { cursor: pointer; }
+.library-search-warnings p { margin: 8px 0 0; }
+#library-search-footer { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+.library-search-summary { margin-right: auto; }
+@media (max-width: 600px) {
+  .library-search-form { grid-template-columns: minmax(0, 1fr) auto; }
+  .library-search-form input { grid-column: 1 / -1; }
+  .library-search-form select { width: 100%; }
+  #library-search-modal .modal { max-height: calc(100dvh - 24px); }
+}

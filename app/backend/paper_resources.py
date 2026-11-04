@@ -24,6 +24,10 @@ class ResourceIn(BaseModel):
     organism: str = Field(default='', max_length=1000)
     tissue: str = Field(default='', max_length=1000)
     modality: str = Field(default='', max_length=1000)
+    disease: str = Field(default='', max_length=1000)
+    platform: str = Field(default='', max_length=1000)
+    sample_groups: str = Field(default='', max_length=1000)
+    sample_count: str = Field(default='', max_length=1000)
     notes: str = Field(default='', max_length=12000)
     status: Literal['pending', 'verified'] = 'pending'
     document_id: str = ''
@@ -45,6 +49,10 @@ class ResourcePatch(BaseModel):
     organism: Optional[str] = Field(default=None, max_length=1000)
     tissue: Optional[str] = Field(default=None, max_length=1000)
     modality: Optional[str] = Field(default=None, max_length=1000)
+    disease: Optional[str] = Field(default=None, max_length=1000)
+    platform: Optional[str] = Field(default=None, max_length=1000)
+    sample_groups: Optional[str] = Field(default=None, max_length=1000)
+    sample_count: Optional[str] = Field(default=None, max_length=1000)
     notes: Optional[str] = Field(default=None, max_length=12000)
     status: Optional[Literal['pending', 'verified']] = None
     document_id: Optional[str] = None
@@ -53,6 +61,8 @@ class ResourcePatch(BaseModel):
 
 
 RESOURCE_DERIVED_FIELDS = ('resources_count', 'resources_pending')
+SAMPLE_FIELDS = ('organism', 'tissue', 'disease', 'modality', 'platform', 'sample_groups', 'sample_count')
+NEW_SAMPLE_FIELDS = ('disease', 'platform', 'sample_groups', 'sample_count')
 REPOSITORIES = {
     'geo': 'GEO', 'ncbigeo': 'GEO', 'geneexpressionomnibus': 'GEO',
     'sra': 'SRA', 'ncbisra': 'SRA', 'sequencereadarchive': 'SRA',
@@ -275,7 +285,7 @@ def related_resources(entries, query=''):
     query = query.strip().casefold()
     output = []
     fields = ('title', 'paper_title', 'repository', 'accession', 'organism', 'tissue', 'modality', 'notes', 'url',
-              'purpose', 'identifiers', 'conditions', 'sample_details')
+              'purpose', 'identifiers', 'conditions', 'sample_details', 'disease', 'platform', 'sample_groups', 'sample_count')
     for record in entries:
         if query and query not in ' '.join(str(record.get(field, '')) for field in fields).casefold():
             continue

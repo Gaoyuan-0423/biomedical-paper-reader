@@ -43,6 +43,7 @@ from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourcePatch,
                              load_resources, normalize_resource, public_resource, public_resources,
                              related_resources, resource_summary, source_revision, validate_source)
 from research_export import append_research_appendix
+from resource_catalog import filter_resources, resource_csv, accession_text
 from resource_extraction import extract_resources, plan_resource_update
 from paper_tags import TEXT_LIMIT, TagFormatError, merge_tags, parse_tags, tag_messages, tag_snapshot
 from geo_metadata import GeoError, cache_fresh, fetch_geo_metadata, load_geo_cache, save_geo_cache, validate_accession
@@ -52,6 +53,7 @@ from paper_chat import (CHAT_TIMEOUT, MAX_OUTPUT, ChatIn, active_requests, chat_
                         history_page, load_history, new_messages, recover_history, save_history, update_message)
 import zotero_import as zi
 from zotero_mcp import ZoteroMCPClient, MCPError
+from library_search import search_library
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -552,10 +554,18 @@ def delete_evidence(paper_id: str, evidence_id: str):
 # ---------- data and code resources ----------
 
 @app.get('/api/papers/{paper_id}/resources')
-def get_paper_resources(paper_id: str):
+def get_paper_resources(paper_id: str, q: str = Query(default='', max_length=500),
+                        organism: str = Query(default='', max_length=1000),
+                        tissue: str = Query(default='', max_length=1000),
+                        disease: str = Query(default='', max_length=1000),
+                        modality: str = Query(default='', max_length=1000),
+                        platform: str = Query(default='', max_length=1000)):
     with storage_lock:
         d = paper_dir(paper_id)
-        return public_resources(d, read_meta(d))
+        meta = read_meta(d)
+        entries = [{**record, 'paper_id': paper_id, 'paper_title': meta['title'], 'paper_doi': meta.get('doi', '')}
+                   for record in public_resources(d, meta)]
+        return filter_resources(entries, q, organism, tissue, disease, modality, platform)
 
 
 @app.post('/api/papers/{paper_id}/resources')
@@ -656,16 +666,42 @@ def delete_paper_resource(paper_id: str, resource_id: str):
         return {'ok': True}
 
 
+def _resource_entries(paper_id: str = ''):
+    directories = [paper_dir(paper_id)] if paper_id else (sorted(PAPERS_DIR.iterdir()) if PAPERS_DIR.is_dir() else [])
+    entries = []
+    for directory in directories:
+        if (directory / 'meta.json').is_file():
+            meta = read_meta(directory)
+            entries.extend({**record, 'paper_id': meta['id'], 'paper_title': meta['title'], 'paper_doi': meta.get('doi', '')}
+                           for record in public_resources(directory, meta))
+    return related_resources(entries)
+
+
 @app.get('/api/resources')
-def get_library_resources(q: str = ''):
+def get_library_resources(q: str = Query(default='', max_length=500),
+                          organism: str = Query(default='', max_length=1000),
+                          tissue: str = Query(default='', max_length=1000),
+                          disease: str = Query(default='', max_length=1000),
+                          modality: str = Query(default='', max_length=1000),
+                          platform: str = Query(default='', max_length=1000)):
     with storage_lock:
-        entries = []
-        if PAPERS_DIR.is_dir():
-            for d in sorted(PAPERS_DIR.iterdir()):
-                if (d / 'meta.json').is_file():
-                    meta = read_meta(d)
-                    entries.extend({**r, 'paper_id': meta['id'], 'paper_title': meta['title']} for r in public_resources(d, meta))
-        return related_resources(entries, q)
+        return filter_resources(_resource_entries(), q, organism, tissue, disease, modality, platform)
+
+
+@app.get('/api/resources/export')
+def export_library_resources(format: Literal['csv', 'accessions'], paper_id: str = '',
+                             q: str = Query(default='', max_length=500),
+                             organism: str = Query(default='', max_length=1000),
+                             tissue: str = Query(default='', max_length=1000),
+                             disease: str = Query(default='', max_length=1000),
+                             modality: str = Query(default='', max_length=1000),
+                             platform: str = Query(default='', max_length=1000)):
+    with storage_lock:
+        entries = filter_resources(_resource_entries(paper_id), q, organism, tissue, disease, modality, platform)
+    content = resource_csv(entries) if format == 'csv' else accession_text(entries)
+    filename = 'bioreader-resources.csv' if format == 'csv' else 'bioreader-accessions.txt'
+    return Response(content=content, media_type='text/csv; charset=utf-8' if format == 'csv' else 'text/plain; charset=utf-8',
+                    headers={'Content-Disposition': f'attachment; filename="{filename}"', 'Cache-Control': 'no-store'})
 
 
 # ---------- optional public GEO metadata ----------
@@ -893,6 +929,53 @@ async def import_zotero_item(body: zi.ZoteroImportIn):
 
 
 # ---------- papers ----------
+
+@app.get('/api/library/search')
+def search_saved_library(q: str = Query(min_length=2, max_length=200),
+                         scope: Literal['all', 'pdf', 'notes'] = 'all',
+                         offset: int = Query(default=0, ge=0, le=100000),
+                         limit: int = Query(default=20, ge=1, le=20)):
+    entries, warnings = [], []
+    with storage_lock:
+        for directory in sorted(PAPERS_DIR.iterdir()) if PAPERS_DIR.is_dir() else []:
+            if not re.fullmatch(r'[0-9a-f]{32}', directory.name) or not (directory / 'meta.json').is_file():
+                continue
+            try:
+                meta = read_meta(directory)
+                if meta.get('id') != directory.name or not isinstance(meta.get('notes', ''), str):
+                    raise ValueError('invalid paper identity or notes')
+                supplements = meta.get('supplements', [])
+                if not isinstance(supplements, list) or any(not isinstance(item, dict) or
+                        not re.fullmatch(r'[0-9a-f]{32}', str(item.get('id', ''))) for item in supplements):
+                    raise ValueError('invalid supplement metadata')
+                entries.append((directory, meta))
+            except (OSError, ValueError, TypeError, KeyError, AttributeError):
+                warnings.append({'paper_id': directory.name, 'paper_title': '无法读取的文献',
+                                 'document_id': '', 'message': '本地文献信息无法读取，该条记录未参与搜索。'})
+    result = search_library(entries, q, scope, offset, limit)
+    result['warnings'] = warnings + result.get('warnings', [])
+    result['warning_count'] = len(warnings) + result.get('warning_count', 0)
+    return result
+
+
+class SearchSourceIn(BaseModel):
+    document_id: str = Field(pattern=r'^(?:main|[0-9a-f]{32})$')
+    page: int = Field(ge=1, le=600, strict=True)
+    source_revision: str = Field(pattern=r'^[0-9a-f]{64}$')
+    block_id: str = Field(pattern=r'^p[1-9][0-9]{0,2}-b[1-9][0-9]*$', max_length=40)
+    quote: str = Field(min_length=1, max_length=2400)
+
+
+@app.post('/api/papers/{paper_id}/search/source')
+def get_search_source(paper_id: str, body: SearchSourceIn):
+    source = body.model_dump()
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        meta = read_meta(directory)
+    result = verified_source(directory, meta, source)
+    with storage_lock:
+        validate_source_snapshot(directory, read_meta(directory), [source])
+    return {'source': {**result, 'paper_id': paper_id}}
 
 @app.get("/api/papers")
 def get_papers():
