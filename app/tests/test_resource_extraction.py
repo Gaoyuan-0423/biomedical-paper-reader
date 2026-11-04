@@ -172,10 +172,10 @@ https://doi.org/10.5061/dryad.abc123
                'status': 'verified', 'document_id': '', 'page': None,
                'notes': '  Human spacing  ', 'custom_legacy_field': {'keep': True}}
         path = self.directory / 'resources.json'
-        path.write_text(json.dumps([old]))
+        path.write_text(json.dumps([old]), encoding='utf-8')
         body = self.extract().json()
         self.assertEqual(body['added_count'], 1)
-        self.assertEqual(json.loads(path.read_text())[0], old)
+        self.assertEqual(json.loads(path.read_text(encoding='utf-8'))[0], old)
 
     def test_only_saved_complete_current_deep_notes_allowed(self):
         for fields, status, phrase in (
@@ -202,10 +202,10 @@ https://doi.org/10.5061/dryad.abc123
         path = self.directory / 'resources.json'
         for damaged in ('{bad json', '[{}]', '{}'):
             with self.subTest(damaged=damaged):
-                path.write_text(damaged)
+                path.write_text(damaged, encoding='utf-8')
                 response = self.extract()
                 self.assertEqual(response.status_code, 409, response.text)
-                self.assertEqual(path.read_text(), damaged)
+                self.assertEqual(path.read_text(encoding='utf-8'), damaged)
                 self.assertEqual(self.client.get(self.url + '/export.md').status_code, 409)
                 self.assertEqual(self.client.get(self.url).status_code, 200)
 
@@ -237,7 +237,7 @@ https://doi.org/10.5061/dryad.abc123
             futures = [pool.submit(run) for _ in range(2)]
             results = [future.result(timeout=10) for future in futures]
         self.assertEqual(sorted(item['added_count'] for item in results), [0, 1])
-        self.assertEqual(len(json.loads((self.directory / 'resources.json').read_text())), 1)
+        self.assertEqual(len(json.loads((self.directory / 'resources.json').read_text(encoding='utf-8'))), 1)
 
     def test_explicit_sample_labels_fill_fields_and_keep_original_grouped_cell(self):
         details = '物种：人；组织：胃组织；疾病：胃癌；分组：肿瘤、正常；样本量：肿瘤 8 例、正常 5 例；技术：scRNA-seq；平台：10x Chromium；GEO 收录：900 个样本'
@@ -287,13 +287,13 @@ https://doi.org/10.5061/dryad.abc123
         old['auto_extraction'] = {'version': 2, 'source': 'resource_table',
                                   'fingerprint': resource_fingerprint(old, version=2)}
         path = self.directory / 'resources.json'
-        path.write_text(json.dumps([old], ensure_ascii=False))
+        path.write_text(json.dumps([old], ensure_ascii=False), encoding='utf-8')
         result = self.extract().json()
         self.assertEqual((result['added_count'], result['updated_count'], result['backup_created']), (1, 1, True))
         record = result['resources'][0]
         self.assertEqual((record['organism'], record['disease'], record['sample_count']), ('人', '胃癌', '13名供者'))
         backup = next(self.directory.glob('resources.backup-*.json'))
-        self.assertEqual(json.loads(backup.read_text()), [old])
+        self.assertEqual(json.loads(backup.read_text(encoding='utf-8')), [old])
         before = path.read_bytes()
         self.assertEqual(self.extract().json()['updated_count'], 0)
         self.assertEqual(path.read_bytes(), before)
@@ -304,9 +304,9 @@ https://doi.org/10.5061/dryad.abc123
         self.assertEqual(self.extract().json()['resources'][0]['sample_count'], '人工补充：12名供者')
         # Even direct additions to a v2 record cannot be lost by a v2 digest.
         old['sample_count'] = '人工补充：10名供者'
-        path.write_text(json.dumps([old], ensure_ascii=False))
+        path.write_text(json.dumps([old], ensure_ascii=False), encoding='utf-8')
         self.assertEqual(self.extract().json()['updated_count'], 0)
-        self.assertEqual(json.loads(path.read_text())[0], old)
+        self.assertEqual(json.loads(path.read_text(encoding='utf-8'))[0], old)
 
     def test_reproduction_table_preserves_whole_rows_missing_ids_and_samples(self):
         self.save_notes('''## 研究材料
@@ -372,7 +372,7 @@ https://doi.org/10.5061/dryad.abc123
                     old_record(5, 'GSE55555', notes=NOTICE + '| GEO 数据 | GSE55555 |\n我的补充说明'),
                     old_record(6, 'GSE66666', custom_legacy_field='keep')]
         path = self.directory / 'resources.json'
-        path.write_text(json.dumps(original, ensure_ascii=False))
+        path.write_text(json.dumps(original, ensure_ascii=False), encoding='utf-8')
         self.save_notes('''## 数据与复现入口
 | 资源 | 用途 | 编号/链接 | 影响使用的条件 |
 | --- | --- | --- | --- |
@@ -382,8 +382,8 @@ https://doi.org/10.5061/dryad.abc123
         self.assertEqual((body['added_count'], body['updated_count'], body['backup_created']), (1, 2, True), body)
         backups = list(self.directory.glob('resources.backup-*.json'))
         self.assertEqual(len(backups), 1)
-        self.assertEqual(json.loads(backups[0].read_text()), original)
-        raw = json.loads(path.read_text())
+        self.assertEqual(json.loads(backups[0].read_text(encoding='utf-8')), original)
+        raw = json.loads(path.read_text(encoding='utf-8'))
         for preserved in original[2:]:
             self.assertEqual(next(record for record in raw if record['id'] == preserved['id']), preserved)
         self.assertEqual(len(raw), 5)
@@ -396,15 +396,15 @@ https://doi.org/10.5061/dryad.abc123
         # wording update remains recognizable as automatic, with a backup, and
         # cannot make edited or previously verified rows replaceable.
         from resource_extraction import resource_fingerprint
-        previous_version = json.loads(path.read_text())
+        previous_version = json.loads(path.read_text(encoding='utf-8'))
         automatic = next(record for record in previous_version if record.get('auto_extraction'))
         automatic['notes'] = '来自精读笔记自动整理，尚未核对原文。'
         automatic['auto_extraction']['fingerprint'] = resource_fingerprint(automatic)
-        path.write_text(json.dumps(previous_version, ensure_ascii=False))
+        path.write_text(json.dumps(previous_version, ensure_ascii=False), encoding='utf-8')
         migrated = self.extract().json()
         self.assertEqual((migrated['added_count'], migrated['updated_count']), (1, 1))
         self.assertEqual(len(migrated['resources']), 5)
-        migrated_raw = json.loads(path.read_text())
+        migrated_raw = json.loads(path.read_text(encoding='utf-8'))
         for preserved in original[2:]:
             self.assertEqual(next(record for record in migrated_raw if record['id'] == preserved['id']), preserved)
         self.assertEqual(next(record for record in migrated_raw if record.get('auto_extraction'))['notes'], '来自精读笔记自动整理。')

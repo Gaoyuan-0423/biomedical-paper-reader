@@ -4,6 +4,10 @@ import math
 import os
 import tempfile
 import time
+import threading
+
+
+_position_lock = threading.Lock()
 
 
 def read_positions(directory, meta):
@@ -32,12 +36,23 @@ def read_positions(directory, meta):
 def save_position(directory, document_id, position):
     folder = directory / 'reading'
     folder.mkdir(exist_ok=True)
-    # One file per source avoids read-modify-write races between different PDFs.
-    fd, temp = tempfile.mkstemp(prefix='.position-', dir=folder)
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as output:
-            json.dump({**position, 'updated': time.time_ns()}, output)
-        os.replace(temp, folder / f'{document_id}.json')
-    finally:
-        if os.path.exists(temp):
-            os.unlink(temp)
+    # Windows wall-clock ticks may cover multiple saves. Allocate a strictly
+    # newer persisted timestamp, also handling a clock adjustment or restart.
+    # Keep the ordering and atomic replacement under one lock across documents.
+    with _position_lock:
+        updated = time.time_ns()
+        for previous in folder.glob('*.json'):
+            try:
+                stamp = int(json.loads(previous.read_text('utf-8'))['updated'])
+                if 0 <= stamp < 2**63:
+                    updated = max(updated, stamp + 1)
+            except (OSError, ValueError, TypeError, KeyError, OverflowError):
+                continue
+        fd, temp = tempfile.mkstemp(prefix='.position-', dir=folder)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as output:
+                json.dump({**position, 'updated': updated}, output)
+            os.replace(temp, folder / f'{document_id}.json')
+        finally:
+            if os.path.exists(temp):
+                os.unlink(temp)
