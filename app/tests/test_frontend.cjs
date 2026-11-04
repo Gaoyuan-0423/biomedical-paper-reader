@@ -14,7 +14,7 @@ function deferred() {
 function harness() {
   const elements = new Map();
   function element() {
-    return { value: '', textContent: '', dataset: {}, style: {}, children: [],
+    return { value: '', textContent: '', dataset: {}, style: { setProperty(name, value) { this[name] = value; } }, children: [],
       get innerHTML() { return this.html || ''; }, set innerHTML(value) { this.html = value; this.children = []; },
       get offsetTop() { return this.parent ? 20 + this.parent.children.slice(0, this.parent.children.indexOf(this)).reduce((n, el) => n + parseFloat(el.style.height || 0) + 18, 0) : 0; },
       classList: { toggle() {}, add() {}, remove() {} }, hidden: false,
@@ -34,7 +34,7 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -669,6 +669,154 @@ test('figure source navigation switches to the correct supplement and page', asy
   h.context.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
   await h.showFigureSource('s002');
   assert.equal(h.state.documentId, B); assert.equal(h.currentPage(), 6);
+});
+
+test('PDF text layers ignore late text from evicted pages and release completed layers', async () => {
+  const h = harness(), pdf = pdfFixture(h, 40), late = deferred(), painted = [];
+  for (let number = 1; number <= 40; number++) {
+    const page = await pdf.doc.getPage(number);
+    page.getTextContent = () => number === 1 ? late.promise : Promise.resolve({ items: [], styles: {}, number });
+  }
+  h.context.window.pdfjsLib = { renderTextLayer({ textContentSource }) {
+    painted.push(textContentSource.number); return { promise: Promise.resolve(), cancel() {} };
+  } };
+  await h.renderPages(0, 1);
+  const oldWrapper = h.state.pageWrappers[0], secondLayer = h.state.pdfView.canvases.get(2).textLayer;
+  assert.ok(secondLayer);
+  h.goToPage(30); await h.paintVisiblePages();
+  late.resolve({ items: [], styles: {}, number: 1 }); await new Promise(setImmediate);
+  assert.ok(!painted.includes(1));
+  assert.equal(oldWrapper.children.length, 0);
+  assert.ok(!h.state.pageWrappers[1].children.includes(secondLayer));
+  assert.equal(h.state.pdfView.canvases.size, 3);
+});
+
+test('PDF text rendering cancels on zoom and text failures preserve readable canvases', async () => {
+  const h = harness(), pdf = pdfFixture(h, 2), text = deferred(); let cancellations = 0;
+  for (let n = 1; n <= 2; n++) (await pdf.doc.getPage(n)).getTextContent = async () => ({ items: [], styles: {} });
+  h.context.window.pdfjsLib = { renderTextLayer() {
+    return { promise: text.promise, cancel() { cancellations++; text.reject(new Error('Text cancelled')); } };
+  } };
+  await h.renderPages(0, 1);
+  const oldLayer = h.state.pdfView.canvases.get(1).textLayer;
+  h.rerenderPdf(); await new Promise(setImmediate);
+  assert.ok(cancellations > 0);
+  assert.ok(!h.state.pageWrappers[0].children.includes(oldLayer));
+  assert.equal(h.state.pdfView.failed.size, 0);
+  assert.ok(h.state.pdfView.canvases.get(1).canvas.width > 0);
+  assert.equal(h.state.pdfRenderTasks.size, 0);
+});
+
+function pdfSelectionFixture(h, page) {
+  const wrapper = h.state.pageWrappers[page - 1];
+  const layer = { closest: selector => selector === '.pdf-page' ? wrapper : null };
+  const node = { nodeType: 3, parentElement: { closest: selector => selector === '.pdf-text-layer' ? layer : null } };
+  const range = { startContainer: node, endContainer: node, getBoundingClientRect: () => ({ left: 30, bottom: 100 }) };
+  const selection = { anchorNode: node, isCollapsed: false, rangeCount: 1, getRangeAt: () => range, toString: () => 'Selected source paragraph', removeAllRanges() { this.isCollapsed = true; } };
+  h.context.window.getSelection = () => selection;
+  return { range, selection, wrapper };
+}
+
+test('PDF selection uses its exact supplemental page and rejects mixed or stale sources and cropping', async () => {
+  const h = harness(); pdfFixture(h, 3);
+  h.state.documentId = B; h.state.pdfContext.documentId = B;
+  h.state.current.supplements = [{ id: B, filename: 'Supplement.pdf' }];
+  await h.renderPages(0, 1);
+  const { range, wrapper } = pdfSelectionFixture(h, 2);
+  const picked = h.selectedPdfContext();
+  assert.equal(h.currentPage(), 1);
+  assert.equal(picked.context.page, 2); assert.equal(picked.context.document_id, B);
+  assert.equal(picked.context.document_name, 'Supplement.pdf');
+  range.endContainer = { closest: () => ({}) };
+  assert.equal(h.selectedPdfContext(), null);
+  range.endContainer = range.startContainer;
+  h.state.cropping = true; assert.equal(h.selectedPdfContext(), null); h.state.cropping = false;
+  wrapper.dataset.paperId = C; assert.equal(h.selectedPdfContext(), null);
+  wrapper.dataset.paperId = A; h.state.pageWrappers[1] = {};
+  assert.equal(h.selectedPdfContext(), null);
+});
+
+test('selection questions retain their source snapshot and do not modify note drafts', async () => {
+  const h = harness(); pdfFixture(h, 3);
+  await h.renderPages(0, 1); pdfSelectionFixture(h, 2);
+  h.state.pdfSelection = h.selectedPdfContext();
+  const calls = [], contexts = [];
+  h.context.window.BioChat = { open() {}, setContext(c) { contexts.push(c); }, async askSelection(action, context) { calls.push({ action, context }); } };
+  h.$('editor').value = 'Unsaved note';
+  assert.equal(await h.askPdfSelection('explain'), true);
+  assert.equal(calls[0].context.page, 2); assert.equal(calls[0].context.selection, 'Selected source paragraph');
+  assert.equal(contexts[0].page, 1); assert.equal(calls[0].context.page, 2);
+  assert.equal(h.state.tab, 'chat'); assert.equal(h.$('editor').value, 'Unsaved note');
+  assert.equal(h.state.pdfSelection, null);
+  pdfSelectionFixture(h, 2); h.state.pdfSelection = h.selectedPdfContext();
+  h.goToPage(3); assert.equal(await h.askPdfSelection('ask'), false);
+  assert.equal(calls.length, 1);
+});
+
+test('chat citations load the supplementary PDF, highlight its exact block and reject another paper', async () => {
+  const h = harness(), pdf = pdfFixture(h, 10), downloads = [];
+  h.state.current.has_file = true;
+  h.state.current.supplements = [{ id: B, pages: 10, filename: 'Supplement.pdf' }];
+  h.context.pdfjsLib = h.context.window.pdfjsLib = { GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve(pdf.doc) }) };
+  h.context.fetch = async url => { downloads.push(url); return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }; };
+  assert.equal(await h.jumpChatSource({ paper_id: A, document_id: B, page: 6, bbox: [0.1, 0.2, 0.8, 0.4] }), true);
+  assert.match(downloads[0], new RegExp('document_id=' + B));
+  assert.equal(h.state.documentId, B); assert.equal(h.currentPage(), 6);
+  assert.equal(h.state.pdfSourceHighlight.parent, h.state.pageWrappers[5]);
+  assert.equal(h.state.pdfSourceHighlight.style.left, '10%');
+  assert.equal(await h.jumpChatSource({ paper_id: C, document_id: 'main', page: 1 }), false);
+  assert.equal(h.state.documentId, B);
+});
+
+test('a citation download that finishes after changing papers cannot highlight the new PDF', async () => {
+  const h = harness(), pdf = pdfFixture(h, 3), download = deferred();
+  h.state.current.has_file = true;
+  h.state.current.supplements = [{ id: B, pages: 3, filename: 'Supplement.pdf' }];
+  h.context.pdfjsLib = h.context.window.pdfjsLib = { GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve(pdf.doc) }) };
+  h.context.fetch = () => download.promise;
+  const jump = h.jumpChatSource({ paper_id: A, document_id: B, page: 2, bbox: [0, 0, 1, 1] });
+  await new Promise(setImmediate);
+  h.state.current = { id: C, title: 'Other paper' }; h.clearPdf();
+  download.resolve({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  assert.equal(await jump, false);
+  assert.equal(h.state.pdfSourceHighlight, null);
+});
+
+test('live chat context clears while a different source is loading without mutating selection snapshots', async () => {
+  const h = harness(); pdfFixture(h, 3); await h.renderPages(0, 2);
+  const contexts = []; h.context.window.BioChat = { setContext(c) { contexts.push(c); } };
+  h.updateChatContext();
+  const previous = contexts.at(-1); assert.equal(previous.page, 2);
+  h.state.documentId = B; h.updateChatContext();
+  assert.equal(contexts.at(-1).document_id, B); assert.equal(contexts.at(-1).page, null);
+  assert.equal(previous.document_id, 'main'); assert.equal(previous.page, 2);
+  h.clearPdf(); assert.equal(contexts.at(-1).page, null);
+});
+
+test('a material change during source navigation prevents highlighting the older citation', async () => {
+  const h = harness(), pdf = pdfFixture(h, 3), download = deferred();
+  Object.assign(h.state.current, { has_file: true, material_revision: 1, supplements: [{ id: B, pages: 3 }] });
+  h.context.pdfjsLib = h.context.window.pdfjsLib = { GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve(pdf.doc) }) };
+  h.context.fetch = () => download.promise;
+  const jump = h.jumpChatSource({ paper_id: A, document_id: B, page: 2, bbox: [0, 0, 1, 1] });
+  await new Promise(setImmediate);
+  h.state.current = { ...h.state.current, material_revision: 2 };
+  download.resolve({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  assert.equal(await jump, false);
+  assert.equal(h.state.pdfSourceHighlight, null);
+});
+
+test('a newer citation wins while an earlier source is still rendering', async () => {
+  const h = harness(), drawing = deferred();
+  pdfFixture(h, 8, n => n === 4 ? { promise: drawing.promise, cancel() {} } : { promise: Promise.resolve(), cancel() {} });
+  await h.renderPages(0, 1);
+  const earlier = h.jumpChatSource({ paper_id: A, document_id: 'main', page: 4, bbox: [0, 0, 1, 1] });
+  await new Promise(setImmediate);
+  const latest = h.jumpChatSource({ paper_id: A, document_id: 'main', page: 5, bbox: [0.1, 0.1, 0.9, 0.9] });
+  await new Promise(setImmediate); drawing.resolve();
+  assert.equal(await earlier, false); assert.equal(await latest, true);
+  assert.equal(h.currentPage(), 5);
+  assert.equal(h.state.pdfSourceHighlight.parent, h.state.pageWrappers[4]);
 });
 
 test('late re-extraction and crop results cannot enter another paper', async () => {

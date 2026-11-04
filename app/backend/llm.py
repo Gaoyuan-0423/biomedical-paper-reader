@@ -262,7 +262,8 @@ class UpstreamError(RuntimeError):
         self.status_code = status_code
 
 
-async def _request_stream(payload: dict, base_url: str, api_key: str, timeout: float) -> AsyncIterator[str]:
+async def _request_stream(payload: dict, base_url: str, api_key: str, timeout: float,
+                          *, require_done: bool = False) -> AsyncIterator[str]:
     url = chat_completions_url(base_url)
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -303,12 +304,25 @@ async def _request_stream(payload: dict, base_url: str, api_key: str, timeout: f
                     try:
                         event = json.loads(data)
                     except json.JSONDecodeError:
+                        if require_done:
+                            raise UpstreamError("模型返回了无法解析的数据，回答未完成。")
                         continue
+                    if require_done and (not isinstance(event, dict) or event.get("error")):
+                        raise UpstreamError("模型在生成过程中返回错误，回答未完成。")
                     for choice in event.get("choices", []):
                         delta = choice.get("delta") or {}
                         text = delta.get("content")
                         if text:
                             yield text
+                        if require_done and choice.get("finish_reason"):
+                            reason = choice["finish_reason"]
+                            if reason == "stop":
+                                return
+                            if reason == "length":
+                                raise UpstreamError("回答达到输出长度上限，已保留生成内容，请缩小问题范围后继续提问。")
+                            raise UpstreamError("模型提前结束了回答，已保留生成内容。")
+                if require_done:
+                    raise UpstreamError("模型连接提前中断，回答未完成，已保留生成内容。")
                 return
         raise RuntimeError("上游 API 重定向次数过多")
 
@@ -321,12 +335,13 @@ async def stream_chat(
     temperature: float = 0.3,
     max_tokens: int | None = None,
     timeout: float = 900.0,
+    require_done: bool = False,
 ) -> AsyncIterator[str]:
     """Yield content deltas from an OpenAI-compatible streaming chat endpoint."""
     payload = {"model": model, "messages": messages, "stream": True, "temperature": temperature}
     if max_tokens:
         payload["max_tokens"] = max_tokens
-    async for piece in _request_stream(payload, base_url, api_key, timeout):
+    async for piece in _request_stream(payload, base_url, api_key, timeout, require_done=require_done):
         yield piece
 
 

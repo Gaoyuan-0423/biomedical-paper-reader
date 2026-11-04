@@ -111,6 +111,9 @@
     pdfContext: null,
     pdfFetch: null,
     pdfDeferredPage: 1,
+    pdfSelection: null,
+    pdfSourceHighlight: null,
+    chatJumpToken: 0,
     readingCache: new Map(),
     readingPending: new Map(),
     readingSaving: null,
@@ -591,8 +594,10 @@
       renderDocuments(); renderWorkflow();
       if (window.BioEvidence) window.BioEvidence.clear();
       if (window.BioResources) window.BioResources.clear();
+      if (window.BioChat) window.BioChat.clear();
       if (state.tab === 'evidence') openEvidence();
       if (state.tab === 'resources') openResources();
+      if (state.tab === 'chat') openChat();
     }
   }
 
@@ -830,6 +835,7 @@
   function clearWorkspace() {
     if (window.BioEvidence) window.BioEvidence.clear();
     if (window.BioResources) window.BioResources.clear();
+    if (window.BioChat) window.BioChat.clear();
     setSaveStatus('');
     $('document-toolbar').hidden = true;
     $('btn-illustrate').disabled = true;
@@ -873,6 +879,7 @@
       state.current = full;
       if (window.BioEvidence) window.BioEvidence.clear();
       if (window.BioResources) window.BioResources.clear();
+      if (window.BioChat) window.BioChat.clear();
       if (!state.readingCache.has(full.id)) state.readingCache.set(full.id, full.reading_position || { documents: {} });
       const active = state.readingCache.get(full.id).active_document;
       state.documentId = (full.supplements || []).some(d => d.id === active) ? active : 'main';
@@ -904,6 +911,7 @@
     fetchFigures().then(() => {
       if (state.tab === 'evidence') openEvidence();
       if (state.tab === 'resources') openResources();
+      if (state.tab === 'chat') openChat();
     });
   }
 
@@ -955,8 +963,10 @@
       await fetchFigures(); renderFigures(); loadPdf();
       if (window.BioEvidence) window.BioEvidence.clear();
       if (window.BioResources) window.BioResources.clear();
+      if (window.BioChat) window.BioChat.clear();
       if (state.tab === 'evidence') openEvidence();
       if (state.tab === 'resources') openResources();
+      if (state.tab === 'chat') openChat();
     }
   }
 
@@ -1391,7 +1401,7 @@
 
   // ---------- tabs ----------
   function switchTab(name) {
-    if (!['preview', 'edit', 'figures', 'evidence', 'resources'].includes(name)) return;
+    if (!['preview', 'edit', 'figures', 'evidence', 'resources', 'chat'].includes(name)) return;
     state.tab = name;
     document.body.dataset.noteTab = name;
     document.body.classList.toggle('resources-wide', name === 'resources');
@@ -1401,17 +1411,71 @@
       b.setAttribute('aria-selected', String(active));
       b.tabIndex = active ? 0 : -1;
     });
-    ['preview', 'edit', 'figures', 'evidence', 'resources'].forEach((t) => { $('tab-' + t).hidden = t !== name; });
+    ['preview', 'edit', 'figures', 'evidence', 'resources', 'chat'].forEach((t) => { $('tab-' + t).hidden = t !== name; });
     if (window.matchMedia('(max-width: 900px)').matches) setWorkspaceView('notes');
     if (name === 'figures') renderFigures();
     if (name === 'preview') renderPreview();
     if (name === 'edit') $('editor').focus();
     if (name === 'evidence') openEvidence();
     if (name === 'resources') openResources();
+    if (name === 'chat') openChat();
   }
 
   function canLeaveResearch() {
-    return (!window.BioEvidence || window.BioEvidence.canLeave()) && (!window.BioResources || window.BioResources.canLeave());
+    return (!window.BioEvidence || window.BioEvidence.canLeave()) && (!window.BioResources || window.BioResources.canLeave()) && (!window.BioChat || window.BioChat.canLeave());
+  }
+
+  function chatContext(page = currentPage()) {
+    const paper = state.current;
+    if (!paper) return null;
+    const supplement = (paper.supplements || []).find(d => d.id === state.documentId);
+    const loaded = state.pdfContext?.paperId === paper.id && state.pdfContext?.documentId === state.documentId;
+    return { paper_id: paper.id, document_id: state.documentId, document_name: supplement?.filename || '正文', page: loaded ? page : null, selection: '' };
+  }
+
+  function updateChatContext() {
+    const context = chatContext();
+    if (context && window.BioChat) window.BioChat.setContext(context);
+  }
+
+  function openChat() {
+    if (!window.BioChat) return;
+    window.BioChat.open(state.current);
+    updateChatContext();
+  }
+
+  async function jumpChatSource(source) {
+    const paper = state.current;
+    if (!paper || state.materialBusy || (source.paper_id && source.paper_id !== paper.id)) return false;
+    const materialRevision = paper.material_revision;
+    const documentId = source.document_id;
+    if (documentId !== 'main' && !(paper.supplements || []).some(d => d.id === documentId)) return false;
+    if (!Number.isInteger(source.page) || source.page < 1) return false;
+    const jumpToken = ++state.chatJumpToken;
+    switchTab('chat');
+    setWorkspaceView('pdf');
+    // Let a hidden narrow-screen PDF acquire its width before loading/jumping.
+    await new Promise(requestAnimationFrame);
+    if (jumpToken !== state.chatJumpToken || state.current?.id !== paper.id) return false;
+    await switchDocument(documentId, source.page);
+    if (jumpToken !== state.chatJumpToken || state.current?.id !== paper.id || state.current.material_revision !== materialRevision || state.documentId !== documentId || state.pdfContext?.documentId !== documentId) return false;
+    await paintVisiblePages();
+    if (jumpToken !== state.chatJumpToken || state.current?.id !== paper.id || state.current.material_revision !== materialRevision || state.documentId !== documentId) return false;
+    const wrapper = state.pageWrappers[source.page - 1];
+    if (!wrapper) return false;
+    const box = source.bbox;
+    if (Array.isArray(box) && box.length === 4 && box.every(n => Number.isFinite(n) && n >= 0 && n <= 1) && box[2] > box[0] && box[3] > box[1]) {
+      state.pdfSourceHighlight?.remove();
+      const highlight = document.createElement('div');
+      highlight.className = 'pdf-source-highlight';
+      highlight.style.left = box[0] * 100 + '%'; highlight.style.top = box[1] * 100 + '%';
+      highlight.style.width = (box[2] - box[0]) * 100 + '%'; highlight.style.height = (box[3] - box[1]) * 100 + '%';
+      highlight.setAttribute('aria-label', '引用原文位置');
+      wrapper.appendChild(highlight); state.pdfSourceHighlight = highlight;
+      highlight.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+      setTimeout(() => { highlight.remove(); if (state.pdfSourceHighlight === highlight) state.pdfSourceHighlight = null; }, 3500);
+    }
+    return true;
   }
 
   function openResources() {
@@ -1823,12 +1887,14 @@
     const paper = state.current;
     if (!paper || state.materialBusy) return;
     if (id !== 'main' && !(paper.supplements || []).some(d => d.id === id)) return;
+    clearPdfSelection();
     if (id === state.documentId && state.pdfView) {
       if (page) goToPage(page, false);
       return;
     }
     state.documentId = id;
     renderDocuments();
+    updateChatContext();
     return loadPdf(page);
   }
 
@@ -1840,6 +1906,8 @@
   }
 
   function clearPdf() {
+    clearPdfSelection();
+    state.pdfSourceHighlight?.remove(); state.pdfSourceHighlight = null;
     rememberReadingPosition();
     flushReadingPositions();
     state.renderToken++;
@@ -1859,6 +1927,7 @@
     showPdfEmpty(!state.current ? 'welcome' : state.current.has_file ? 'loading' : 'missing');
     $('pdf-crop').disabled = true;
     setCropping(false);
+    updateChatContext();
   }
 
   async function loadPdf(targetPage) {
@@ -1910,6 +1979,8 @@
     if (!doc) return;
     state.pdfDeferredPage = keepPage || 1;
     if (!$('pdf-scroll').clientWidth || !$('pdf-scroll').clientHeight) return;
+    clearPdfSelection();
+    state.pdfSourceHighlight?.remove(); state.pdfSourceHighlight = null;
     const container = $('pdf-pages');
     container.innerHTML = '';
     state.pageWrappers = [];
@@ -1935,6 +2006,8 @@
       const w = document.createElement('div');
       w.className = 'pdf-page';
       w.dataset.page = i + 1;
+      w.dataset.paperId = state.pdfContext?.paperId || state.current?.id || '';
+      w.dataset.documentId = state.pdfContext?.documentId || state.documentId;
       w.style.width = Math.floor(sizes[i].width * scale) + 'px';
       w.style.height = Math.floor(sizes[i].height * scale) + 'px';
       w.setAttribute('aria-label', '第 ' + (i + 1) + ' 页');
@@ -1958,9 +2031,7 @@
     view.wanted = new Set(wanted);
     for (const [n, entry] of view.canvases) {
       if (view.wanted.has(n)) continue;
-      entry.canvas.width = entry.canvas.height = 0;
-      entry.canvas.remove();
-      entry.page.cleanup();
+      releasePdfEntry(entry);
       view.canvases.delete(n);
     }
     if (view.task && !view.wanted.has(view.task.number)) view.task.render.cancel();
@@ -1989,7 +2060,9 @@
           finally { state.pdfRenderTasks.delete(task); view.task = null; }
           if (view !== state.pdfView || !view.wanted.has(number)) { canvas.width = canvas.height = 0; page.cleanup(); continue; }
           state.pageWrappers[number - 1].appendChild(canvas);
-          view.canvases.set(number, { canvas, page });
+          const entry = { canvas, page, cancelled: false, textLayer: null, textTask: null };
+          view.canvases.set(number, entry);
+          entry.textPromise = renderPdfText(view, number, entry, vp);
         } catch (e) {
           if (canvas) canvas.width = canvas.height = 0;
           if (page && view === state.pdfView) page.cleanup();
@@ -2008,9 +2081,39 @@
 
   function releasePdfCanvases() {
     if (!state.pdfView) return;
-    for (const { canvas, page } of state.pdfView.canvases.values()) {
-      canvas.width = canvas.height = 0;
-      page.cleanup();
+    for (const entry of state.pdfView.canvases.values()) releasePdfEntry(entry);
+  }
+
+  function releasePdfEntry(entry) {
+    entry.cancelled = true;
+    entry.textTask?.cancel();
+    entry.textLayer?.remove();
+    entry.canvas.width = entry.canvas.height = 0;
+    entry.canvas.remove();
+    entry.page.cleanup();
+  }
+
+  async function renderPdfText(view, number, entry, viewport) {
+    if (!window.pdfjsLib?.renderTextLayer || (!entry.page.streamTextContent && !entry.page.getTextContent)) return;
+    let task;
+    try {
+      const textContentSource = entry.page.streamTextContent ? entry.page.streamTextContent() : await entry.page.getTextContent();
+      if (entry.cancelled || view !== state.pdfView || view.token !== state.renderToken || !view.wanted.has(number)) return;
+      const layer = document.createElement('div');
+      layer.className = 'pdf-text-layer';
+      layer.style.setProperty('--scale-factor', viewport.scale || view.scale);
+      entry.textLayer = layer;
+      state.pageWrappers[number - 1].appendChild(layer);
+      task = window.pdfjsLib.renderTextLayer({ textContentSource, container: layer, viewport });
+      entry.textTask = task; state.pdfRenderTasks.add(task);
+      await task.promise;
+      if (entry.cancelled || view !== state.pdfView || view.token !== state.renderToken) layer.remove();
+    } catch (_) {
+      // A text-layer failure must not blank an otherwise readable PDF image.
+      entry.textLayer?.remove();
+    } finally {
+      if (task) state.pdfRenderTasks.delete(task);
+      entry.textTask = null;
     }
   }
 
@@ -2028,10 +2131,12 @@
   function goToPage(n, smooth) {
     const w = state.pageWrappers[n - 1];
     if (!w) return;
+    clearPdfSelection();
     $('pdf-scroll').scrollTo({ top: w.offsetTop - 12, behavior: smooth ? 'smooth' : 'auto' });
     $('pdf-page').value = n;
     paintVisiblePages();
     rememberReadingPosition();
+    updateChatContext();
   }
 
   function cancelPdfRenders() {
@@ -2044,6 +2149,7 @@
     // A hidden narrow-screen view has no measurable width or page offsets.
     if (!state.pdf || !$('pdf-scroll').clientWidth || !$('pdf-scroll').clientHeight) return;
     const page = state.pdfView ? currentPage() : state.pdfDeferredPage;
+    clearPdfSelection();
     rememberReadingPosition();
     state.renderToken++;
     cancelPdfRenders();
@@ -2062,12 +2168,73 @@
 
   // ---------- manual crop ----------
   function setCropping(on) {
+    clearPdfSelection();
     state.cropping = on && !!state.pdf;
     $('pdf-scroll').classList.toggle('cropping', state.cropping);
     $('crop-hint').hidden = !state.cropping;
     $('pdf-crop').classList.toggle('active', state.cropping);
     if (!state.cropping && state.cropDrag && state.cropDrag.el) state.cropDrag.el.remove();
     state.cropDrag = null;
+  }
+
+  // Selection provenance comes from the selected text layer, never scroll position.
+  function selectedPdfContext(selection = window.getSelection?.()) {
+    if (!state.current || !state.pdfView || state.cropping || state.materialBusy || !selection || selection.isCollapsed || !selection.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    const element = node => node?.nodeType === 3 ? node.parentElement : node;
+    const start = element(range.startContainer)?.closest?.('.pdf-text-layer');
+    const end = element(range.endContainer)?.closest?.('.pdf-text-layer');
+    if (!start || start !== end) return null;
+    const wrapper = start.closest('.pdf-page'), page = Number(wrapper?.dataset.page);
+    if (!wrapper || state.pageWrappers[page - 1] !== wrapper || wrapper.dataset.paperId !== state.current.id || wrapper.dataset.documentId !== state.documentId) return null;
+    const selectionText = selection.toString().trim();
+    if (!selectionText) return null;
+    return { context: { ...chatContext(page), selection: selectionText.slice(0, 6000) }, token: state.renderToken, wrapper, rect: range.getBoundingClientRect() };
+  }
+
+  function clearPdfSelection() {
+    state.pdfSelection = null;
+    $('pdf-selection-tools').hidden = true;
+    // Clear only PDF selections; note editor/preview selection is independent.
+    const selection = window.getSelection?.();
+    const node = selection?.anchorNode;
+    const element = node?.nodeType === 3 ? node.parentElement : node;
+    if (element?.closest?.('.pdf-text-layer')) selection.removeAllRanges();
+  }
+
+  function showPdfSelection() {
+    const selected = selectedPdfContext();
+    state.pdfSelection = selected;
+    const toolbar = $('pdf-selection-tools');
+    toolbar.hidden = !selected;
+    if (!selected) return;
+    const bounds = selected.rect;
+    toolbar.style.left = Math.max(8, Math.min(bounds.left, window.innerWidth - 220)) + 'px';
+    toolbar.style.top = Math.max(8, Math.min(bounds.bottom + 8, window.innerHeight - 52)) + 'px';
+  }
+
+  async function askPdfSelection(action) {
+    const selected = state.pdfSelection;
+    if (!['explain', 'translate', 'ask'].includes(action) || !selected || selected.token !== state.renderToken || selected.context.paper_id !== state.current?.id || selected.context.document_id !== state.documentId || state.cropping || state.materialBusy) return false;
+    if (!window.BioChat) { toast('问答组件未能加载，请重新打开应用', 'error'); return false; }
+    // Keep a snapshot before switching the mobile workspace clears the DOM range.
+    const context = { ...selected.context };
+    clearPdfSelection();
+    switchTab('chat');
+    await window.BioChat.askSelection(action, context);
+    return true;
+  }
+
+  function initPdfSelection() {
+    const toolbar = $('pdf-selection-tools');
+    toolbar.addEventListener('mousedown', event => event.preventDefault());
+    toolbar.addEventListener('click', event => {
+      const button = event.target.closest('[data-selection-action]');
+      if (button) askPdfSelection(button.dataset.selectionAction).catch(e => toast('无法提问：' + e.message, 'error'));
+    });
+    document.addEventListener('selectionchange', showPdfSelection);
+    window.addEventListener('resize', clearPdfSelection);
+    window.addEventListener('keydown', event => { if (event.key === 'Escape') clearPdfSelection(); });
   }
 
   function initCrop() {
@@ -2409,6 +2576,8 @@
     $('pdf-crop').addEventListener('click', () => setCropping(!state.cropping));
     let scrollRaf = null;
     $('pdf-scroll').addEventListener('scroll', () => {
+      if (state.pdfSelection && state.pdfSelection.context.page !== currentPage()) clearPdfSelection();
+      else $('pdf-selection-tools').hidden = true;
       if (scrollRaf) return;
       scrollRaf = requestAnimationFrame(() => {
         scrollRaf = null;
@@ -2416,6 +2585,7 @@
         $('pdf-page').value = currentPage();
         paintVisiblePages();
         rememberReadingPosition();
+        updateChatContext();
       });
     });
 
@@ -2441,6 +2611,10 @@
   }
 
   async function init() {
+    if (window.BioChat) window.BioChat.init({
+      request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
+      jump: jumpChatSource, toast,
+    });
     if (window.BioResources) window.BioResources.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
       extract: paper => extractResources(paper),
@@ -2469,6 +2643,7 @@
     showPdfEmpty('welcome');
     initSplitter();
     initCrop();
+    initPdfSelection();
     await Promise.all([loadSettings(), loadPapers()]);
     // Deep link: ?paper=<id> only scrolls to and flashes the matching sidebar
     // entry; opening a paper always requires a real user click, so request ids

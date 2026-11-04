@@ -188,6 +188,18 @@ select { cursor: pointer; }
 .pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 20px; min-width: min-content; }
 .pdf-page { position: relative; background: var(--panel); box-shadow: 0 3px 16px var(--shadow-soft), 0 0 0 1px var(--shadow-edge); }
 .pdf-page canvas { display: block; }
+.pdf-text-layer { position: absolute; inset: 0; overflow: hidden; line-height: 1; text-align: initial; text-size-adjust: none; -webkit-text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 2; }
+.pdf-text-layer :is(span, br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; }
+.pdf-text-layer span.markedContent { top: 0; height: 0; }
+.pdf-text-layer[data-main-rotation='90'] { transform: rotate(90deg) translateY(-100%); }
+.pdf-text-layer[data-main-rotation='180'] { transform: rotate(180deg) translate(-100%, -100%); }
+.pdf-text-layer[data-main-rotation='270'] { transform: rotate(270deg) translateX(-100%); }
+.pdf-text-layer ::selection { background: #2563eb40; }
+.pdf-text-layer br::selection { background: transparent; }
+.pdf-scroll.cropping .pdf-text-layer { pointer-events: none; user-select: none; }
+.pdf-source-highlight { position: absolute; pointer-events: none; z-index: 3; background: #facc1540; outline: 2px solid #eab308; border-radius: 2px; }
+.pdf-selection-tools { position: fixed; z-index: 70; display: flex; gap: 2px; padding: 4px; border: 1px solid var(--primary-border); border-radius: 9px; background: var(--panel); box-shadow: 0 4px 18px var(--shadow-popover); }
+.pdf-selection-tools .btn { min-height: 34px; padding: 6px 12px; color: var(--primary-ink); }
 .pdf-page::before { content: '第 ' attr(data-page) ' 页'; position: absolute; bottom: 5px; right: 9px; color: var(--muted); font-size: 11px; pointer-events: none; }
 .pdf-retry { position: absolute; top: 45%; left: 50%; transform: translateX(-50%); white-space: nowrap; }
 .page-num { position: absolute; right: 7px; bottom: 7px; font-size: 11px; background: var(--panel-translucent); color: var(--muted); padding: 2px 5px; border-radius: 3px; }
@@ -479,9 +491,26 @@ select { cursor: pointer; }
 .task-link { color: var(--primary-ink); }
 .storage-warning { margin-top: 8px; padding: 9px 11px; border: 1px solid var(--warn-text); border-radius: var(--radius); color: var(--warn-text); background: var(--warn-bg); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 body[data-note-tab='evidence'] .reading-actions,
+body[data-note-tab='chat'] .reading-actions,
 body[data-note-tab='resources'] .reading-actions { display: none; }
 body[data-note-tab='evidence'] .reading-actions:has(#btn-stop:not([hidden])),
+body[data-note-tab='chat'] .reading-actions:has(#btn-stop:not([hidden])),
 body[data-note-tab='resources'] .reading-actions:has(#btn-stop:not([hidden])) { display: flex; }
+
+/* Give the conversation its own reading space without changing note views. */
+body[data-note-tab='chat'] .notes-heading,
+body[data-note-tab='chat'] #paper-workflow,
+body[data-note-tab='chat'] #btn-capture-evidence,
+body[data-note-tab='chat'] #export-menu,
+body[data-note-tab='chat'] .paper-details,
+body[data-note-tab='chat'] .paper-tags,
+body[data-note-tab='chat'] .head-actions .btn { display: none; }
+body[data-note-tab='chat'] .notes-heading:has(.save-status[data-state='error']) { display: flex; min-height: 30px; padding: 4px 12px; }
+body[data-note-tab='chat'] .notes-heading .heading-label { display: none; }
+body[data-note-tab='chat'] .notes-toolbar { padding: 6px 12px; }
+body[data-note-tab='chat'] .paper-head { padding: 8px 12px; flex-shrink: 0; align-items: center; }
+body[data-note-tab='chat'] .paper-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 14px; line-height: 1.5; }
+body[data-note-tab='chat'] .head-actions { display: block; margin: 0; }
 .btn, .tab, .filter-btn, .chip, .task-link { touch-action: manipulation; }
 @media (max-width: 900px) {
   .sidebar-head { padding: 16px 20px 12px; }
