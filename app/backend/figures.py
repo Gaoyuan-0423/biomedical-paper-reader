@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import re
 import statistics
+import threading
+from functools import wraps
 from pathlib import Path
 
 import pdfplumber
@@ -26,6 +28,17 @@ FOOTER = re.compile(r"\bet\s+al\b.*(?:doi\s*:|10\.\d{4,9}/)|^(?:copyright|©|dow
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.I)
 RENDER_SCALE = 2
 MAX_PAGES = 600
+_pdfium_lock = threading.RLock()
+
+
+def _serialized_pdfium(function):
+    # PDFium has process-global state: even different PDFs cannot render
+    # concurrently in separate threads. Keep the lock through object cleanup.
+    @wraps(function)
+    def serialized(*args, **kwargs):
+        with _pdfium_lock:
+            return function(*args, **kwargs)
+    return serialized
 
 
 # ---------- text geometry ----------
@@ -296,6 +309,7 @@ def save_crop(image, bbox, page_width, page_height, destination: Path):
 
 # ---------- public API ----------
 
+@_serialized_pdfium
 def parse_pdf(pdf_path: Path, figures_dir: Path) -> dict:
     """Column-ordered page text plus caption-anchored figure crops in one pass."""
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -371,6 +385,7 @@ def parse_pdf(pdf_path: Path, figures_dir: Path) -> dict:
     return {"pages": pages, "figures": figures, "metadata": metadata, "warnings": warnings}
 
 
+@_serialized_pdfium
 def crop_figure(pdf_path: Path, figures_dir: Path, page_number: int, bbox, fid: str) -> dict:
     """Manual crop in PDF points for one page; the caller assigns id/label/caption.
     Rendered at a higher scale than automatic extraction: manual crops are targeted

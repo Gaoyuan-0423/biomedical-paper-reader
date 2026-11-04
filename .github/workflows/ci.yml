@@ -27,7 +27,8 @@ jobs:
           node --check app/frontend/evidence.js
           node --check app/frontend/resources.js
           node --check app/frontend/chat.js
-          node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs
+          node --check app/frontend/zotero.js
+          node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs app/tests/test_zotero.cjs
       - name: Helper scripts compile
         run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py
 

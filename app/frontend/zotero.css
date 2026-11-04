@@ -1,0 +1,54 @@
+.zotero-settings-section { margin-top: 4px; border-top: 1px solid var(--border); padding-top: 14px; }
+.zotero-settings-section > summary { color: var(--primary-ink); cursor: pointer; font-size: 12px; font-weight: 600; }
+#zotero-settings { display: grid; gap: 12px; padding-top: 12px; }
+#zotero-settings .hint { margin: 0; line-height: 1.8; }
+.zotero-storage-field { grid-column: 1 / -1; }
+.zotero-settings-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.zotero-clear-token { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+.zotero-clear-token input, .zotero-attachment input { width: auto; flex: 0 0 auto; accent-color: var(--primary); }
+.zotero-error, .zotero-message { margin: 0; padding: 9px 11px; border-radius: 6px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.zotero-error { background: var(--danger-bg); color: var(--danger); }
+.zotero-message { background: var(--primary-soft); color: var(--primary-ink); }
+.zotero-modal { width: 860px; }
+.zotero-modal .modal-head { padding: 18px 22px; }
+#zotero-panel { gap: 12px; padding: 16px 22px; }
+.zotero-intro { margin: 0; line-height: 1.8; }
+.zotero-connect-prompt { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.zotero-search { display: flex; gap: 8px; flex-shrink: 0; }
+.zotero-search .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.zotero-search input { flex: 1; min-width: 0; }
+.zotero-browser { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; min-height: 220px; }
+.zotero-results { max-height: 380px; overflow-y: auto; min-width: 0; }
+.zotero-result { display: grid; gap: 5px; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 10px 11px; border-radius: 6px; margin-bottom: 7px; cursor: pointer; overflow-wrap: anywhere; }
+.zotero-result:hover { background: var(--surface-subtle); }
+.zotero-result.selected { background: var(--primary-soft); border-color: var(--primary-border); }
+.zotero-result strong { font-size: 12px; line-height: 1.65; font-weight: 600; }
+.zotero-result span, .zotero-result small { font-size: 11px; line-height: 1.6; color: var(--muted); }
+.zotero-more { width: 100%; }
+.zotero-preview { min-width: 0; max-height: 380px; overflow-y: auto; padding-left: 16px; border-left: 1px solid var(--border); }
+.zotero-preview h4 { margin: 0 0 8px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.zotero-meta, .zotero-empty { font-size: 12px; color: var(--muted); line-height: 1.8; overflow-wrap: anywhere; }
+.zotero-meta { margin: 4px 0; }
+.zotero-abstract { margin: 10px 0; font-size: 12px; color: var(--muted); }
+.zotero-abstract summary { cursor: pointer; color: var(--primary-ink); }
+.zotero-abstract p { max-height: 140px; overflow: auto; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.zotero-attachments { margin: 15px 0 0; padding: 0; border: 0; }
+.zotero-attachments legend { font-size: 12px; font-weight: 600; padding: 0 0 7px; }
+.zotero-attachment { display: flex; gap: 8px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--border); }
+.zotero-attachment input { margin-top: 4px; }
+.zotero-attachment span { min-width: 0; display: grid; gap: 3px; }
+.zotero-attachment strong { font-size: 12px; line-height: 1.7; font-weight: 500; overflow-wrap: anywhere; }
+.zotero-attachment small { font-size: 11px; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; }
+.zotero-attachment.unavailable strong { color: var(--muted); }
+#zotero-footer { padding: 13px 22px; }
+.zotero-import-status { flex: 1; min-width: 0; font-size: 11px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
+.zotero-import-status small { display: block; font-size: inherit; color: var(--primary-ink); }
+@media (max-width: 600px) {
+  .zotero-modal .modal-head, #zotero-panel, #zotero-footer { padding: 13px 14px; }
+  .zotero-browser { grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; }
+  .zotero-results { max-height: 175px; }
+  .zotero-preview { max-height: none; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--border); }
+  #zotero-footer { flex-wrap: wrap; }
+  .zotero-import-status { flex-basis: 100%; }
+  #zotero-footer .btn:last-child { margin-left: auto; }
+}

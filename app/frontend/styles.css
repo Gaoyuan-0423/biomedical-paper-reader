@@ -151,6 +151,7 @@ select { cursor: pointer; }
 .sidebar.dragover .drop-hint { background: var(--primary-tint); border-color: var(--primary); color: var(--primary); }
 .sidebar-foot { display: flex; align-items: center; gap: 7px; padding: 14px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); min-height: 42px; }
 .sidebar-tools { position: relative; flex: 0 0 auto; display: grid; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--panel); }
+.sidebar-tools { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .sidebar .drop-hint { flex: 0 0 auto; margin-bottom: 10px; padding-block: 9px; }
 .sidebar-foot { flex: 0 0 auto; padding-block: 9px; min-height: 35px; }
 .library-collapsed .sidebar { display: none; }

@@ -26,6 +26,49 @@ pdfplumber、pypdfium2、Pillow）。
 - 读图追问与图注编辑使用弹窗；留空追问表示整体观察，取消或 Esc 不发起读图。
 - 设置中的模型连接与研究方向常显；生成上限和相关文献 API Key 收在「高级设置」。
 
+## 连接 Zotero MCP
+
+v0.7.0 的首批连接器针对 [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp) 的 **Streamable HTTP** 接口，支持该传输返回的 JSON 和 SSE 响应。它不是所有同名 Zotero MCP 服务的通用适配器，也不使用 `stdio` 或旧式独立 `/sse` 传输。连接时检查 `zotero_search_items`、`zotero_get_item_metadata` 和 `zotero_get_item_children`；元数据工具需支持 `format="json"`。
+
+### 先保存连接设置
+
+在右上角设置中的 Zotero MCP 区填写：
+
+| 设置 | 默认值与用途 |
+|---|---|
+| MCP 地址 | `http://127.0.0.1:8000/mcp`，指向已运行的服务 |
+| Bearer Token（可选） | 仅当你的 MCP 服务或代理要求此鉴权时填写；上游默认本地服务无需此值，不能把 Zotero Web API Key 当作它 |
+| 本机存储目录 | `~/Zotero/storage`，对应 Zotero 数据目录下的 `storage` 文件夹；自定义数据目录时需调整 |
+
+`localhost` 和 `127.0.0.1` 都指运行 BioReader 的使用者自己的电脑。不同用户可以填写相同的本机地址，各自连接各自的服务；GitHub 发布包不会连接开发者的 Zotero。默认附件目录在运行时按当前用户的主目录生成，连接配置和凭据也分别保存在各自的本机数据目录中。
+
+注意区分：`http://localhost:23119/api/` 是 **Zotero 自带的本地 API**；这里填写的是另行启动的 **MCP 服务地址**，例如 `http://127.0.0.1:8000/mcp`。勾选 Zotero 的「允许通讯」是启用前者，并不会自动启动 MCP。详情见 [Zotero 本地 API 文档](https://www.zotero.org/support/dev/web_api/v3/local_api)。
+
+还没有安装 Zotero MCP 时可以先保存这些设置，稍后再测试连接。BioReader 不安装、不启动服务，也不修改 Zotero 或其他客户端的配置。Zotero 连接及 Token 单独保存在 BioReader 数据目录的 `zotero.json` 中，Token 以明文存储且不回显；模型配置仍使用 `settings.json`，两者独立保存。导入文献不需要模型 API Key。
+
+### 安装并启动官方服务
+
+准备 Python 3.10+ 和 Zotero 7+，在 Zotero 的「设置 → 高级」打开「允许此计算机上的其他应用程序与 Zotero 通信」。按[官方安装指南](https://github.com/54yyyu/zotero-mcp/blob/main/docs/getting-started.md)安装服务；已安装 `uv` 时可运行：
+
+```bash
+uv tool install zotero-mcp-server
+ZOTERO_LOCAL=true zotero-mcp serve --transport streamable-http --host 127.0.0.1 --port 8000
+```
+
+没有 `uv` 时可采用官方列出的 `pipx install zotero-mcp-server` 或 Python 环境中的 `pip install zotero-mcp-server`，启动命令相同。保持服务运行，再回到 BioReader 测试连接。上述本地只读用法不要求 Zotero Web API Key，也不用运行写入授权或 Claude 配置命令。额外语义检索／读 PDF 插件不是本连接器的必需项。参数与 `/mcp` 路径依据[上游 CLI](https://github.com/54yyyu/zotero-mcp/blob/main/src/zotero_mcp/cli.py)及安装指南；上游版本变更时以其文档为准。
+
+### 检索、预览与导入
+
+1. 打开「Zotero」入口，按短关键词、作者或标题检索当前服务的活动文库。预览后确认文献身份和附件；首版不在 BioReader 中切换 Zotero 文库。
+2. 明确选择「仅导入元数据」，或选择一份可用的本机存储 PDF 作为正文导入。元数据包括文献标题、作者、期刊、日期、DOI、摘要和标签等；不会自动生成笔记或复制 Zotero 中的笔记。
+3. 以 Zotero 来源文库／条目 Key 和 DOI 查重。命中 BioReader 已有记录时返回该记录，可点击「打开文献」继续阅读；保留已有正文、笔记及人工修改，重复导入不会自动替换或补入 PDF。
+
+PDF 导入只支持配置目录中已经存在的 Zotero 存储附件（`imported_file`、`imported_url`），读取范围为 `storage/<附件 Key>/<文件名>`，并核对附件所属论文、类型和文件内容。链接文件 `linked_file`、网址附件 `linked_url`、尚未下载的云端文件和另一台机器上的路径不能通过此入口读取；可先在 Zotero 下载到本机存储，或使用 BioReader 原有 PDF 上传入口。缺少 PDF 时仍可明确选择仅导入元数据，不会把全文摘要或抽取文本伪装成 PDF。
+
+上游的附件路径工具返回的是服务器文件路径，而不是 PDF 字节；Zotero [本地 API](https://www.zotero.org/support/dev/web_api/v3/local_api)的 `/file` 也返回 `file://` 重定向。BioReader 因而不读取 MCP 返回的任意路径或自动追随附件 URL。首版只允许本机回环地址上的 MCP 导入配置目录中的 PDF；远端 MCP 仅支持元数据导入，不能用远端路径或本机同名文件冒充附件。首次连接不自动遍历或导入整库，导入过程不向 Zotero 写回任何数据。
+
+连接失败时先确认服务仍在运行、地址包含 `/mcp`、传输选择 `streamable-http`，以及服务器版本提供上述三个工具和 JSON 元数据；附件不可用时检查本机目录及 Zotero 下载状态。不要把 HTTP 连接成功等同于 PDF 文件已在本机。
+
 ## 原文选字与问答
 
 在 PDF 中拖选文字后，点击「解释」「翻译」或「追问」；也可以直接打开「问答」标签页输入问题。选区会保留其所属文件和 PDF 页码，滚动到别页不会改变已选问题的来源。取图模式下拖动仍用于裁图，退出取图后恢复文字选择。
@@ -128,7 +171,8 @@ pdfplumber、pypdfium2、Pillow）。
 
 ```
 app/data/
-├── settings.json          # API 配置
+├── settings.json          # 模型 API 配置
+├── zotero.json            # 独立 MCP 地址、可选 Token 与本机附件目录
 └── papers/<id>/           # 每篇一个目录
     ├── paper.pdf / text.txt / meta.json
     ├── supplements/<id>.pdf / <id>.txt  # 独立补充文件及文本，清单在 meta.json
@@ -175,8 +219,7 @@ app/data/
 | POST | `/api/papers/{id}/figures/read` | 批量读图（SSE，观察缓存） |
 | POST | `/api/papers/{id}/read?mode=deep\|quick` | SSE 流式生成笔记 |
 
-出站请求仅限四类：你配置的 LLM 接口（SSRF 校验 + 重定向逐跳复检）、`api.crossref.org`、
-`api.semanticscholar.org`，以及固定的 GEO 元数据端点 `www.ncbi.nlm.nih.gov/geo/query/acc.cgi`（主机白名单）。
+出站请求包括你配置的 LLM 接口（SSRF 校验 + 重定向逐跳复检）、`api.crossref.org`、`api.semanticscholar.org`、固定的 GEO 元数据端点 `www.ncbi.nlm.nih.gov/geo/query/acc.cgi`，以及你明确配置并调用的 Zotero MCP 地址。MCP 默认连接本机 `127.0.0.1:8000`；只调用检索、元数据和附件列表工具，不执行服务器提供的任意工具或下载其返回的任意 URL。
 
 ## 已知边界
 
