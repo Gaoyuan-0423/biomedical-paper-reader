@@ -11,6 +11,23 @@ import zipfile
 from pathlib import Path
 
 
+def verify_frontend(root, bundle):
+    """Require the checkout and bundle to preserve the committed frontend bytes."""
+    count = 0
+    for source in (root / 'app/frontend').rglob('*'):
+        if source.is_file():
+            relative = source.relative_to(root).as_posix()
+            committed = subprocess.check_output(['git', 'show', f'HEAD:{relative}'], cwd=root)
+            content = source.read_bytes()
+            if content != committed:
+                raise RuntimeError(f'Checkout frontend differs from Git HEAD: {relative}; check core.autocrlf.')
+            target = bundle / '_internal/frontend' / source.relative_to(root / 'app/frontend')
+            if target.read_bytes() != content:
+                raise RuntimeError(f'Bundled frontend mismatch: {relative}')
+            count += 1
+    return count
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True)
@@ -21,17 +38,14 @@ def main():
     if not re.fullmatch(r'v\d+\.\d+\.\d+', args.version) or not re.fullmatch(r'[a-f0-9]{40}', args.commit):
         parser.error('Invalid version or source commit.')
     root = Path(__file__).resolve().parents[1]
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+    if args.commit != head:
+        raise RuntimeError('Requested source commit differs from Git HEAD.')
     bundle = root / 'app/dist/BioReader'
     exe = bundle / 'BioReader.exe'
     if not exe.is_file():
         raise RuntimeError('Build BioReader.exe first.')
-    count = 0
-    for source in (root / 'app/frontend').rglob('*'):
-        if source.is_file():
-            target = bundle / '_internal/frontend' / source.relative_to(root / 'app/frontend')
-            if target.read_bytes() != source.read_bytes():
-                raise RuntimeError(f'Bundled frontend mismatch: {source.name}')
-            count += 1
+    count = verify_frontend(root, bundle)
     output = root / 'app/dist/windows-release'
     output.mkdir(parents=True, exist_ok=True)
     archive = output / f'BioReader-{args.version}-windows-x64.zip'
