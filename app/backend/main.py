@@ -19,13 +19,14 @@ import shutil
 import tempfile
 import hashlib
 import uuid
+import time
 import httpx
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import quote as url_quote
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -46,6 +47,9 @@ from resource_extraction import extract_resources, plan_resource_update
 from paper_tags import TEXT_LIMIT, TagFormatError, merge_tags, parse_tags, tag_messages, tag_snapshot
 from geo_metadata import GeoError, cache_fresh, fetch_geo_metadata, load_geo_cache, save_geo_cache, validate_accession
 from paper_resources import resource_accessions
+from chat_sources import prepare_sources, save_parsed_blocks, validate_source_snapshot, verified_source
+from paper_chat import (CHAT_TIMEOUT, MAX_OUTPUT, ChatIn, active_requests, chat_messages,
+                        history_page, load_history, new_messages, recover_history, save_history, update_message)
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -306,6 +310,7 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
         if document_id == "main":
             (d / "text.txt").write_text(text, "utf-8")
         save_figures(d, figures)
+        save_parsed_blocks(d, document_id, hashlib.sha256(content).hexdigest(), parsed['pages'])
     return parsed, figures
 
 
@@ -806,6 +811,147 @@ def get_paper(paper_id: str):
     d = paper_dir(paper_id)
     meta = read_meta(d)
     return {**meta, "reading_position": read_positions(d, meta)}
+
+
+@app.get('/api/papers/{paper_id}/chat')
+def get_paper_chat(paper_id: str, limit: int = Query(default=100, ge=1, le=100), before: str = ''):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        messages = load_history(d) if str(d) in active_requests else recover_history(d)
+        return history_page(messages, limit, before)
+
+
+@app.get('/api/papers/{paper_id}/chat/sources/{message_id}/{source_id}')
+def get_chat_source(paper_id: str, message_id: str, source_id: str):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        message = next((item for item in load_history(d) if item['id'] == message_id and item['role'] == 'assistant'), None)
+        source = next((item for item in message['sources'] if item['id'] == source_id), None) if message else None
+        if source is None:
+            raise HTTPException(404, '这条回答的引用不存在')
+    # Geometry extraction can take time: never hold the library lock while reading PDF pages.
+    result = verified_source(d, meta, source)
+    with storage_lock:
+        validate_source_snapshot(d, read_meta(d), [source])
+    return {'source': {**result, 'paper_id': paper_id}}
+
+
+class _ChatStreamingResponse(StreamingResponse):
+    """Finalize even if the client disconnects before the generator's first yield."""
+    def __init__(self, content, finalize):
+        super().__init__(content, media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+        self.finalize_chat = finalize
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.finalize_chat()
+
+
+@app.post('/api/papers/{paper_id}/chat')
+async def ask_paper_chat(paper_id: str, body: ChatIn):
+    if not body.message.strip():
+        raise HTTPException(422, '请输入问题')
+    token = uuid.uuid4().hex
+    with storage_lock:
+        d = paper_dir(paper_id)
+        key = str(d)
+        if key in active_requests:
+            raise HTTPException(409, '这篇文献已有回答正在生成，请等待完成或先停止')
+        settings = load_settings()
+        if not settings.get('api_key'):
+            raise HTTPException(400, '请先在设置中填写 API Key')
+        meta = read_meta(d)
+        recover_history(d)
+        active_requests[key] = token
+    try:
+        sources = await asyncio.to_thread(prepare_sources, d, meta, body)
+        with storage_lock:
+            latest = read_meta(d)
+            validate_source_snapshot(d, latest, sources)
+            history = load_history(d)
+            user, assistant = new_messages(body, sources)
+            messages = chat_messages(latest, history, body, sources)
+            # UTF-8 plus JSON escaping can use six bytes per output character.
+            save_history(d, history + [user, assistant], reserve=MAX_OUTPUT * 6 + 4096)
+    except BaseException:
+        with storage_lock:
+            if active_requests.get(key) == token:
+                active_requests.pop(key, None)
+        raise
+
+    state = {'content': '', 'final': False}
+
+    def persist(status, error=''):
+        with storage_lock:
+            saved = update_message(d, assistant['id'], state['content'], status, error)
+            if status != 'pending':
+                state['final'] = True
+            return saved
+
+    def finalize():
+        with storage_lock:
+            try:
+                if not state['final']:
+                    persist('interrupted', '回答已中断，已保留收到的内容。')
+            except HTTPException:
+                # A concurrently damaged/deleted sidecar must never be replaced from memory.
+                pass
+            finally:
+                if active_requests.get(key) == token:
+                    active_requests.pop(key, None)
+
+    async def events():
+        try:
+            yield _sse({'type': 'start', 'message': user, 'assistant': assistant})
+            last_save = time.monotonic()
+            saved_size = 0
+            async with asyncio.timeout(CHAT_TIMEOUT):
+                async for piece in stream_chat(settings['base_url'], settings['api_key'], settings['model'], messages,
+                                               max_tokens=4096, timeout=CHAT_TIMEOUT, require_done=True):
+                    if not isinstance(piece, str) or not piece:
+                        continue
+                    accepted = piece[:max(0, MAX_OUTPUT - len(state['content']))]
+                    state['content'] += accepted
+                    if accepted:
+                        yield _sse({'type': 'chunk', 'message_id': assistant['id'], 'text': accepted})
+                    if len(accepted) < len(piece):
+                        raise UpstreamError('回答达到长度上限，已保留收到的内容。')
+                    if len(state['content']) - saved_size >= 1000 or time.monotonic() - last_save >= 1:
+                        persist('pending')
+                        saved_size, last_save = len(state['content']), time.monotonic()
+            if not state['content'].strip():
+                raise UpstreamError('模型未返回可用回答，请重试。')
+            completed = persist('completed')
+            yield _sse({'type': 'done', 'message': completed})
+        except (asyncio.CancelledError, GeneratorExit):
+            raise
+        except Exception as exc:
+            if isinstance(exc, TimeoutError):
+                error = '回答等待超时，已保留收到的内容，请稍后重试。'
+            elif isinstance(exc, UpstreamError):
+                # HTTP provider bodies may echo submitted text or credentials.
+                # Keep only the status here, never persist their raw message.
+                error = (f'模型服务返回 HTTP {exc.status_code}，请检查服务配置或稍后重试。'
+                         if exc.status_code is not None else str(exc))
+            elif isinstance(exc, HTTPException):
+                error = str(exc.detail)
+            elif isinstance(exc, UnsafeURLError):
+                error = '模型服务地址不可用，请检查设置。'
+            else:
+                error = '模型连接失败，已保留收到的内容，请检查服务设置后重试。'
+            try:
+                saved = persist('interrupted' if state['content'] else 'error', error)
+            except HTTPException as storage_error:
+                error = str(storage_error.detail)
+                saved = {**assistant, 'content': state['content'], 'status': 'interrupted', 'error': error}
+            yield _sse({'type': 'error', 'message': error, 'assistant': saved})
+        finally:
+            finalize()
+
+    return _ChatStreamingResponse(events(), finalize)
 
 
 class ReadingPosition(BaseModel):

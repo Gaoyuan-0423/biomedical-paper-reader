@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pdfplumber
 import pypdfium2 as pdfium
+from pypdf import PdfReader
 
 HEADING = re.compile(
     r"^(?:\d+(?:\.\d+)*[.\s]+)?(?:abstract|introduction|background|related work|materials(?: and methods)?|methods|"
@@ -301,6 +302,7 @@ def parse_pdf(pdf_path: Path, figures_dir: Path) -> dict:
     pages, figures, warnings = [], [], []
     metadata = {}
     counter = 0
+    text_reader = None
     with pdfplumber.open(str(pdf_path)) as source, pdfium.PdfDocument(str(pdf_path)) as renderer:
         if len(source.pages) > MAX_PAGES:
             raise ValueError(f"PDF 超过 {MAX_PAGES} 页，请拆分后导入")
@@ -322,11 +324,28 @@ def parse_pdf(pdf_path: Path, figures_dir: Path) -> dict:
             body_size = statistics.median([l["size"] for l in lines]) if lines else 10
             blocks = paragraph_lines(lines, body_size)
             text = "\n".join(("## " if b["level"] else "") + b["text"] for b in blocks)
+            if page.rotation:
+                try:
+                    text_reader = text_reader or PdfReader(pdf_path)
+                    text = text_reader.pages[index].extract_text() or ''
+                except Exception as exc:
+                    text = ''
+                    warnings.append(f"第 {number} 页旋转文本解析失败：{type(exc).__name__}")
             if not metadata.get("doi"):
                 m = DOI_RE.search(text)
                 if m:
                     metadata["doi"] = m.group().rstrip(".,;)")
-            pages.append({"number": number, "text": text, "width": float(page.width), "height": float(page.height)})
+            # Chat uses paragraph text and normalized, top-left geometry. Rotated
+            # pages retain text but deliberately omit highlights until mapped.
+            uncertain_geometry = (page.rotation or tuple(page.bbox[:2]) != (0, 0) or
+                                  (page.cropbox and tuple(page.cropbox) != tuple(page.mediabox)))
+            source_blocks = [{"text": b["text"], "bbox": None if uncertain_geometry else
+                              [b["bbox"][0] / page.width, b["bbox"][1] / page.height,
+                               b["bbox"][2] / page.width, b["bbox"][3] / page.height]} for b in blocks]
+            if page.rotation:
+                source_blocks = [{'text': text, 'bbox': None}] if text else []
+            pages.append({"number": number, "text": text, "width": float(page.width), "height": float(page.height),
+                          "blocks": source_blocks})
             try:
                 regions = figure_regions(page, lines)
             except Exception as exc:  # noqa: BLE001
