@@ -13,22 +13,24 @@ function deferred() {
   return { promise, resolve, reject };
 }
 function harness() {
-  const handlers = {}, calls = [], messages = [], changes = [], navigation = [];
+  const handlers = {}, calls = [], messages = [], changes = [], navigation = [], downloads = [];
   const panel = { innerHTML: '', addEventListener(name, fn) { handlers[name] = fn; }, querySelector: () => ({ focus() {} }) };
   const hooks = {
     request: async (method, url, body) => { calls.push({ method, url, body }); return method === 'GET' ? [] : record(body); },
     toast: (...args) => messages.push(args), onChanged: id => changes.push(id),
     openPaper: async id => { navigation.push(['paper', id]); },
     jump: async (...args) => { navigation.push(['jump', ...args]); },
+    download: async (...args) => { downloads.push(args); },
   };
   const context = vm.createContext({ window: { confirm: () => true }, document: { getElementById: () => panel }, URL, console });
   vm.runInContext(source, context); const ui = context.window.BioResources; ui.init(hooks);
-  return { ui, hooks, panel, calls, messages, changes, navigation,
+  return { ui, hooks, panel, calls, messages, changes, navigation, downloads,
     click(action, data = {}) { return handlers.click({ target: { closest: selector => selector === '[data-resource-action]' ? { dataset: { resourceAction: action, ...data } } : null } }); },
     mode(value) { return handlers.click({ target: { closest: selector => selector === '[data-resource-mode]' ? { dataset: { resourceMode: value } } : null } }); },
     input(field, value) { return handlers.input({ target: { dataset: { resourceField: field }, value } }); },
     field(field, value) { return handlers.change({ target: { dataset: { resourceField: field }, value } }); },
     query(value) { return handlers.input({ target: { dataset: {}, value, matches: selector => selector === '#resource-search input' } }); },
+    filter(name, value) { return handlers.input({ target: { dataset: { resourceFilter: name }, value, matches: selector => selector === '#resource-search input' } }); },
     submit(id = 'resource-form') { return handlers.submit({ target: { id }, preventDefault() {} }); },
   };
 }
@@ -310,4 +312,144 @@ test('GEO actions match explicit accession membership including official legacy 
   for (const accession of ['GSE12345', 'GSE67890', 'GSE24680']) assert.match(h.panel.innerHTML, new RegExp('data-resource-accession="' + accession + '"'));
   for (const accession of ['GSE99999', 'GSE77777', 'GSE13579']) assert.doesNotMatch(h.panel.innerHTML, new RegExp('data-resource-accession="' + accession + '"'));
   assert.equal((h.panel.innerHTML.match(/data-resource-accession="GSE12345"/g) || []).length, 1);
+});
+
+test('all structured sample fields round trip without replacing paper counts with GEO totals', async () => {
+  const h = harness();
+  const fields = { organism: '人；小鼠', tissue: '胃组织', disease: '胃癌', modality: 'scRNA-seq', platform: '10x', sample_groups: '肿瘤；对照', sample_count: '肿瘤 56 例；对照 19 例' };
+  h.hooks.request = async (method, url, body) => {
+    h.calls.push({ method, url, body });
+    if (method === 'PATCH') return record(body);
+    return url.endsWith('/geo') ? { records: { GSE12345: geo() } } : [record({ ...fields, sample_details: '原始样品说明' })];
+  };
+  await h.ui.open(paper());
+  assert.match(h.panel.innerHTML, /材料补充与原始说明/);
+  assert.match(h.panel.innerHTML, /论文实际样本量/); assert.match(h.panel.innerHTML, /肿瘤 56 例/);
+  assert.match(h.panel.innerHTML, /GEO 收录 60 个样本/);
+  await h.click('edit', { resourceKey: A + ':' + R });
+  for (const [name, value] of Object.entries(fields)) { assert.match(h.panel.innerHTML, new RegExp('data-resource-field="' + name + '"')); h.input(name, value + ' '); }
+  await h.submit();
+  const body = h.calls.find(c => c.method === 'PATCH').body;
+  for (const [name, value] of Object.entries(fields)) assert.equal(body[name], value);
+  assert.equal(body.sample_details, '原始样品说明'); assert.equal(Object.hasOwn(body, 'status'), false);
+});
+
+test('current-paper filters are sent to the server and its grouped results are exported under identical conditions', async () => {
+  const h = harness();
+  const rows = [
+    record({ title: 'Selected group', organism: 'Homo　sapiens', tissue: '胃组织', disease: '胃癌', modality: 'ｓｃＲＮＡ-seq', platform: '１０ｘ', identifiers: 'GSE12345、GSE67890' }),
+    record({ id: S, title: 'Wrong species', organism: 'mouse', tissue: '胃组织', disease: '胃癌', modality: 'scRNA-seq', platform: '10x' }),
+    record({ id: B, title: 'Wrong tissue', organism: 'Homo sapiens', tissue: '肝脏', disease: '胃癌', modality: 'scRNA-seq', platform: '10x' }),
+  ];
+  h.hooks.request = async (_, url) => { h.calls.push({ url }); return url.endsWith('/geo') ? { records: {} } : url.includes('?') ? rows.slice(0, 1) : rows; };
+  await h.ui.open(paper());
+  for (const [name, value] of Object.entries({ organism: 'homo sapiens', tissue: '胃', disease: '癌', modality: 'scrna', platform: '10X' })) h.filter(name, value);
+  await h.submit('resource-search');
+  const requested = new URL('http://local' + h.calls.findLast(call => call.url.includes('?')).url);
+  assert.equal(requested.pathname, '/api/papers/' + A + '/resources');
+  for (const [name, value] of Object.entries({ organism: 'homo sapiens', tissue: '胃', disease: '癌', modality: 'scrna', platform: '10X' })) assert.equal(requested.searchParams.get(name), value);
+  assert.match(h.panel.innerHTML, /Selected group/); assert.match(h.panel.innerHTML, /GSE12345、GSE67890/);
+  assert.doesNotMatch(h.panel.innerHTML, /Wrong species|Wrong tissue/);
+  assert.equal((h.panel.innerHTML.match(/class="resource-row"/g) || []).length, 1);
+  await h.click('export-csv');
+  const url = new URL('http://local' + h.downloads[0][0]);
+  assert.equal(url.searchParams.get('paper_id'), A); assert.equal(url.searchParams.get('organism'), 'homo sapiens');
+  assert.equal(url.searchParams.get('modality'), 'scrna'); assert.equal(h.downloads[0][1], 'bioreader-resources.csv');
+  await h.click('reset-filters'); assert.match(h.panel.innerHTML, /Wrong species/);
+});
+
+test('unsubmitted search and filter edits block export and preserve the last displayed results', async () => {
+  const h = harness(); h.hooks.request = async (_, url) => url.endsWith('/geo') ? { records: {} } : url.includes('not%20applied') ? [] : [record({ platform: '10x', disease: '胃癌' })];
+  await h.ui.open(paper());
+  h.filter('platform', '10x'); await h.click('export-csv'); assert.equal(h.downloads.length, 0);
+  await h.submit('resource-search'); await h.click('export-csv'); assert.equal(h.downloads.length, 1);
+  h.query('not applied'); await h.click('export-accessions'); assert.equal(h.downloads.length, 1);
+  assert.match(h.panel.innerHTML, /Public atlas/);
+  await h.submit('resource-search'); assert.match(h.panel.innerHTML, /没有找到匹配资源/);
+  await h.click('export-csv'); assert.equal(h.downloads.length, 1);
+});
+
+test('global filtered export uses the submitted scope, encodes values, and omits a paper constraint', async () => {
+  const h = harness(); h.hooks.request = async (_, url) => { h.calls.push({ url }); return [record({ paper_id: B, paper_title: 'Other paper' })]; };
+  await h.ui.open(null); h.query('tumor / control'); h.filter('organism', '人 & 小鼠'); h.filter('platform', '10x Chromium');
+  await h.submit('resource-search');
+  const search = new URL('http://local' + h.calls.at(-1).url);
+  assert.equal(search.searchParams.get('q'), 'tumor / control'); assert.equal(search.searchParams.get('organism'), '人 & 小鼠');
+  await h.click('export-accessions');
+  const download = new URL('http://local' + h.downloads[0][0]);
+  assert.equal(download.searchParams.get('format'), 'accessions'); assert.equal(download.searchParams.has('paper_id'), false);
+  for (const [name, value] of search.searchParams) assert.equal(download.searchParams.get(name), value);
+  assert.equal(h.downloads[0][1], 'bioreader-accessions.txt');
+});
+
+test('pending read, failed read and an unsaved resource draft cannot export stale data', async () => {
+  const h = harness(), response = deferred();
+  h.hooks.request = async (_, url) => url.endsWith('/geo') ? { records: {} } : [record()];
+  await h.ui.open(paper()); await h.click('edit', { resourceKey: A + ':' + R });
+  h.input('sample_groups', '尚未保存'); await h.click('export-csv'); assert.equal(h.downloads.length, 0);
+  await h.click('cancel'); h.hooks.request = () => response.promise;
+  const pending = h.submit('resource-search'); await h.click('export-csv'); assert.equal(h.downloads.length, 0);
+  response.reject(new Error('disk unavailable')); await pending;
+  await h.click('export-csv'); assert.equal(h.downloads.length, 0); assert.match(h.panel.innerHTML, /disk unavailable/);
+});
+
+test('export failure can retry, duplicate downloads are blocked and configuration cannot switch mid-download', async () => {
+  const h = harness(), response = deferred();
+  h.hooks.request = async (_, url) => url.endsWith('/geo') ? { records: {} } : [record()];
+  await h.ui.open(paper()); let requests = 0;
+  h.hooks.download = async () => { requests++; return response.promise; };
+  const first = h.click('export-csv'); await h.click('export-csv');
+  assert.equal(requests, 1); assert.equal(h.ui.canLeave(), false); assert.equal(await h.ui.showAll(), false);
+  const reads = h.calls.length; await h.ui.open(paper()); assert.equal(h.calls.length, reads);
+  response.reject(new Error('download failed')); await first;
+  assert.match(h.panel.innerHTML, /导出失败：download failed/); assert.match(h.panel.innerHTML, /Public atlas/);
+  h.hooks.download = async () => { requests++; }; await h.click('export-csv');
+  assert.equal(requests, 2); assert.equal(h.ui.canLeave(), true); assert.doesNotMatch(h.panel.innerHTML, /download failed/);
+});
+
+test('late export errors do not overwrite a newly opened paper or its download state', async () => {
+  const h = harness(), response = deferred();
+  h.hooks.request = async (_, url) => url.endsWith('/geo') ? { records: {} } : [record()];
+  h.hooks.download = () => response.promise; await h.ui.open(paper());
+  const first = h.click('export-csv'); h.ui.clear(); await h.ui.open(paper(B));
+  response.reject(new Error('old download error')); await first;
+  assert.doesNotMatch(h.panel.innerHTML, /old download error|正在导出当前结果/); assert.equal(h.ui.canLeave(), true);
+});
+
+test('current-paper Unicode matches from the server are rendered without a second client matcher', async () => {
+  const h = harness(); h.hooks.request = async (_, url) => { h.calls.push({ url }); return url.endsWith('/geo') ? { records: {} } : [record({ platform: 'ΐ-platform' })]; };
+  await h.ui.open({ ...paper(), title: 'Synthetic cohort', doi: '10.1234/Example' });
+  h.query('ι'); h.filter('platform', 'ι'); await h.submit('resource-search');
+  assert.match(h.panel.innerHTML, /class="resource-row"/);
+  assert.match(h.panel.innerHTML, /ΐ-platform/);
+  const url = new URL('http://local' + h.calls.findLast(call => call.url.includes('?')).url);
+  assert.equal(url.searchParams.get('q'), 'ι'); assert.equal(url.searchParams.get('platform'), 'ι');
+});
+
+test('saving a filtered row refreshes server membership without applying unsubmitted conditions', async () => {
+  const h = harness(); let saved = false;
+  h.hooks.request = async (method, url, body) => {
+    h.calls.push({ method, url, body });
+    if (method === 'PATCH') { saved = true; return record(body); }
+    return url.endsWith('/geo') ? { records: {} } : saved ? [] : [record({ platform: '10x' })];
+  };
+  await h.ui.open(paper()); h.filter('platform', '10x'); await h.submit('resource-search');
+  h.filter('platform', 'BD'); await h.click('edit', { resourceKey: A + ':' + R }); h.input('platform', 'BD'); await h.submit();
+  const refreshed = h.calls.at(-1); assert.equal(refreshed.method, 'GET');
+  assert.equal(new URL('http://local' + refreshed.url).searchParams.get('platform'), '10x');
+  assert.match(h.panel.innerHTML, /data-resource-filter="platform"[^>]*value="BD"/);
+  assert.doesNotMatch(h.panel.innerHTML, /class="resource-row"/);
+  await h.click('export-csv'); assert.equal(h.downloads.length, 0);
+});
+
+test('editing filters during a pending read cannot export results under the new unsubmitted condition', async () => {
+  const h = harness(), pending = deferred(); await h.ui.open(null);
+  h.hooks.request = () => pending.promise;
+  h.filter('platform', '10x'); const loading = h.submit('resource-search');
+  h.filter('platform', 'BD'); pending.resolve([record({ platform: '10x', paper_id: B })]); await loading;
+  assert.match(h.panel.innerHTML, /data-resource-filter="platform"[^>]*value="BD"/);
+  await h.click('export-csv'); assert.equal(h.downloads.length, 0);
+  h.hooks.request = async () => [record({ platform: 'BD', paper_id: B })];
+  await h.submit('resource-search'); await h.click('export-csv');
+  assert.equal(new URL('http://local' + h.downloads[0][0]).searchParams.get('platform'), 'BD');
 });

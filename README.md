@@ -6,7 +6,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.7.0。新增 Zotero MCP 检索与逐篇导入，可选择元数据或本机已下载 PDF；保留蓝白阅读工作台、PDF 选字问答、原文引用跳转、星标、自动标签及数据资源整理；默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
+版本：v0.8.0。新增样品信息结构化、组合筛选、资源表 CSV／编号清单导出，以及全库正文、补充 PDF 和已保存笔记搜索；保留蓝白工作台、单篇问答、原文定位和 Zotero MCP 导入。默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -45,13 +45,19 @@
 
 #### Mac 桌面版（预览）
 
-下载入口：[v0.7.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.7.0)，其中 `BioReader-v0.7.0-macos-arm64.zip` 适用于 Apple 芯片 Mac。解压后打开 `BioReader.app`，无需手动运行浏览器、终端或安装 Python。附件以发布页实际提供为准。应用未做 Apple 开发者签名和公证；本轮回归、浏览器与打包结果见 [App 验证记录](app/tests/README.md)，不将旧版验收记为本版结果。
+下载入口：[v0.8.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.8.0)，其中 `BioReader-v0.8.0-macos-arm64.zip` 适用于 Apple 芯片 Mac。解压后打开 `BioReader.app`，无需手动运行浏览器、终端或安装 Python。附件以发布页实际提供为准。应用未做 Apple 开发者签名和公证；本轮回归、浏览器与打包结果见 [App 验证记录](app/tests/README.md)，不将旧版验收记为本版结果。
 
 也可运行 `./app/build-macos.sh` 自行构建；数据独立保存在用户目录。安装、构建和当前验证范围见 [Mac 桌面版说明](app/DESKTOP.md)。AI 模型、DOI 和相关文献查询仍需联网。
 
 ![BioReader v0.5.0 蓝白阅读工作台：文献库、补充 PDF 与数据资源记录](docs/screenshots/bioreader-v0.5.0-bluewhite.png)
 
 蓝白工作台 v0.5.0 实测截图（1440px，当前版已简化阅读状态并更新资源表格）：左侧筛选与待办，中间正文／补充材料阅读，右侧资源记录与原文定位。截图使用原创合成 PDF 和虚构记录。
+
+#### 搜索正文与整理样品
+
+点击侧栏「搜索正文与笔记」，在本机文献库中查找关键词或原文短语。结果显示命中片段与 PDF 页码；打开 PDF 结果前校验来源版本，有坐标时高亮原文，无坐标时跳到页面。笔记结果打开对应论文的已保存笔记，不承诺精确定位笔记内的句子。搜索不调用模型，旧 PDF 首次提取本地文本缓存可能较慢；扫描件不做 OCR。
+
+「数据与复现」保留论文原来的资源分组，分别记录物种、组织、疾病、技术、平台、实验分组与论文实际样本量。明确填写的字段可从精读表格整理，也可直接编辑；GEO 收录总量保持独立。按物种／组织／疾病／技术／平台组合筛选后，可导出当前结果的 CSV 或去重编号清单。详情见 [App 使用说明](app/README.md#数据与复现)。
 
 #### 从 Zotero 导入
 
@@ -134,7 +140,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.7.0. This desktop preview adds Zotero MCP search and individual imports of metadata or locally downloaded PDFs. It retains PDF selection questions, persistent per-paper conversations, original-source navigation, the blue-and-white workspace, favorites, automatic tags, evidence and structured research resources. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
+Version: v0.8.0. This desktop preview adds structured sample information, combined filters, resource CSV/accession-list exports, and library-wide search across main PDFs, supplements and saved notes. It retains the blue-and-white workspace, per-paper questions, source navigation and Zotero MCP imports. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -173,9 +179,15 @@ A full close-reading report follows this structure: opening guide → article in
 
 #### macOS desktop preview
 
-Download page: [v0.7.0 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.7.0). The `BioReader-v0.7.0-macos-arm64.zip` asset targets Apple silicon Macs. Extract it and open `BioReader.app`; launching it does not require a browser, terminal, or Python installation. Availability depends on the assets actually published on that page. The app has no Apple Developer ID signature or notarization. See the [App validation record](app/tests/README.md) for this version’s regressions, browser checks and build results; older acceptance results are not counted as new checks.
+Download page: [v0.8.0 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.8.0). The `BioReader-v0.8.0-macos-arm64.zip` asset targets Apple silicon Macs. Extract it and open `BioReader.app`; launching it does not require a browser, terminal, or Python installation. Availability depends on the assets actually published on that page. The app has no Apple Developer ID signature or notarization. See the [App validation record](app/tests/README.md) for this version’s regressions, browser checks and build results; older acceptance results are not counted as new checks.
 
 Build from source with `./app/build-macos.sh` if preferred. See the [desktop guide](app/DESKTOP.md) for installation, storage, and validation limits. AI, DOI lookup, and related-paper searches still require network access.
+
+#### Search saved content and organize samples
+
+Use the sidebar's full-text search to find keywords or source phrases across local main PDFs, supplements and saved notes. Results show actual excerpts and PDF pages. PDF opening checks the file revision, highlights the source when coordinates exist and otherwise navigates to its page. Note results open the paper's saved notes without promising exact sentence positioning. Search does not call a model. Older PDFs may take longer to build a local text cache on first use; scanned documents are not OCRed.
+
+Data resources retain their per-paper grouping while recording species, tissue, disease, assay, platform, experimental groups and actual sample counts separately. Explicitly labeled fields can be organized from close-reading tables or edited directly; GEO collection totals remain independent. Combine species/tissue/disease/assay/platform filters, then export the current results as CSV or a deduplicated accession list. See the [App guide](app/README.md#数据与复现).
 
 #### Import from Zotero
 

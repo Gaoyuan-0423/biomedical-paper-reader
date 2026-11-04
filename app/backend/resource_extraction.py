@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from fastapi import HTTPException
 
-from paper_resources import (ACCESSION_TOKEN, ResourceIn, normalize_resource, resource_accessions,
+from paper_resources import (ACCESSION_TOKEN, NEW_SAMPLE_FIELDS, SAMPLE_FIELDS, ResourceIn, normalize_resource, resource_accessions,
                              resource_key, resource_link_keys, resource_repository, resource_urls, safe_url)
 
 
@@ -181,7 +181,42 @@ HEADERS = {
                    'conditions', 'conditionsforuse', 'conditionsaffectinguse', 'accessconditions', 'usageconditions', 'restrictions'),
     'sample_details': ('样本', '样品', '材料', '样本材料', '样品材料', '使用样品', '样本类型', '样品类型', '使用样本',
                        'sample', 'samples', 'sampledetails', 'samplematerial', 'sampletype', 'specimen'),
+    'organism': ('物种', '研究对象', '物种研究对象', 'species', 'organism', 'organisms'),
+    'tissue': ('组织', '部位', '组织部位', '材料来源', 'tissue', 'tissues', 'organ'),
+    'disease': ('疾病', '疾病状态', 'disease', 'condition'),
+    'modality': ('技术', '技术类型', '测序技术', '测序类型', 'modality', 'technology', 'assay'),
+    'platform': ('平台', '测序平台', '检测平台', 'platform', 'sequencingplatform'),
+    'sample_groups': ('分组', '实验分组', '论文实验分组', 'groups', 'samplegroups', 'experimentalgroups'),
+    'sample_count': ('样本量', '样品数量', '使用样本量', '实际样本量', '论文实际样本量',
+                     'samplesize', 'samplecount', 'samplesused'),
 }
+
+
+def structured_samples(details):
+    """Extract only explicitly labeled fields; never infer counts or GEO scope."""
+    value = unicodedata.normalize('NFKC', re.sub(r'<br\s*/?>', '\n', details or '', flags=re.I))
+    value = value.replace('**', '').replace('`', '')
+    # Unknown labels also delimit values, so a following GEO total is not
+    # swallowed into the preceding paper-specific sample count.
+    labels = list(re.finditer(r'(?:^|[;\n])\s*([^:;\n]{1,40})\s*:\s*', value))
+    output, conflicts = {}, set()
+    for index, match in enumerate(labels):
+        name = _header(match[1])
+        field = next((field for field in SAMPLE_FIELDS if name in HEADERS[field]), None)
+        if field is None:
+            continue
+        item = value[match.end():labels[index + 1].start() if index + 1 < len(labels) else len(value)].strip(' ;\n')
+        if not item or len(item) > 1000 or re.match(r'^(?:未报告|未提供|未知|不适用|未说明|不明确|待确认|not reported|not provided|unknown|not applicable|n/?a\b)', item, re.I):
+            continue
+        if field in conflicts:
+            continue
+        if field in output and output[field] != item:
+            # Conflicting/repeated labels are not a reliable single field.
+            output[field] = ''
+            conflicts.add(field)
+        else:
+            output[field] = item
+    return {field: item for field, item in output.items() if item}
 
 
 def _cells(line):
@@ -268,6 +303,10 @@ def _resource_tables(notes):
 
 
 def _table_resource(fields):
+    fields = dict(fields)
+    for field, value in structured_samples(fields.get('sample_details', '')).items():
+        if not fields.get(field):
+            fields[field] = value
     accessions = resource_accessions(fields)
     links = resource_urls(fields.get('identifiers', ''))
     repository = {accession_repository(value) for value in accessions}
@@ -287,8 +326,9 @@ def _table_resource(fields):
         role=_role(fields.get('purpose', ''), kind), notes=AUTO_NOTICE).model_dump())
 
 
-def resource_fingerprint(record):
-    fields = {field: record.get(field, ResourceIn.model_fields[field].default) for field in ResourceIn.model_fields}
+def resource_fingerprint(record, version=3):
+    fields = {field: record.get(field, ResourceIn.model_fields[field].default) for field in ResourceIn.model_fields
+              if version != 2 or field not in NEW_SAMPLE_FIELDS}
     return hashlib.sha256(json.dumps(fields, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
@@ -302,7 +342,7 @@ def extract_resources(notes):
         if fingerprint in seen:
             continue
         seen.add(fingerprint)
-        record['auto_extraction'] = {'version': 2, 'fingerprint': fingerprint,
+        record['auto_extraction'] = {'version': 3, 'fingerprint': fingerprint,
                                      'source': 'resource_table' if found else 'identifier_fallback'}
         output.append(record)
     return output
@@ -315,8 +355,11 @@ def untouched_auto(record):
     if set(record) - set(ResourceIn.model_fields) - {'id', 'created_at', 'updated_at', 'source_revision', 'auto_extraction'}:
         return False
     marker = record.get('auto_extraction')
-    if isinstance(marker, dict) and marker.get('version') == 2:
-        return marker.get('fingerprint') == resource_fingerprint(record)
+    if isinstance(marker, dict) and marker.get('version') in (2, 3):
+        version = marker['version']
+        if version == 2 and any(record.get(field) for field in NEW_SAMPLE_FIELDS):
+            return False
+        return marker.get('fingerprint') == resource_fingerprint(record, version=version)
     if (not record.get('notes', '').startswith(NOTICE) or not record.get('created_at') or
             record.get('created_at') != record.get('updated_at') or record.get('source_revision') or
             any(record.get(field) for field in ('purpose', 'identifiers', 'conditions', 'sample_details'))):

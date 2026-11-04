@@ -859,25 +859,23 @@
     setWorkspaceView('library');
   }
 
-  /** Entry points in this file are parameterless on purpose: callers stash the
-   *  target (a server-issued record) on `state` first, then invoke. Ids for
-   *  request paths are therefore only ever read from state, never handed in
-   *  from DOM/URL values. */
-  async function openPaper() {
+  /** Callers stash the server-issued target on state; the optional guard only
+   *  cancels pending navigation. Request IDs never come from DOM/URL values. */
+  async function openPaper(canContinue = () => true) {
     const target = state.pendingPaper;
     state.pendingPaper = null;
-    if (!target) return;
+    if (!target || !canContinue()) return;
     if (state.current && state.current.id === target.id) { state.openToken++; return; }
     if (!canLeaveResearch()) return;
     if (state.materialBusy) { toast('正在处理补充材料，请稍候'); return; }
     if (state.generating) { toast('正在生成笔记，请先停止再切换文献', 'error'); return; }
     const token = ++state.openToken;
-    if (!await flushSave() || token !== state.openToken) return;
+    if (!await flushSave() || token !== state.openToken || !canContinue()) return;
     try {
       const full = await api.paper(target.id);
-      if (token !== state.openToken) return;
+      if (token !== state.openToken || !canContinue()) return;
       // The reader may have continued typing while the new paper loaded.
-      if (!await flushSave() || token !== state.openToken) return;
+      if (!await flushSave() || token !== state.openToken || !canContinue()) return;
       rememberReadingPosition();
       preserveNewerTags(full);
       state.current = full;
@@ -1448,23 +1446,23 @@
     updateChatContext();
   }
 
-  async function jumpChatSource(source) {
+  async function jumpChatSource(source, targetTab = 'chat', canContinue = () => true) {
     const paper = state.current;
-    if (!paper || state.materialBusy || (source.paper_id && source.paper_id !== paper.id)) return false;
+    if (!paper || !canContinue() || state.materialBusy || (source.paper_id && source.paper_id !== paper.id)) return false;
     const materialRevision = paper.material_revision;
     const documentId = source.document_id;
     if (documentId !== 'main' && !(paper.supplements || []).some(d => d.id === documentId)) return false;
     if (!Number.isInteger(source.page) || source.page < 1) return false;
     const jumpToken = ++state.chatJumpToken;
-    switchTab('chat');
+    switchTab(targetTab);
     setWorkspaceView('pdf');
     // Let a hidden narrow-screen PDF acquire its width before loading/jumping.
     await new Promise(requestAnimationFrame);
-    if (jumpToken !== state.chatJumpToken || state.current?.id !== paper.id) return false;
+    if (!canContinue() || jumpToken !== state.chatJumpToken || state.current?.id !== paper.id) return false;
     await switchDocument(documentId, source.page);
-    if (jumpToken !== state.chatJumpToken || state.current?.id !== paper.id || state.current.material_revision !== materialRevision || state.documentId !== documentId || state.pdfContext?.documentId !== documentId) return false;
+    if (!canContinue() || jumpToken !== state.chatJumpToken || state.current?.id !== paper.id || state.current.material_revision !== materialRevision || state.documentId !== documentId || state.pdfContext?.documentId !== documentId) return false;
     await paintVisiblePages();
-    if (jumpToken !== state.chatJumpToken || state.current?.id !== paper.id || state.current.material_revision !== materialRevision || state.documentId !== documentId) return false;
+    if (!canContinue() || jumpToken !== state.chatJumpToken || state.current?.id !== paper.id || state.current.material_revision !== materialRevision || state.documentId !== documentId) return false;
     const wrapper = state.pageWrappers[source.page - 1];
     if (!wrapper) return false;
     const box = source.bbox;
@@ -1476,7 +1474,9 @@
       highlight.style.width = (box[2] - box[0]) * 100 + '%'; highlight.style.height = (box[3] - box[1]) * 100 + '%';
       highlight.setAttribute('aria-label', '引用原文位置');
       wrapper.appendChild(highlight); state.pdfSourceHighlight = highlight;
-      highlight.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+      // Keep the requested page at the top when its opening lines match;
+      // centering that highlight can scroll back into the previous page.
+      highlight.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
       setTimeout(() => { highlight.remove(); if (state.pdfSourceHighlight === highlight) state.pdfSourceHighlight = null; }, 3500);
     }
     return true;
@@ -1484,6 +1484,36 @@
 
   function openResources() {
     if (window.BioResources) window.BioResources.open(state.current);
+  }
+
+  async function openLibrarySearchResult(result, navigation = {}) {
+    const isCurrent = typeof navigation.isCurrent === 'function' ? navigation.isCurrent : () => true;
+    if (!ID_RE.test(result?.paper_id || '') || !['pdf', 'notes'].includes(result.kind)) return false;
+    if (!canLeaveResearch()) return false;
+    if (state.materialBusy || state.generating) {
+      toast('请等待当前材料处理完成，或停止生成后再打开搜索结果。', 'error');
+      return false;
+    }
+    if (!await flushSave() || !isCurrent()) return false;
+    // Validate PDF provenance before navigating away from the current paper.
+    let verified;
+    if (result.kind === 'pdf') {
+      verified = await api.jsonBody('POST', paperPath(result.paper_id, '/search/source'), result.source);
+      if (!isCurrent()) return false;
+    }
+    const target = state.papers.find(p => p.id === result.paper_id);
+    if (!target) throw new Error('这篇文献已移除，请重新搜索。');
+    state.pendingPaper = target;
+    await openPaper(isCurrent);
+    if (!isCurrent() || state.current?.id !== result.paper_id) return false;
+    if (result.kind === 'notes') {
+      switchTab('preview'); setWorkspaceView('notes');
+      return true;
+    }
+    // Recheck after opening: material may have changed during navigation.
+    verified = await api.jsonBody('POST', paperPath(result.paper_id, '/search/source'), result.source);
+    if (!isCurrent() || state.current?.id !== result.paper_id) return false;
+    return jumpChatSource(verified.source, 'preview', isCurrent);
   }
 
   function mergeResourceSummary(paper, updated) {
@@ -2424,6 +2454,7 @@
           if (modal.id === 'input-modal') finishInput(null);
           else if (modal.id === 'settings-modal') closeSettings();
           else if (modal.id === 'zotero-modal' && window.BioZotero) window.BioZotero.close();
+          else if (modal.id === 'library-search-modal' && window.BioLibrarySearch) window.BioLibrarySearch.close();
           else closeModal(modal.id);
         }
         if (exportMenu.open) { exportMenu.open = false; exportMenu.querySelector('summary').focus(); }
@@ -2441,6 +2472,7 @@
     });
     $('btn-settings').addEventListener('click', openSettings);
     $('btn-zotero-import').addEventListener('click', () => window.BioZotero?.open());
+    $('btn-library-search').addEventListener('click', () => window.BioLibrarySearch?.open(state.query));
     $('status-pill').addEventListener('click', openSettings);
     $('settings-close').addEventListener('click', closeSettings);
     $('settings-cancel').addEventListener('click', closeSettings);
@@ -2619,6 +2651,11 @@
   }
 
   async function init() {
+    if (window.BioLibrarySearch) window.BioLibrarySearch.init({
+      panel: $('library-search-body'), footer: $('library-search-footer'), modal: $('library-search-modal'),
+      request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
+      toast, showModal: openModal, hideModal: closeModal, onOpenResult: openLibrarySearchResult,
+    });
     if (window.BioZotero) window.BioZotero.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
       toast, showModal: openModal, hideModal: closeModal, onImported: updateListItem,
@@ -2638,6 +2675,16 @@
     });
     if (window.BioResources) window.BioResources.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
+      download: async (url, filename) => {
+        if (!url.startsWith('/api/resources/export?')) throw new Error('无效的资源导出地址');
+        const response = await fetch(url);
+        if (!response.ok) {
+          let message = response.statusText;
+          try { message = (await response.json()).detail || message; } catch (_) { /* Keep HTTP status. */ }
+          throw new Error(message);
+        }
+        downloadRaw(filename, await response.blob());
+      },
       extract: paper => extractResources(paper),
       jump: async (documentId, page) => { switchTab('preview'); setWorkspaceView('pdf'); await switchDocument(documentId, page); },
       openPaper: async (id) => {

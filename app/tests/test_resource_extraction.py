@@ -239,6 +239,75 @@ https://doi.org/10.5061/dryad.abc123
         self.assertEqual(sorted(item['added_count'] for item in results), [0, 1])
         self.assertEqual(len(json.loads((self.directory / 'resources.json').read_text())), 1)
 
+    def test_explicit_sample_labels_fill_fields_and_keep_original_grouped_cell(self):
+        details = '物种：人；组织：胃组织；疾病：胃癌；分组：肿瘤、正常；样本量：肿瘤 8 例、正常 5 例；技术：scRNA-seq；平台：10x Chromium；GEO 收录：900 个样本'
+        records = extract_resources('| 资源 | 用途 | 编号/链接 | 影响使用的条件 | 样品/材料 |\n'
+                                    '| --- | --- | --- | --- | --- |\n'
+                                    '| 多个验证队列 | 验证 | GSE11111、GSE22222 | 仅处理矩阵 | ' + details + ' |')
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['sample_details'], details)
+        self.assertEqual(record['identifiers'], 'GSE11111、GSE22222')
+        for field, expected in [('organism', '人'), ('tissue', '胃组织'), ('disease', '胃癌'),
+                                ('sample_groups', '肿瘤、正常'), ('sample_count', '肿瘤 8 例、正常 5 例'),
+                                ('modality', 'scRNA-seq'), ('platform', '10x Chromium')]:
+            self.assertEqual(record[field], expected)
+        self.assertEqual(record['auto_extraction']['version'], 3)
+        self.assertNotIn('900', record['sample_count'])
+
+    def test_explicit_columns_take_precedence_and_ambiguous_text_is_not_guessed(self):
+        records = extract_resources('''| Resource | Purpose | Accession | Conditions | Samples | Species | Sample size | Platform |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Discovery | Compare | GSE11111 | Processed only | Species: human; sample size: 99; platform: 10x | mouse | 6 donors | BD Rhapsody |
+| Validation | Validate | GSE22222 | Unknown | Human stomach cancer: 56 tumors, 19 controls; GEO total: 200 | | | |
+''')
+        self.assertEqual(len(records), 2)
+        self.assertEqual((records[0]['organism'], records[0]['sample_count'], records[0]['platform']),
+                         ('mouse', '6 donors', 'BD Rhapsody'))
+        for field in ('organism', 'tissue', 'disease', 'sample_groups', 'sample_count', 'modality', 'platform'):
+            self.assertEqual(records[1][field], '')
+        from resource_extraction import structured_samples
+        self.assertEqual(structured_samples('物种：未报告；样本量：未知；平台：不适用'), {})
+        self.assertEqual(structured_samples('物种：人；物种：小鼠；物种：人'), {})
+        self.assertEqual(structured_samples('**物种**：人<br>**样本量**：13名供者'),
+                         {'organism': '人', 'sample_count': '13名供者'})
+
+    def test_v2_sample_backfill_backs_up_and_manual_fields_remain_unchanged(self):
+        from resource_extraction import resource_fingerprint
+        from paper_resources import NEW_SAMPLE_FIELDS
+        notes = ('| 资源 | 用途 | 编号/链接 | 影响使用的条件 | 样品/材料 |\n'
+                 '| --- | --- | --- | --- | --- |\n'
+                 '| GEO 队列 | 验证 | GSE11111 | 处理矩阵 | 物种：人；疾病：胃癌；样本量：13名供者 |')
+        self.save_notes(notes)
+        old = extract_resources(notes)[0]
+        old.update(id='1' * 32, created_at='2026-01-01', updated_at='2026-01-01', source_revision='')
+        old['organism'] = ''
+        for field in NEW_SAMPLE_FIELDS:
+            old.pop(field)
+        old['auto_extraction'] = {'version': 2, 'source': 'resource_table',
+                                  'fingerprint': resource_fingerprint(old, version=2)}
+        path = self.directory / 'resources.json'
+        path.write_text(json.dumps([old], ensure_ascii=False))
+        result = self.extract().json()
+        self.assertEqual((result['added_count'], result['updated_count'], result['backup_created']), (1, 1, True))
+        record = result['resources'][0]
+        self.assertEqual((record['organism'], record['disease'], record['sample_count']), ('人', '胃癌', '13名供者'))
+        backup = next(self.directory.glob('resources.backup-*.json'))
+        self.assertEqual(json.loads(backup.read_text()), [old])
+        before = path.read_bytes()
+        self.assertEqual(self.extract().json()['updated_count'], 0)
+        self.assertEqual(path.read_bytes(), before)
+        patch_result = self.client.patch(self.url + '/resources/' + record['id'], json={'sample_count': '人工补充：12名供者'})
+        self.assertEqual(patch_result.status_code, 200)
+        self.assertNotIn('auto_extraction', patch_result.json())
+        self.assertEqual(self.extract().json()['updated_count'], 0)
+        self.assertEqual(self.extract().json()['resources'][0]['sample_count'], '人工补充：12名供者')
+        # Even direct additions to a v2 record cannot be lost by a v2 digest.
+        old['sample_count'] = '人工补充：10名供者'
+        path.write_text(json.dumps([old], ensure_ascii=False))
+        self.assertEqual(self.extract().json()['updated_count'], 0)
+        self.assertEqual(json.loads(path.read_text())[0], old)
+
     def test_reproduction_table_preserves_whole_rows_missing_ids_and_samples(self):
         self.save_notes('''## 研究材料
 | 队列 | 编号 |

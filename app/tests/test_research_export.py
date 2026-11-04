@@ -150,6 +150,17 @@ class ResearchExportTests(unittest.TestCase):
         self.assertIn('已人工改写', human_output)
         self.assertEqual([legacy, manual, edited], before)
 
+    def test_sample_fields_export_without_implying_geo_totals_or_verification(self):
+        resource = self.resource(organism='human', tissue='stomach', disease='gastric cancer',
+                                 modality='scRNA-seq', platform='10x', sample_groups='tumor; normal',
+                                 sample_count='8; 5 donors', geo_sample_count=5000)
+        output = append_research_appendix('', [], [resource])
+        for value in ('human', 'stomach', 'gastric cancer', '10x', 'tumor; normal', '8; 5 donors'):
+            self.assertIn(value, output)
+        self.assertIn('论文实际样本量', output)
+        self.assertNotIn('5000', output)
+        self.assertNotIn('核查状态', output)
+
     def test_external_geo_metadata_does_not_enter_saved_resource_exports(self):
         resource = self.resource(sample_details='人工记录：两组供者',
                                  geo_metadata={'sample_details': 'REMOTE-GEO-DERIVED-VALUE', 'samples': ['GSM99999']},

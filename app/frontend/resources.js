@@ -3,16 +3,28 @@
   const ID = /^[0-9a-f]{32}$/;
   const KINDS = { dataset: '数据集', code: '代码', other: '其他资源' };
   const ROLES = { generated: '本文产生', reused: '复用已有资源', implementation: '代码实现', unknown: '待确认' };
+  const SAMPLE_FIELDS = { organism: '物种', tissue: '组织／部位', disease: '疾病／研究背景', modality: '技术类型', platform: '平台', sample_groups: '实验分组', sample_count: '论文实际样本量' };
+  const FILTER_FIELDS = ['organism', 'tissue', 'disease', 'modality', 'platform'];
   let hooks, panel, paper = null, records = [], mode = 'current', query = '', draft = null;
+  let filters = {}, filtersOpen = false, applied = null, exporting = false, exportError = '';
   let epoch = 0, busy = false, loading = false, extracting = false, opened = false, refreshPending = false, error = '';
   let geoCache = {}, geoBusy = new Set(), geoErrors = {}, geoExpanded = new Set();
   const AUTO_NOTE = '来自精读笔记自动整理，尚未核对原文。';
   const AUTO_SOURCE_NOTE = '来自精读笔记自动整理。';
-  const CONTENT_FIELDS = ['title', 'purpose', 'identifiers', 'conditions', 'sample_details', 'repository', 'accession', 'url', 'organism', 'tissue', 'modality', 'notes', 'quote'];
+  const CONTENT_FIELDS = ['title', 'purpose', 'identifiers', 'conditions', 'sample_details', 'repository', 'accession', 'url', ...Object.keys(SAMPLE_FIELDS), 'notes', 'quote'];
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const current = token => token === epoch;
   const key = record => (record.paper_id || paper?.id || '') + ':' + record.id;
   const options = (items, selected) => Object.entries(items).map(([value, label]) => '<option value="' + esc(value) + '"' + (selected === value ? ' selected' : '') + '>' + esc(label) + '</option>').join('');
+  function criteria() { return { q: query.trim(), ...Object.fromEntries(FILTER_FIELDS.map(name => [name, String(filters[name] || '').trim()])) }; }
+  function pendingCriteria() { const next = criteria(); return !applied || Object.keys(next).some(name => next[name] !== applied[name]); }
+  function queryString(values) { return Object.entries(values).filter(([name, value]) => name === 'q' || value).map(([name, value]) => name + '=' + encodeURIComponent(value)).join('&'); }
+  function exportDisabled() { return loading || busy || !!draft || exporting || !!error || pendingCriteria() || !records.length; }
+  function syncExportState() {
+    panel?.querySelectorAll?.('[data-resource-action="export-csv"], [data-resource-action="export-accessions"]').forEach(button => { button.disabled = exportDisabled(); });
+    const hint = panel?.querySelector?.('[data-resource-search-pending]');
+    if (hint) hint.hidden = loading || !applied || !pendingCriteria();
+  }
 
   function path(paperId, id) {
     if (!ID.test(paperId) || (id && !ID.test(id))) throw new Error('无效的资源记录');
@@ -95,11 +107,11 @@
       textField('title', '资源名称', draft.title, 1000) +
       '<div class="resource-fields">' + textarea('purpose', '用途', draft.purpose, 12000) + textarea('identifiers', '编号／链接（同组可填多个）', draft.identifiers, 12000) + '</div>' +
       '<div class="resource-fields">' + textarea('conditions', '影响使用的条件', draft.conditions, 12000) + textarea('sample_details', '样品／材料（论文实际使用情况）', draft.sample_details, 12000) + '</div>' +
+      '<fieldset class="resource-sample-form"><legend>样品信息</legend><p class="hint">填写论文实际使用的样品；多项可用分号分开。样本量可写“肿瘤 56 例；对照 19 例”，不使用 GEO 收录总数代填。</p><div class="resource-sample-fields">' + Object.entries(SAMPLE_FIELDS).map(([name, label]) => textField(name, label, draft[name], 1000)).join('') + '</div></fieldset>' +
       '<details class="resource-details"' + (draft.detailsOpen ? ' open' : '') + '><summary>分类、兼容编号与原文依据</summary><div class="resource-details-body">' +
       '<div class="resource-fields"><label>资源类型<select data-resource-field="kind"' + disabled + '>' + options(KINDS, draft.kind) + '</select></label><label>与本文的关系<select data-resource-field="role"' + disabled + '>' + options(ROLES, draft.role) + '</select></label></div>' +
       '<div class="resource-fields">' + textField('repository', '仓库（如 GEO、GitHub）', draft.repository, 200) + textField('accession', '仓库编号（可选）', draft.accession, 300) + '</div>' +
       textField('url', '资源链接（可选）', draft.url, 4000, 'url') +
-      textField('organism', '物种／研究对象', draft.organism, 1000) + textField('tissue', '组织／部位', draft.tissue, 1000) + textField('modality', '技术类型', draft.modality, 1000) +
       textarea('notes', '备注', draft.notes, 12000) +
       '<div class="resource-source-fields"><label>原文来源（可选）<select data-resource-field="document_id"' + disabled + '><option value="">不关联原文</option>' + docs.map(d => '<option value="' + esc(d.id) + '"' + (draft.document_id === d.id ? ' selected' : '') + '>' + esc(d.name) + '</option>').join('') + '</select></label>' +
       '<label>PDF 页码<input data-resource-field="page" type="number" min="1" max="' + (doc?.pages || 600) + '" value="' + esc(draft.page) + '"' + (!doc || busy ? ' disabled' : ' required') + '></label></div>' +
@@ -109,6 +121,13 @@
   }
   function paperLink(id, title) {
     return ID.test(id || '') ? '<button type="button" class="resource-paper-link" data-resource-action="paper" data-resource-paper="' + id + '" title="' + esc(title) + '">' + esc(title || '查看关联论文') + '</button>' : esc(title || '');
+  }
+  function sampleHTML(record) {
+    const values = Object.entries(SAMPLE_FIELDS).filter(([name]) => String(record[name] || '').trim());
+    const raw = String(record.sample_details || '').trim();
+    if (!values.length) return cellText(raw, '论文实际使用样品未记录');
+    return '<dl class="resource-sample-values">' + values.map(([name, label]) => '<div><dt>' + label + '</dt><dd>' + cellText(record[name]) + '</dd></div>').join('') + '</dl>' +
+      (raw ? '<details class="resource-sample-notes"><summary>材料补充与原始说明</summary>' + cellText(raw) + '</details>' : '');
   }
   function geoHTML(record) {
     const paperId = record.paper_id || paper?.id, recordKey = esc(key(record));
@@ -135,20 +154,19 @@
     }).join('');
   }
   function rowHTML(record) {
-    const mutable = mode === 'current' && paper, disabled = busy || draft ? ' disabled' : '';
+    const mutable = mode === 'current' && paper, disabled = busy || draft || exporting ? ' disabled' : '';
     const available = record.source_available !== false;
     const recordKey = esc(key(record));
-    const details = [record.organism, record.tissue, record.modality].filter(Boolean);
     const related = (record.related_papers || []).filter(p => p.id !== (record.paper_id || paper?.id));
     const identifiers = record.identifiers || [record.accession, record.url].filter(Boolean).join('\n');
     return '<tr class="resource-row" data-resource-row="' + recordKey + '"><th scope="row"><div class="resource-title">' + richText(record.title) + '</div>' +
       (automatic(record) ? '<span class="resource-auto">笔记整理</span>' : '') +
       (mode === 'all' ? '<div class="resource-paper">来自 ' + paperLink(record.paper_id, record.paper_title) + '</div>' : '') +
       (related.length ? '<details class="resource-related"><summary>其他关联论文 · ' + related.length + '</summary>' + related.map(p => paperLink(p.id, p.title)).join('') + '</details>' : '') +
-      '</th><td>' + cellText(record.purpose || (record.role !== 'unknown' ? ROLES[record.role] : '')) + '</td><td class="resource-identifiers">' + cellText(identifiers) + '</td><td>' + cellText(record.conditions) + '</td><td class="resource-samples">' + cellText(record.sample_details, '论文实际使用样品未记录') + geoHTML(record) + '</td>' +
+      '</th><td>' + cellText(record.purpose || (record.role !== 'unknown' ? ROLES[record.role] : '')) + '</td><td class="resource-identifiers">' + cellText(identifiers) + '</td><td>' + cellText(record.conditions) + '</td><td class="resource-samples">' + sampleHTML(record) + geoHTML(record) + '</td>' +
       '<td class="resource-operations">' + (mutable ? '<button type="button" class="resource-edit" data-resource-action="edit" data-resource-key="' + recordKey + '"' + disabled + '>编辑</button>' : '') +
       '<details class="resource-row-details"><summary>详情</summary><div class="resource-row-details-body">' +
-      '<p class="resource-meta">' + esc([KINDS[record.kind] || KINDS.other, record.repository, ...details].filter(Boolean).join(' · ')) + '</p>' +
+      '<p class="resource-meta">' + esc([KINDS[record.kind] || KINDS.other, record.repository].filter(Boolean).join(' · ')) + '</p>' +
       (readableNotes(record) ? cellText(readableNotes(record)) : '') +
       (record.quote ? '<blockquote>' + esc(record.quote) + '</blockquote>' : '') +
       (record.document_id ? '<p class="resource-source">' + esc(record.source_name || documents().find(d => d.id === record.document_id)?.name || '原文') + ' · PDF 第 ' + esc(record.page) + ' 页</p>' : '') +
@@ -160,23 +178,30 @@
   }
   function render() {
     if (!panel) return;
-    const visible = mode === 'current' && query ? records.filter(r => CONTENT_FIELDS.some(k => String(r[k] || '').toLowerCase().includes(query.toLowerCase()))) : records;
+    const visible = records, disabled = busy || draft || exporting ? ' disabled' : '';
+    const filterCount = FILTER_FIELDS.filter(name => String(filters[name] || '').trim()).length;
     panel.innerHTML = '<div class="resource-toolbar"><div><strong>数据与复现</strong><p class="hint">积累可复用资源，追踪它们来自哪些论文。</p></div>' +
-      '<div class="resource-toolbar-actions"><button class="btn" type="button" data-resource-action="extract" aria-busy="' + extracting + '" title="仅整理已保存且材料未变更的完整精读笔记中的明确资源"' + (!paper || mode !== 'current' || loading || busy || draft || !extractable() ? ' disabled' : '') + '>' + (extracting ? '正在整理…' : '从精读笔记整理') + '</button>' +
-      '<button class="btn btn-primary" type="button" data-resource-action="add"' + (!paper || mode !== 'current' || loading || busy || draft ? ' disabled' : '') + '>添加资源</button></div></div>' +
+      '<div class="resource-toolbar-actions"><button class="btn" type="button" data-resource-action="extract" aria-busy="' + extracting + '" title="仅整理已保存且材料未变更的完整精读笔记中的明确资源"' + (!paper || mode !== 'current' || loading || busy || draft || exporting || !extractable() ? ' disabled' : '') + '>' + (extracting ? '正在整理…' : '从精读笔记整理') + '</button>' +
+      '<button class="btn btn-primary" type="button" data-resource-action="add"' + (!paper || mode !== 'current' || loading || busy || draft || exporting ? ' disabled' : '') + '>添加资源</button></div></div>' +
       (paper && mode === 'current' ? '<p class="hint resource-extract-hint">' + (extractable() ? '整理笔记中的资源、用途、使用条件与样品，可随时编辑补充。' : '完整精读笔记保存且材料未变更时，可在这里整理资源、用途、使用条件与样品。') + '</p>' : '') +
-      '<div class="resource-modes" role="group" aria-label="资源范围"><button class="btn' + (mode === 'current' ? ' active' : '') + '" type="button" data-resource-mode="current" aria-pressed="' + (mode === 'current') + '"' + (!paper || busy || draft ? ' disabled' : '') + '>当前论文</button><button class="btn' + (mode === 'all' ? ' active' : '') + '" type="button" data-resource-mode="all" aria-pressed="' + (mode === 'all') + '"' + (busy || draft ? ' disabled' : '') + '>全部论文</button></div>' +
-      '<form class="resource-search" id="resource-search"><input type="search" aria-label="搜索数据与复现" placeholder="搜索编号、样品、用途…" value="' + esc(query) + '" maxlength="500"' + (busy || draft ? ' disabled' : '') + '><button class="btn" type="submit"' + (busy || draft ? ' disabled' : '') + '>搜索</button></form>' +
+      '<div class="resource-modes" role="group" aria-label="资源范围"><button class="btn' + (mode === 'current' ? ' active' : '') + '" type="button" data-resource-mode="current" aria-pressed="' + (mode === 'current') + '"' + (!paper ? ' disabled' : disabled) + '>当前论文</button><button class="btn' + (mode === 'all' ? ' active' : '') + '" type="button" data-resource-mode="all" aria-pressed="' + (mode === 'all') + '"' + disabled + '>全部论文</button></div>' +
+      '<form class="resource-search" id="resource-search"><div class="resource-search-row"><input data-resource-query type="search" aria-label="搜索数据与复现" placeholder="搜索编号、样品、用途…" value="' + esc(query) + '" maxlength="500"' + disabled + '><button class="btn" type="submit"' + disabled + '>搜索</button></div>' +
+      '<details class="resource-filters"' + (filtersOpen ? ' open' : '') + '><summary>按样品信息筛选' + (filterCount ? ' · ' + filterCount + ' 项' : '') + '</summary><div class="resource-filter-fields">' + FILTER_FIELDS.map(name => '<label>' + SAMPLE_FIELDS[name] + '<input data-resource-filter="' + name + '" type="search" maxlength="1000" placeholder="包含关键词" value="' + esc(filters[name] || '') + '"' + disabled + '></label>').join('') + '</div><div class="resource-filter-actions"><span class="hint">同时满足填写的条件；空白字段不参与筛选。</span><button class="btn" type="submit"' + disabled + '>应用筛选</button></div></details>' +
+      '<div class="resource-results-actions"><span class="resource-export-label">导出当前结果</span><button class="btn" type="button" data-resource-action="export-csv"' + (exportDisabled() ? ' disabled' : '') + '>资源表 CSV</button><button class="btn" type="button" data-resource-action="export-accessions"' + (exportDisabled() ? ' disabled' : '') + '>编号清单</button><button class="btn btn-ghost" type="button" data-resource-action="reset-filters"' + disabled + '>清除筛选</button></div>' +
+      '<p class="hint resource-search-pending" data-resource-search-pending' + (loading || !applied || !pendingCriteria() ? ' hidden' : '') + '>条件尚未应用，请点击搜索或应用筛选后再导出。</p>' +
+      (exporting ? '<p class="hint" role="status">正在导出当前结果…</p>' : '') + (exportError ? '<p class="resource-error" role="alert">' + esc(exportError) + '</p>' : '') + '</form>' +
       (!paper ? '<p class="hint">在全库中搜索资源；打开一篇论文后可添加与编辑它的资源。</p>' : '') +
       (draft ? formHTML() : '') + (!draft && error ? '<p class="resource-error" role="alert">' + esc(error) + ' <button class="btn btn-ghost" type="button" data-resource-action="reload">重试</button></p>' : '') +
-      (loading ? '<p class="resource-empty" role="status">正在读取资源…</p>' : visible.length ? '<p class="resource-count">' + visible.length + ' 条资源记录 <span>宽表可横向滚动</span></p><div class="resource-table-scroll" tabindex="0" role="region" aria-label="数据与复现资源表"><table class="resource-table"><thead><tr><th scope="col">资源</th><th scope="col">用途</th><th scope="col">编号／链接</th><th scope="col">影响使用的条件</th><th scope="col">样品／材料</th><th scope="col">操作</th></tr></thead><tbody>' + visible.map(rowHTML).join('') + '</tbody></table></div>' : '<p class="resource-empty">' + (query ? '没有找到匹配资源。可尝试仓库编号或不同关键词。' : '暂无资源记录。阅读论文时，将数据仓库、代码和原文依据保存在这里。') + '</p>');
+      (loading ? '<p class="resource-empty" role="status">正在读取资源…</p>' : visible.length ? '<p class="resource-count">' + visible.length + ' 条资源记录 <span>宽表可横向滚动</span></p><div class="resource-table-scroll" tabindex="0" role="region" aria-label="数据与复现资源表"><table class="resource-table"><thead><tr><th scope="col">资源</th><th scope="col">用途</th><th scope="col">编号／链接</th><th scope="col">影响使用的条件</th><th scope="col">样品／材料</th><th scope="col">操作</th></tr></thead><tbody>' + visible.map(rowHTML).join('') + '</tbody></table></div>' : '<p class="resource-empty">' + (query || filterCount ? '没有找到匹配资源。可尝试仓库编号或不同关键词。' : '暂无资源记录。阅读论文时，将数据仓库、代码和原文依据保存在这里。') + '</p>');
   }
-  async function load() {
-    const token = ++epoch;
-    loading = true; error = ''; render();
+  async function load(nextCriteria = criteria()) {
+    const token = ++epoch, requested = { ...nextCriteria };
+    loading = true; error = ''; exportError = ''; render();
     try {
-      const result = await hooks.request('GET', mode === 'all' || !paper ? '/api/resources?q=' + encodeURIComponent(query) : path(paper.id));
+      const result = await hooks.request('GET', mode === 'all' || !paper ? '/api/resources?' + queryString(requested) :
+        path(paper.id) + (Object.values(requested).some(Boolean) ? '?' + queryString(requested) : ''));
       if (current(token)) {
+        applied = requested;
         records = Array.isArray(result) ? result : result.resources || [];
         if (mode === 'current' && paper && records.some(r => geoAccessions(r).length)) {
           const paperId = paper.id;
@@ -195,31 +220,32 @@
     opened = true;
     const next = nextPaper && ID.test(nextPaper.id) ? nextPaper : null;
     const same = (paper?.id || '') === (next?.id || '');
-    if (same && (draft || busy)) { paper = next; return; }
-    if (!same) { draft = null; records = []; geoCache = {}; geoBusy = new Set(); geoErrors = {}; geoExpanded = new Set(); query = ''; extracting = false; refreshPending = false; mode = next ? 'current' : 'all'; }
+    if (same && (draft || busy || exporting)) { paper = next; return; }
+    if (!same) { draft = null; records = []; geoCache = {}; geoBusy = new Set(); geoErrors = {}; geoExpanded = new Set(); query = ''; filters = {}; applied = null; exportError = ''; filtersOpen = false; exporting = false; extracting = false; refreshPending = false; mode = next ? 'current' : 'all'; }
     if (!next) mode = 'all';
     paper = next; busy = false;
-    await load();
+    await load(applied || criteria());
   }
   function clear() {
     ++epoch; paper = null; records = []; query = ''; mode = 'all'; draft = null; busy = false; loading = false; extracting = false; opened = false; refreshPending = false; error = '';
+    filters = {}; applied = null; filtersOpen = false; exporting = false; exportError = '';
     geoCache = {}; geoBusy = new Set(); geoErrors = {}; geoExpanded = new Set();
     if (panel) panel.innerHTML = '';
   }
   async function showAll() {
     if (!canLeave()) return false;
-    opened = true; draft = null; mode = 'all'; query = '';
+    opened = true; draft = null; mode = 'all'; query = ''; filters = {}; applied = null;
     await load();
     return true;
   }
   async function refreshAfterExtraction(paperId) {
     if (!opened || (mode !== 'all' && paper?.id !== paperId)) return;
-    if (draft || busy) { refreshPending = true; return; }
+    if (draft || busy || exporting) { refreshPending = true; return; }
     refreshPending = false;
-    await load();
+    await load(applied || criteria());
   }
   async function extract() {
-    if (!paper || mode !== 'current' || busy || loading || draft || !extractable()) return;
+    if (!paper || mode !== 'current' || busy || loading || draft || exporting || !extractable()) return;
     const token = epoch, target = paper;
     let success = false;
     busy = true; extracting = true; error = ''; render();
@@ -231,18 +257,19 @@
     finally {
       if (current(token)) {
         busy = false; extracting = false;
-        if (success) { refreshPending = false; await load(); } else render();
+        if (success) { refreshPending = false; await load(applied || criteria()); } else render();
       }
     }
   }
   function start(record = {}) {
-    if (!paper || mode !== 'current' || busy || loading || draft) return;
+    if (!paper || mode !== 'current' || busy || loading || draft || exporting) return;
     const doc = documents().find(d => d.id === record.document_id);
     draft = { id: record.id || '', title: record.title || '', kind: record.kind || 'dataset', role: record.role || 'unknown',
       purpose: record.purpose || '', identifiers: record.identifiers || '', conditions: record.conditions || '', sample_details: record.sample_details || '',
       repository: record.repository || '', accession: record.accession || '', url: record.url || '', organism: record.organism || '', tissue: record.tissue || '',
-      modality: record.modality || '', notes: readableNotes(record), document_id: doc ? doc.id : '', page: doc ? record.page : null, quote: record.quote || '',
-      detailsOpen: !!(record.organism || record.tissue || record.modality || readableNotes(record) || record.document_id || record.quote) };
+      modality: record.modality || '', disease: record.disease || '', platform: record.platform || '', sample_groups: record.sample_groups || '', sample_count: record.sample_count || '',
+      notes: readableNotes(record), document_id: doc ? doc.id : '', page: doc ? record.page : null, quote: record.quote || '',
+      detailsOpen: !!(readableNotes(record) || record.document_id || record.quote) };
     error = ''; render(); panel.querySelector('[data-resource-field="title"]')?.focus();
   }
   function changed(id) { Promise.resolve().then(() => hooks.onChanged?.(id)).catch(() => hooks.toast?.('资源已保存，列表刷新失败，请稍后重试。', 'error')); }
@@ -263,12 +290,20 @@
     finally {
       if (current(token)) {
         busy = false; render();
-        if (refreshPending && !draft) { refreshPending = false; await load(); }
+        if (!draft && !error && (refreshPending || Object.values(applied || {}).some(Boolean))) { refreshPending = false; await load(applied || criteria()); }
       }
     }
   }
   function input(event) {
-    if (event.target.matches?.('#resource-search input')) { query = event.target.value; return; }
+    const filter = event.target.dataset.resourceFilter;
+    if (FILTER_FIELDS.includes(filter)) {
+      if (!busy && !draft && !exporting) { filters[filter] = event.target.value; syncExportState(); }
+      return;
+    }
+    if (event.target.matches?.('#resource-search input')) {
+      if (!busy && !draft && !exporting) { query = event.target.value; syncExportState(); }
+      return;
+    }
     const field = event.target.dataset.resourceField;
     if (!draft || busy || ![...CONTENT_FIELDS, 'kind', 'role', 'document_id', 'page'].includes(field)) return;
     draft[field] = event.target.value;
@@ -276,7 +311,7 @@
   async function submit(event) {
     if (!['resource-form', 'resource-search'].includes(event.target.id)) return;
     event.preventDefault();
-    if (event.target.id === 'resource-search') { if (!busy && !draft) await load(); return; }
+    if (event.target.id === 'resource-search') { if (!busy && !draft && !exporting) await load(); return; }
     if (!draft || busy) return;
     const doc = documents().find(d => d.id === draft.document_id), page = draft.document_id ? Number(draft.page) : null;
     if (!draft.title.trim()) { error = '请填写资源名称。'; render(); return; }
@@ -300,12 +335,14 @@
       if (modeButton.disabled || !canLeave()) return;
       const next = modeButton.dataset.resourceMode;
       if (!['current', 'all'].includes(next) || (next === 'current' && !paper)) return;
-      draft = null; mode = next; query = ''; await load(); return;
+      draft = null; mode = next; query = ''; filters = {}; applied = null; await load(); return;
     }
     const button = event.target.closest('[data-resource-action]');
-    if (!button || button.disabled || busy) return;
+    if (!button || button.disabled || busy || exporting) return;
     const action = button.dataset.resourceAction;
-    if (action === 'cancel') { draft = null; error = ''; render(); if (refreshPending) { refreshPending = false; await load(); } return; }
+    if (action === 'export-csv' || action === 'export-accessions') { await exportResults(action === 'export-csv' ? 'csv' : 'accessions'); return; }
+    if (action === 'reset-filters') { if (!draft) { query = ''; filters = {}; await load(); } return; }
+    if (action === 'cancel') { draft = null; error = ''; render(); if (refreshPending) { refreshPending = false; await load(applied || criteria()); } return; }
     if (action === 'add') { start(); return; }
     if (action === 'extract') { await extract(); return; }
     if (action === 'reload') { if (!draft) await load(); return; }
@@ -328,6 +365,24 @@
       } catch (err) { hooks.toast?.('无法定位原文：' + err.message, 'error'); }
     }
   }
+  async function exportResults(format) {
+    if (exportDisabled()) return;
+    const token = epoch, values = { format, ...(mode === 'current' && paper ? { paper_id: paper.id } : {}), ...applied };
+    const filename = format === 'csv' ? 'bioreader-resources.csv' : 'bioreader-accessions.txt';
+    exporting = true; exportError = ''; render();
+    try {
+      if (!hooks.download) throw new Error('导出功能未能加载，请重新打开应用');
+      const result = await hooks.download('/api/resources/export?' + queryString(values), filename);
+      if (current(token) && result !== false) hooks.toast?.('已导出当前筛选结果');
+    } catch (err) {
+      if (current(token)) exportError = '导出失败：' + err.message + '。请再次点击导出重试。';
+    } finally {
+      if (current(token)) {
+        exporting = false; render();
+        if (refreshPending && !draft) { refreshPending = false; await load(applied || criteria()); }
+      }
+    }
+  }
   async function fetchGeo(record, accession) {
     const paperId = record.paper_id || paper?.id, cacheKey = paperId + ':' + accession, token = epoch, pendingSet = geoBusy;
     if (draft || busy || !ID.test(paperId || '') || !geoAccessions(record).includes(accession) || geoBusy.has(cacheKey)) return;
@@ -344,6 +399,7 @@
     }
   }
   function canLeave() {
+    if (exporting) { hooks.toast?.('正在导出资源，请稍后再切换。', 'error'); return false; }
     if (extracting) { hooks.toast?.('正在整理资源，请稍后再切换。', 'error'); return false; }
     if (busy) { hooks.toast?.('正在保存资源，请稍后再切换。', 'error'); return false; }
     if (draft && (draft.id || [...CONTENT_FIELDS, 'document_id'].some(k => String(draft[k] || '').trim()) || draft.kind !== 'dataset' || draft.role !== 'unknown')) {
@@ -361,6 +417,7 @@
     panel.addEventListener('toggle', event => {
       if (event.target.isConnected === false) return;
       if (draft && event.target.classList.contains('resource-details')) draft.detailsOpen = event.target.open;
+      if (event.target.classList.contains('resource-filters')) filtersOpen = event.target.open;
       const geoKey = event.target.dataset.geoKey;
       if (geoKey) { if (event.target.open) geoExpanded.add(geoKey); else geoExpanded.delete(geoKey); }
     }, true);
