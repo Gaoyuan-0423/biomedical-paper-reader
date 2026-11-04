@@ -92,6 +92,10 @@ select { cursor: pointer; }
 .pill-warn { background: var(--warn-bg); color: var(--warn-text); }
 .pill-ok { background: var(--ok-bg); color: var(--ok-text); }
 .workspace-views { display: none; }
+.reading-modes { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-subtle); }
+.reading-modes button { border: 0; border-radius: 6px; padding: 7px 12px; background: transparent; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.reading-modes button[aria-pressed='true'] { background: var(--primary); color: white; }
+.reading-modes button:disabled { opacity: .45; cursor: default; }
 .layout { display: flex; height: calc(100% - var(--topbar-height)); }
 
 /* Library. */
@@ -163,6 +167,10 @@ select { cursor: pointer; }
 .notes-pane { flex: 1; }
 @media (min-width: 901px) {
   .resources-wide .pdf-pane, .resources-wide .splitter { display: none; }
+  body[data-reading-ready='true'][data-reading-mode='focus'] .sidebar,
+  body[data-reading-ready='true'][data-reading-mode='focus'] .notes-pane,
+  body[data-reading-ready='true'][data-reading-mode='focus'] .splitter { display: none; }
+  body[data-reading-ready='true'][data-reading-mode='focus'] .pdf-pane { flex: 1; width: 100%; }
 }
 .pane-heading { min-height: 44px; padding: 0 17px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .heading-label { display: flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 600; letter-spacing: .5px; }
@@ -398,8 +406,10 @@ select { cursor: pointer; }
   .pdf-welcome { padding-inline: 16px; }
 }
 @media (max-width: 900px) {
-  :root { --topbar-height: 62px; }
-  .topbar { padding: 0 18px; gap: 12px; }
+  :root { --topbar-height: 102px; }
+  .topbar { padding: 9px 18px; gap: 6px 12px; flex-wrap: wrap; }
+  .reading-modes { order: 3; width: 100%; justify-content: center; padding: 2px; }
+  .reading-modes button { flex: 1; padding: 5px 8px; font-size: 11px; }
   .brand-name { font-size: 21px; }
   .brand-sub { font-size: 11px; }
   .brand-mark { width: 32px; height: 32px; }

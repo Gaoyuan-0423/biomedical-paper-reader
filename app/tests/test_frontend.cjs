@@ -34,7 +34,7 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -49,6 +49,97 @@ function harness() {
   return { ...app, $, context };
 }
 function edit(h, notes) { h.$('editor').value = notes; h.scheduleSave(); }
+
+function answer(id = 'answer1') { return { id, role: 'assistant', status: 'completed', content: '## Finding\n\n**Sample** [S1]', sources: [{id: 'S1', document_id: C, document_name: 'supplement.pdf', page: 2, quote: 'Original evidence.'}] }; }
+test('hidden PDF retains visible page for narrow-screen question context', () => {
+  const h = harness();
+  h.state.pageWrappers = [1, 2, 3].map(page => ({offsetTop: 0, dataset: {page: String(page)}}));
+  h.$('pdf-scroll').clientWidth = 0;
+  h.$('pdf-page').value = 2;
+  h.state.pdfContext = {paperId: A, documentId: 'main'};
+  let context;
+  h.context.window.BioChat = {setContext(value) {context = value;}};
+  h.updateChatContext();
+  assert.equal(h.currentPage(), 2);
+  assert.equal(context.page, 2);
+});
+test('completed chat answer appends to newest draft with sources and persistent deduplication', async () => {
+  const h = harness(), writes = [];
+  h.api.patch = async (id, body) => { writes.push(body.notes); return { id, ...body }; };
+  edit(h, 'My original draft');
+  await h.appendChatNote({paperId: A, message: answer()});
+  const saved = writes.at(-1);
+  assert.ok(saved.startsWith('My original draft\n\n'));
+  assert.match(saved, /supplement\.pdf · PDF 第 2 页/);
+  assert.match(saved, /> Original evidence\./);
+  assert.match(saved, /\*\*Sample\*\*/);
+  await h.appendChatNote({paperId: A, message: answer()});
+  assert.equal(writes.at(-1), saved);
+  assert.equal(writes.length, 2);
+});
+test('failed chat append stays in draft and retry saves without duplicate excerpt', async () => {
+  const h = harness(); let failing = true;
+  h.api.patch = async (id, body) => { if (failing) throw new Error('Disk full'); return {id, ...body}; };
+  await assert.rejects(h.appendChatNote({paperId: A, message: answer()}), /保存失败/);
+  assert.match(h.$('editor').value, /Reading|Finding/);
+  failing = false;
+  await h.appendChatNote({paperId: A, message: answer()});
+  assert.equal(h.$('editor').value.split('### 阅读问答摘录').length, 2);
+  assert.equal(h.state.pendingSave, null);
+});
+test('typing while the existing note saves is retained before the chat excerpt', async () => {
+  const h = harness(), pending = deferred(), writes = [];
+  h.api.patch = async (id, body) => { writes.push(body.notes); if (writes.length === 1) await pending.promise; return {id, ...body}; };
+  edit(h, 'First draft');
+  const adding = h.appendChatNote({paperId: A, message: answer()});
+  edit(h, 'Newer draft while saving');
+  pending.resolve(); await adding;
+  assert.ok(writes.at(-1).startsWith('Newer draft while saving\n\n'));
+  assert.equal(writes.length, 3);
+});
+test('append rejects changed paper, generation, partial answer and research drafts', async () => {
+  const h = harness();
+  await assert.rejects(h.appendChatNote({paperId: B, message: answer()}), /论文已切换/);
+  h.state.generating = true;
+  await assert.rejects(h.appendChatNote({paperId: A, message: answer()}), /等待/);
+  h.state.generating = false;
+  await assert.rejects(h.appendChatNote({paperId: A, message: {...answer(), status: 'interrupted'}}), /已完成/);
+  h.context.window.BioResources = {canLeave: () => false};
+  await assert.rejects(h.appendChatNote({paperId: A, message: answer()}), /先保存/);
+  assert.equal(h.$('editor').value, '');
+});
+test('paper changed during previous draft save cannot receive a late appended answer', async () => {
+  const h = harness(), pending = deferred();
+  h.api.patch = () => pending.promise;
+  edit(h, 'A draft');
+  const appending = h.appendChatNote({paperId: A, message: answer()});
+  h.state.current = {id: B, notes: 'B draft'}; h.$('editor').value = 'B draft';
+  pending.resolve({id: A, notes: 'A draft'});
+  await assert.rejects(appending, /状态已变化/);
+  assert.equal(h.$('editor').value, 'B draft');
+});
+test('appended model HTML and image/link syntax cannot execute through note rendering', async () => {
+  const h = harness();
+  h.api.patch = async (id, body) => ({id, ...body});
+  await h.appendChatNote({paperId: A, message: {...answer(), content: '<script>bad()</script>\n![image](https://evil.test/x)\n[click](javascript:bad())\n!\\[bypass](https://evil.test/x)'}});
+  assert.doesNotMatch(h.$('editor').value, /<script>/);
+  assert.match(h.$('editor').value, /!\\\[image\\\]/);
+  assert.match(h.$('editor').value, /\\\[click\\\]/);
+  const marked = require('../frontend/vendor/marked.min.js');
+  const html = marked.parse(h.$('editor').value);
+  assert.doesNotMatch(html, /<script|<img|href="javascript:/);
+});
+test('reading modes preserve editor drafts, select chat, and respect resource drafts', () => {
+  const h = harness(); h.$('editor').value = 'Unchanged note';
+  assert.equal(h.setReadingMode('focus'), true);
+  assert.equal(h.state.readingMode, 'focus');
+  assert.equal(h.setReadingMode('chat'), true);
+  assert.equal(h.state.tab, 'chat');
+  assert.equal(h.$('editor').value, 'Unchanged note');
+  h.context.window.BioResources = {canLeave: () => false};
+  assert.equal(h.setReadingMode('notes'), false);
+  assert.equal(h.state.tab, 'chat');
+});
 
 test('library search navigation preserves resource drafts and active generation', async () => {
   const h = harness();
@@ -1210,7 +1301,7 @@ test('Word export uses saved research appendix without modifying notes and keeps
   h.state.current.resources_count = 1;
   h.api.prepareExport = async (id, notes) => {
     requested = { id, notes };
-    return { notes: '<!-- bioreader-research-appendix:v1 sha256=' + 'a'.repeat(64) + ' -->\n## 数据与复现\n\n- 与本文关系：复用已有数据\n- 名称：a\\_b &amp; c\n- 链接：[打开资源](https://example.org/data)\n<!-- /bioreader-research-appendix:v1 -->\n' };
+    return { notes: '<!-- bioreader-chat:answer1 -->\n### 阅读问答摘录\n\n保留的回答\n<!-- bioreader-research-appendix:v1 sha256=' + 'a'.repeat(64) + ' -->\n## 数据与复现\n\n- 与本文关系：复用已有数据\n- 名称：a\\_b &amp; c\n- 链接：[打开资源](https://example.org/data)\n<!-- /bioreader-research-appendix:v1 -->\n' };
   };
   await h.exportWord();
   assert.deepEqual(requested, { id: A, notes: '' });
@@ -1223,6 +1314,8 @@ test('Word export uses saved research appendix without modifying notes and keeps
   assert.ok(serialized.includes('ExternalHyperlink'));
   assert.ok(serialized.includes('https://example.org/data'));
   assert.ok(!serialized.includes('bioreader-research-appendix'));
+  assert.ok(!serialized.includes('bioreader-chat:'));
+  assert.ok(serialized.includes('保留的回答'));
 });
 
 test('unsaved resource draft blocks export instead of silently excluding it', async () => {
