@@ -50,6 +50,8 @@ from paper_resources import resource_accessions
 from chat_sources import prepare_sources, save_parsed_blocks, validate_source_snapshot, verified_source
 from paper_chat import (CHAT_TIMEOUT, MAX_OUTPUT, ChatIn, active_requests, chat_messages,
                         history_page, load_history, new_messages, recover_history, save_history, update_message)
+import zotero_import as zi
+from zotero_mcp import ZoteroMCPClient, MCPError
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -756,6 +758,140 @@ def clear_api_key():
     return public_settings(data)
 
 
+# ---------- explicit Zotero MCP import ----------
+
+@app.get('/api/zotero/settings')
+def get_zotero_settings():
+    with storage_lock:
+        return zi.public_config(zi.read_config(DATA_DIR))
+
+
+@app.put('/api/zotero/settings')
+def put_zotero_settings(body: zi.ZoteroConfigIn):
+    with storage_lock:
+        config = zi.merge_config(zi.read_config(DATA_DIR), body)
+        zi.write_config(DATA_DIR, config)
+        return zi.public_config(config)
+
+
+@app.post('/api/zotero/check')
+async def check_zotero(body: zi.ZoteroConfigIn):
+    with storage_lock:
+        config = zi.merge_config(zi.read_config(DATA_DIR), body)
+    try:
+        async with ZoteroMCPClient(config['endpoint'], config['token']) as client:
+            info = await client.discover()
+        supported = all((info.get('capabilities') or {}).get(key) for key in ('search', 'metadata', 'attachments'))
+        return {key: info.get(key) for key in ('server_name', 'protocol_version', 'capabilities')} | {
+            'message': ('已连接 Zotero MCP；PDF 导入使用配置目录中的本机附件副本。' if supported else
+                        'MCP 接口已连通，但缺少所需的 Zotero 检索或条目工具，请使用兼容的 Zotero MCP 服务。')}
+    except MCPError as exc:
+        raise HTTPException(exc.status_code, exc.message) from exc
+
+
+@app.post('/api/zotero/search')
+async def search_zotero(body: zi.ZoteroSearchIn):
+    if not body.query.strip():
+        raise HTTPException(422, '请输入标题、作者或关键词')
+    with storage_lock:
+        config = zi.read_config(DATA_DIR)
+    try:
+        async with ZoteroMCPClient(config['endpoint'], config['token']) as client:
+            result = await client.search(body.query.strip(), limit=body.limit, start=body.start)
+    except MCPError as exc:
+        raise HTTPException(exc.status_code, exc.message) from exc
+    with storage_lock:
+        zi.same_config(DATA_DIR, config)
+    return {'items': result['items'], 'has_more': result.get('has_more', False),
+            'configuration_id': config['configuration_id']}
+
+
+@app.get('/api/zotero/items/{item_key}')
+async def preview_zotero_item(item_key: str, configuration_id: str):
+    if not zi.KEY.fullmatch(item_key):
+        raise HTTPException(422, 'Zotero 条目编号格式不正确')
+    with storage_lock:
+        config = zi.read_config(DATA_DIR)
+        if configuration_id != config['configuration_id']:
+            raise HTTPException(409, 'Zotero 连接设置已更改，请重新搜索')
+    try:
+        async with ZoteroMCPClient(config['endpoint'], config['token']) as client:
+            item = await client.get_item(item_key)
+            if item.get('item_type') in ('attachment', 'note', 'annotation'):
+                raise HTTPException(422, '请选择论文条目，而不是附件或笔记')
+            attachments = await client.get_attachments(item_key, parent=item)
+    except MCPError as exc:
+        raise HTTPException(exc.status_code, exc.message) from exc
+    with storage_lock:
+        zi.same_config(DATA_DIR, config)
+        pid = zi.preview(DATA_DIR, config, item, attachments)
+    return {'item': item, 'attachments': [zi.attachment_view(config, item, a) for a in attachments],
+            'preview_id': pid, 'configuration_id': config['configuration_id']}
+
+
+def _import_zotero_preview(directory, papers_directory, config, record, attachment_key):
+    """Parse in an unpublished directory; a short final transaction prevents duplicates."""
+    item = record['item']
+    with storage_lock:
+        zi.same_config(directory, config)
+        found = zi.duplicate(list_meta(), config, item)
+        if found:
+            return {'paper': read_meta(paper_dir(found['id'])), 'existing': True,
+                    'message': '文献库已包含该条目，已保留原有内容；需要补充 PDF 时可在论文页附加文件。'}
+    content, filename = None, ''
+    if attachment_key:
+        attachment = next((a for a in record['attachments'] if a['key'] == attachment_key), None)
+        if attachment is None:
+            raise HTTPException(422, '所选 PDF 不属于这次文献预览')
+        content, filename = zi.read_managed_pdf(config, item, attachment)
+    try:
+        Path(directory).mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='.zotero-import-', dir=directory) as temporary:
+            paper_id = uuid.uuid4().hex
+            stage = Path(temporary) / paper_id
+            stage.mkdir()
+            meta = blank_meta(paper_id)
+            for name in ('title', 'authors', 'year', 'doi', 'journal', 'abstract', 'url'):
+                meta[name] = str(item.get(name) or '')
+            meta['title'] = meta['title'] or 'Zotero ' + item['key']
+            meta['tags'] = item.get('tags', [])[:30]
+            meta['source'] = 'zotero'
+            meta['zotero_source'] = zi.source_identity(config, item, attachment_key)
+            if content is not None:
+                _validate_pdf_upload(filename, content)
+                try:
+                    meta = ingest_pdf(stage, content, filename, meta)
+                except OSError:
+                    raise
+                except Exception as exc:
+                    if isinstance(exc, HTTPException):
+                        raise
+                    raise HTTPException(422, '所选 PDF 无法解析，请检查是否损坏、加密或超过 600 页；没有创建文献') from exc
+            else:
+                (stage / 'text.txt').write_text(meta['abstract'], 'utf-8')
+            write_meta(stage, meta)
+            with storage_lock:
+                zi.same_config(directory, config)
+                found = zi.duplicate(list_meta(), config, {**item, 'doi': meta.get('doi') or item.get('doi')})
+                if found:
+                    return {'paper': read_meta(paper_dir(found['id'])), 'existing': True,
+                            'message': '该文献已导入，已保留已有正文和笔记。'}
+                Path(papers_directory).mkdir(parents=True, exist_ok=True)
+                stage.rename(Path(papers_directory) / paper_id)
+            return {'paper': meta, 'existing': False,
+                    'message': '已导入文献及 PDF，可以开始阅读。' if content is not None else '已导入文献信息；尚未附加 PDF。'}
+    except OSError as exc:
+        raise HTTPException(503, 'Zotero 导入保存失败，请检查磁盘后重试；已有文献未修改') from exc
+
+
+@app.post('/api/zotero/import')
+async def import_zotero_item(body: zi.ZoteroImportIn):
+    with storage_lock:
+        config = zi.read_config(DATA_DIR)
+        record = zi.get_preview(DATA_DIR, config, body.preview_id)
+    return await asyncio.to_thread(_import_zotero_preview, DATA_DIR, PAPERS_DIR, config, record, body.attachment_key)
+
+
 # ---------- papers ----------
 
 @app.get("/api/papers")
@@ -785,24 +921,25 @@ async def import_doi(body: DoiIn):
     except (LookupError_, UnsafeURLError) as exc:
         raise HTTPException(400, str(exc)) from exc
     doi = record["doi"].lower()
-    for existing in list_meta():
-        if (existing.get("doi") or "").lower() == doi:
-            raise HTTPException(409, f"文献库里已有该 DOI：{existing['title']}")
-    paper_id, d = new_paper_dir()
-    meta = blank_meta(paper_id)
-    meta.update({
-        "title": record["title"] or doi,
-        "authors": record["authors"],
-        "year": record["year"],
-        "doi": record["doi"],
-        "journal": record["journal"],
-        "abstract": record["abstract"],
-        "url": record["url"],
-        "source": "doi",
-        "filename": "",
-    })
-    (d / "text.txt").write_text(record["abstract"], "utf-8")
-    write_meta(d, meta)
+    with storage_lock:
+        for existing in list_meta():
+            if (existing.get("doi") or "").lower() == doi:
+                raise HTTPException(409, f"文献库里已有该 DOI：{existing['title']}")
+        paper_id, d = new_paper_dir()
+        meta = blank_meta(paper_id)
+        meta.update({
+            "title": record["title"] or doi,
+            "authors": record["authors"],
+            "year": record["year"],
+            "doi": record["doi"],
+            "journal": record["journal"],
+            "abstract": record["abstract"],
+            "url": record["url"],
+            "source": "doi",
+            "filename": "",
+        })
+        (d / "text.txt").write_text(record["abstract"], "utf-8")
+        write_meta(d, meta)
     return meta
 
 

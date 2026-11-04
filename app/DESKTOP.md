@@ -4,9 +4,9 @@
 
 ## 下载与安装预览包
 
-下载入口：[v0.6.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.6.0)。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
+下载入口：[v0.7.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.7.0)，附件以发布页实际提供为准。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
 
-1. 下载 [BioReader-v0.6.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.6.0/BioReader-v0.6.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
+1. 下载 [BioReader-v0.7.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.7.0/BioReader-v0.7.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
 2. 解压 ZIP，将 `BioReader.app` 拖入“应用程序”，或从解压目录直接打开。更新旧版前先退出正在运行的 BioReader。
 3. 双击打开 App。无需另装 Python 或手动启动浏览器／终端。AI 笔记需要在设置中配置模型接口和 API Key。
 
@@ -35,9 +35,17 @@ BIOREADER_PYTHON=/path/to/python3 ./app/build-macos.sh
 界面依赖已随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。AI 笔记需要在设置中配置可用的模型接口及 API Key；Key 以明文保存在本机设置文件中。导出 Markdown 或 Word 时，系统会显示保存文件对话框。
 
 
+## 可选的 Zotero 连接
+
+Zotero MCP 是独立运行的服务，不包含在 BioReader 安装包中。尚未安装时，可先在设置中保存 MCP 地址与本机存储目录；之后按 [Zotero 连接说明](README.md#连接-zotero-mcp) 安装、启动服务并测试连接。默认地址为 `http://127.0.0.1:8000/mcp`，默认目录为 `~/Zotero/storage`。
+
+`localhost` / `127.0.0.1` 指每位使用者自己的电脑，同样的地址不会连接开发者的文库。`localhost:23119/api/` 是 Zotero 本地 API，需要与另行启动的 MCP 服务地址区分。默认附件目录按运行时用户的主目录生成，安装包不预置个人文库配置或凭据。
+
+导入只读取用户选择的条目：元数据可独立导入，PDF 需为该目录内已下载的 Zotero 存储附件。复制到 BioReader 后，原 Zotero 文件和记录保持不变；命中已有来源或 DOI 时返回已有文献，可点击打开，不覆盖笔记。首版只有本机回环地址上的 MCP 可使用本机 PDF 导入；远端 MCP 仅支持元数据导入。Zotero 设置单独写入数据目录中的 `zotero.json`，不改变模型配置。
+
 ## 验证与限制
 
-v0.6.0 增加 PDF 选字解释／翻译／追问、按论文保存的问答和正文／补充材料引用跳转；保留蓝白界面、星标、标签、结构化资源表及 GEO 样品补充。工程验证覆盖隔离合成文献与模拟模型，不代表真实模型的回答准确率或科学解读质量；原生 WebKit 本轮未重新验收。具体自动回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)。
+v0.7.0 增加针对 54yyyu/zotero-mcp 的检索、元数据与本机存储 PDF 导入；保留原文问答、星标、标签和数据与复现表。本轮验证采用模拟 MCP 响应和隔离合成文件；没有连接私人 Zotero 库，也没有安装或运行用户的 Zotero MCP 服务。模拟协议检查不等于所有服务版本兼容或真实库端到端验收；原生 WebKit 本轮未重新验收。具体自动回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)。
 
 ### v0.4.0 历史发布快照
 
@@ -52,7 +60,7 @@ v0.4.0 的桌面包用于预览试用。应用内部使用系统 WebKit 和本�
 ```bash
 python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7'
 python -m unittest discover -s app/tests -v
-node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs
+node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs app/tests/test_zotero.cjs
 ```
 
 打包结果由构建机器的架构决定；本次发布预览包为 arm64。应用包作为 Release 附件提供，虚拟环境、个人论文库和编译产物不提交到源码仓库。

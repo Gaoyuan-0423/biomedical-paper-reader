@@ -283,10 +283,14 @@
     $('set-api-key').value = '';
     $('set-key-hint').textContent = s.has_api_key ? '当前已保存 Key：' + (s.api_key_masked || '已设置') : '尚未设置 Key';
     $('set-s2-hint').textContent = s.has_s2_api_key ? '已保存 Semantic Scholar Key（留空保持不变）' : '未设置；匿名额度较慢，免费申请 semanticscholar.org/product/api';
+    if (window.BioZotero) window.BioZotero.loadSettings();
     openModal('settings-modal', 'set-base-url');
   }
 
-  function closeSettings() { closeModal('settings-modal'); }
+  function closeSettings() {
+    if (window.BioZotero) window.BioZotero.closeSettings();
+    closeModal('settings-modal');
+  }
 
   async function saveSettings() {
     const body = {
@@ -2417,7 +2421,10 @@
       if (e.key === 'Escape') {
         if (modal) {
           e.preventDefault();
-          if (modal.id === 'input-modal') finishInput(null); else closeModal(modal.id);
+          if (modal.id === 'input-modal') finishInput(null);
+          else if (modal.id === 'settings-modal') closeSettings();
+          else if (modal.id === 'zotero-modal' && window.BioZotero) window.BioZotero.close();
+          else closeModal(modal.id);
         }
         if (exportMenu.open) { exportMenu.open = false; exportMenu.querySelector('summary').focus(); }
       }
@@ -2433,6 +2440,7 @@
       }
     });
     $('btn-settings').addEventListener('click', openSettings);
+    $('btn-zotero-import').addEventListener('click', () => window.BioZotero?.open());
     $('status-pill').addEventListener('click', openSettings);
     $('settings-close').addEventListener('click', closeSettings);
     $('settings-cancel').addEventListener('click', closeSettings);
@@ -2601,7 +2609,7 @@
     window.addEventListener('beforeunload', (e) => {
       rememberReadingPosition();
       flushReadingPositions();
-      if (state.pendingSave || state.saveInFlight || state.generating || !canLeaveResearch()) {
+      if (state.pendingSave || state.saveInFlight || state.generating || window.BioZotero?.isImporting() || !canLeaveResearch()) {
         flushSave();
         e.preventDefault();
         e.returnValue = '';
@@ -2611,6 +2619,19 @@
   }
 
   async function init() {
+    if (window.BioZotero) window.BioZotero.init({
+      request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
+      toast, showModal: openModal, hideModal: closeModal, onImported: updateListItem,
+      openSettings: () => {
+        openSettings();
+        $('zotero-settings-details').open = true;
+        $('zotero-settings-details').scrollIntoView({ block: 'nearest' });
+      },
+      openPaper: async paper => {
+        state.pendingPaper = paper; await openPaper();
+        return !!state.current && state.current.id === paper.id;
+      },
+    });
     if (window.BioChat) window.BioChat.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
       jump: jumpChatSource, toast,
