@@ -1,12 +1,33 @@
 (function () {
   'use strict';
   const PAPER_ID = /^[0-9a-f]{32}$/, MESSAGE_ID = /^[a-zA-Z0-9_-]{1,100}$/, SOURCE_ID = /^S[1-9][0-9]*$/;
-  const sessions = new Map();
+  const sessions = new Map(), renderedAnswers = new WeakMap();
   let hooks = {}, panel = null, active = null;
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const path = id => '/api/papers/' + id + '/chat';
   function restoreDraft(id) { try { return window.sessionStorage?.getItem('bioreader.chat.draft.' + id) || ''; } catch (_) { return ''; } }
-  function saveDraft(state) { try { window.sessionStorage?.setItem('bioreader.chat.draft.' + state.paper.id, state.draft); } catch (_) { /* In-memory draft remains available. */ } }
+  function saveDraft(state) {
+    try {
+      const store = window.sessionStorage;
+      store?.setItem('bioreader.chat.draft.' + state.paper.id, state.draft);
+      const context = state.draft.trim() && (state.pinned || state.contextRequired) ? { draft: state.draft, materialRevision: state.materialRevision, context: state.pinned, needsContext: !!state.contextRequired } : null;
+      store?.setItem('bioreader.chat.draft-context.' + state.paper.id, JSON.stringify(context));
+    } catch (_) { /* In-memory draft remains available. */ }
+  }
+  function restoreContext(paper, draft) {
+    if (!draft.trim()) return {};
+    try {
+      const saved = JSON.parse(window.sessionStorage?.getItem('bioreader.chat.draft-context.' + paper.id) || 'null');
+      if (!saved || saved.draft !== draft) return {};
+      const ctx = saved.context;
+      const documentExists = ctx?.document_id === 'main' ? paper.has_file : (paper.supplements || []).some(item => item.id === ctx?.document_id);
+      if (!saved.needsContext && saved.materialRevision === paper.material_revision && documentExists && validContext(ctx) && ctx.page <= 600 && (!ctx.selection || typeof ctx.selection === 'string' && ctx.selection.length <= 12000)) {
+        const name = ctx.document_id === 'main' ? '正文' : paper.supplements.find(item => item.id === ctx.document_id)?.filename || '补充材料';
+        return { pinned: { paper_id: paper.id, document_id: ctx.document_id, document_name: name, page: ctx.page, selection: ctx.selection || '' } };
+      }
+      return { contextRequired: true, notice: '上次提问所用材料或位置已失效。请确认 PDF 位置后点击“使用当前页”，或重新选择原文。' };
+    } catch (_) { return {}; }
+  }
   function contextFor(state) { return state.pinned || state.live; }
   function validContext(ctx) { return ctx && (ctx.document_id === 'main' || PAPER_ID.test(ctx.document_id || '')) && Number.isInteger(ctx.page) && ctx.page >= 1; }
   function sourceMap(message) { return new Map((Array.isArray(message.sources) ? message.sources : []).filter(s => SOURCE_ID.test(s.id || '')).map(s => [s.id, s])); }
@@ -14,15 +35,135 @@
     if (!MESSAGE_ID.test(message.id || '')) return esc(label);
     return '<button type="button" class="chat-source" data-chat-action="source" data-chat-message="' + esc(message.id) + '" data-chat-source="' + esc(source.id) + '">' + esc(label) + '</button>';
   }
+  // Render a small, explicit Markdown vocabulary. Model HTML is always text;
+  // citations are introduced only in prose, never inside links or code.
+  function markdownText(value) {
+    const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };
+    return String(value ?? '').replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (entity, name) => {
+      if (name[0] !== '#') return named[name.toLowerCase()] || entity;
+      const number = name[1].toLowerCase() === 'x' ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+      return number > 0 && number <= 0x10ffff && !(number >= 0xd800 && number <= 0xdfff) ? String.fromCodePoint(number) : entity;
+    });
+  }
+  function answerHTML(message, sources) {
+    if (message.status !== 'completed' || !window.marked?.lexer) return esc(message.content);
+    const previous = renderedAnswers.get(message);
+    if (previous && previous.content === message.content && previous.sources === message.sources) return previous.html;
+    function prose(text, citations) {
+      const safe = esc(markdownText(text));
+      return citations ? safe.replace(/\[(S[1-9][0-9]*)\]/g, (label, id) => sources.has(id) ? sourceButton(message, sources.get(id), label) : label) : safe;
+    }
+    function render(tokens, citations = true, depth = 0) {
+      return (tokens || []).map(token => {
+        if (depth > 32) return esc(token.raw || token.text || '');
+        const children = (allow = citations) => render(token.tokens, allow, depth + 1);
+        switch (token.type) {
+          case 'space': return '';
+          case 'text': return token.tokens ? children() : prose(token.text, citations);
+          case 'escape': return esc(token.text);
+          case 'html': return esc(token.raw || token.text);
+          case 'paragraph': return '<p>' + children() + '</p>';
+          case 'heading': { const level = Math.max(2, Math.min(6, Number(token.depth) || 2)); return '<h' + level + '>' + children() + '</h' + level + '>'; }
+          case 'strong': return '<strong>' + children() + '</strong>';
+          case 'em': return '<em>' + children() + '</em>';
+          case 'del': return '<del>' + children() + '</del>';
+          case 'br': return '<br>';
+          case 'hr': return '<hr>';
+          case 'code': return '<pre><code>' + esc(token.text) + '</code></pre>';
+          case 'codespan': return '<code>' + esc(markdownText(token.text)) + '</code>';
+          case 'blockquote': return '<blockquote>' + children() + '</blockquote>';
+          case 'list': {
+            const tag = token.ordered ? 'ol' : 'ul';
+            const start = Number.isSafeInteger(token.start) && token.start > 0 ? ' start="' + token.start + '"' : '';
+            return '<' + tag + (token.ordered ? start : '') + '>' + (token.items || []).map(item => '<li>' + (item.task ? (item.checked ? '☑ ' : '☐ ') : '') + render(item.tokens, citations, depth + 1) + '</li>').join('') + '</' + tag + '>';
+          }
+          case 'table': {
+            const cells = (row, tag) => '<tr>' + row.map(cell => '<' + tag + '>' + render(cell.tokens, citations, depth + 1) + '</' + tag + '>').join('') + '</tr>';
+            return '<div class="chat-table-scroll" tabindex="0" role="region" aria-label="回答中的表格"><table><thead>' + cells(token.header || [], 'th') + '</thead><tbody>' + (token.rows || []).map(row => cells(row, 'td')).join('') + '</tbody></table></div>';
+          }
+          case 'link': {
+            const label = children(false) || prose(token.text, false);
+            try {
+              const url = new URL(markdownText(token.href));
+              if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) return '<a href="' + esc(url.href) + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+            } catch (_) { /* Invalid and local URLs remain plain labels. */ }
+            return label;
+          }
+          case 'image': return prose(token.text, false);
+          default: return esc(token.raw || token.text || '');
+        }
+      }).join('');
+    }
+    let html;
+    try { html = render(window.marked.lexer(String(message.content || ''), { gfm: true, breaks: false })); }
+    catch (_) { html = '<pre>' + esc(message.content) + '</pre>'; }
+    renderedAnswers.set(message, { content: message.content, sources: message.sources, html });
+    return html;
+  }
+  function answerText(message) {
+    const sources = [...sourceMap(message).values()];
+    return String(message.content || '') + (sources.length ? '\n\n原文来源\n' + sources.map(source => '[' + source.id + '] ' + (source.document_name || '原文') + ' · PDF 第 ' + source.page + ' 页\n' + String(source.quote || '')).join('\n\n') : '');
+  }
+  function messageActions(message) {
+    if (message.role !== 'assistant' || message.status !== 'completed' || !String(message.content || '').trim() || !MESSAGE_ID.test(message.id || '')) return '';
+    const busy = active?.stream || active?.loading || active?.loadingEarlier;
+    const id = esc(message.id), appended = active?.appended?.has(message.id), appending = active?.appending?.has(message.id);
+    return '<div class="chat-message-actions">' +
+      (hooks.copyText ? '<button class="btn btn-ghost" type="button" data-chat-action="copy" data-chat-message="' + id + '"' + (busy || active?.copying?.has(message.id) ? ' disabled' : '') + '>复制回答与来源</button>' : '') +
+      (hooks.appendNote ? '<button class="btn btn-ghost" type="button" data-chat-action="append" data-chat-message="' + id + '"' + (busy || appended || appending ? ' disabled' : '') + '>' + (appended ? '已追加到笔记' : appending ? '正在保存…' : '追加到笔记') + '</button>' : '') + '</div>';
+  }
+  function prepareQuestion(action) {
+    const state = active, ctx = state && contextFor(state);
+    if (!state || state.loading || state.stream || !validContext(ctx)) return;
+    if (state.draft.trim()) {
+      state.notice = '输入框已有问题，请先发送或清空，再使用快捷提问。';
+      updateStatus(); panel.querySelector('#chat-input')?.focus(); return;
+    }
+    const scope = ctx.selection ? '当前选中的原文' : (ctx.document_name || '当前 PDF') + '第 ' + ctx.page + ' 页';
+    const prompts = {
+      'quick-page': '请解释' + scope + '的主要意思，列出关键概念，专业术语保留英文。',
+      'quick-methods': '请梳理' + scope + '中明确描述的方法：样品、分组、处理步骤及关键参数；未在所提供原文中出现的内容请标为未报告。',
+      'quick-limits': '请检查' + scope + '中结论的证据与局限，区分原文明示的局限和你的推断，不把当前片段未提及的内容当作整篇论文没有报告。',
+    };
+    if (!prompts[action]) return;
+    state.draft = prompts[action] + ' 仅根据本次提供的原文片段回答并标注来源，材料不足时请说明。';
+    state.pinned = { ...ctx }; state.contextRequired = false; state.notice = '问题已填入，可修改后发送。';
+    saveDraft(state);
+    const input = panel.querySelector('#chat-input'); if (input) { input.value = state.draft; input.focus(); }
+    updateStatus();
+  }
+  async function useAnswer(action, id) {
+    const state = active;
+    if (!state || state.stream || state.loading || state.loadingEarlier) return;
+    const message = state.messages.find(item => item.id === id);
+    if (!message || message.role !== 'assistant' || message.status !== 'completed' || !String(message.content || '').trim() || !MESSAGE_ID.test(message.id || '')) return;
+    const appending = action === 'append', hook = appending ? hooks.appendNote : hooks.copyText;
+    if (!hook || (appending && state.appended?.has(id))) return;
+    const busy = appending ? (state.appending ||= new Set()) : (state.copying ||= new Set());
+    if (busy.has(id)) return;
+    const version = state.version;
+    busy.add(id); state.notice = ''; updateHistory(); updateStatus();
+    try {
+      const result = await (appending ? hook({ paperId: state.paper.id, message }) : hook(answerText(message)));
+      if (appending && result !== true) throw new Error('笔记尚未保存，请重试。');
+      if (appending) (state.appended ||= new Set()).add(id);
+      if (active === state && state.version === version) state.notice = appending ? '回答及原文来源已追加到笔记。' : '已复制回答及原文来源。';
+    } catch (err) {
+      if (active === state && state.version === version) state.notice = (appending ? '追加失败：' : '复制失败：') + (err.message || String(err));
+    } finally {
+      busy.delete(id);
+      if (active === state && state.version === version) { updateHistory(); updateStatus(); }
+    }
+  }
   function messageHTML(message) {
     const user = message.role === 'user', sources = sourceMap(message);
-    const content = esc(message.content).replace(/\[(S[1-9][0-9]*)\]/g, (text, id) => !user && sources.has(id) ? sourceButton(message, sources.get(id), text) : text);
+    const content = user ? esc(message.content) : answerHTML(message, sources);
     const status = { pending: active?.stream?.assistantId === message.id ? '正在回答…' : '上一轮回复仍在结束或保存，可刷新对话查看状态。', interrupted: '回复已中断，已收到的内容保留。', error: '本次回复未完成，已收到的内容保留。' }[message.status] || '';
     const questionDocument = message.document_name || (message.document_id === 'main' ? '正文' : active?.paper.supplements?.find(d => d.id === message.document_id)?.filename || '补充材料');
-    return '<article class="chat-message chat-message-' + (user ? 'user' : 'assistant') + '" data-chat-message-id="' + esc(message.id) + '"><div class="chat-role">' + (user ? '你' : '阅读助手') + '</div><div class="chat-content">' + content + '</div>' +
+    return '<article class="chat-message chat-message-' + (user ? 'user' : 'assistant') + '" data-chat-message-id="' + esc(message.id) + '"><div class="chat-role">' + (user ? '你' : '阅读助手') + '</div><div class="chat-content' + (!user && message.status === 'completed' && window.marked?.lexer ? ' chat-markdown' : '') + '">' + content + '</div>' +
       (user && message.selection ? '<details class="chat-sources chat-selected-question"><summary>当时选中的原文 · ' + esc(questionDocument) + ' · 第 ' + esc(message.page) + ' 页</summary><blockquote>' + esc(message.selection) + '</blockquote></details>' : '') +
       (!user && status ? '<p class="chat-message-status">' + status + '</p>' : '') +
-      (!user && sources.size ? '<details class="chat-sources"><summary>原文来源 · ' + sources.size + '</summary>' + [...sources.values()].map(s => '<div>' + sourceButton(message, s, (s.document_name || '原文') + ' · 第 ' + s.page + ' 页 · [' + s.id + ']') + '<blockquote>' + esc(s.quote) + '</blockquote></div>').join('') + '</details>' : '') + '</article>';
+      (!user && sources.size ? '<details class="chat-sources"><summary>原文来源 · ' + sources.size + '</summary>' + [...sources.values()].map(s => '<div>' + sourceButton(message, s, (s.document_name || '原文') + ' · 第 ' + s.page + ' 页 · [' + s.id + ']') + '<blockquote>' + esc(s.quote) + '</blockquote></div>').join('') + '</details>' : '') + messageActions(message) + '</article>';
   }
   function updateContext() {
     const target = panel?.querySelector('#chat-context');
@@ -30,7 +171,10 @@
     const ctx = contextFor(active), valid = validContext(ctx);
     target.innerHTML = '<span class="chat-context-chip">' + (valid ? esc(ctx.document_name || (ctx.document_id === 'main' ? '正文' : '补充材料')) + ' · PDF 第 ' + ctx.page + ' 页' : '请选择可阅读的 PDF') + '</span>' +
       (ctx?.selection ? '<div class="chat-selection"><span title="' + esc(ctx.selection) + '">选区：' + esc(ctx.selection.slice(0, 180)) + (ctx.selection.length > 180 ? '…' : '') + '</span><button type="button" class="btn btn-ghost" data-chat-action="clear-selection">取消选区</button></div>' : '') +
-      (ctx?.selection ? '<div class="chat-quick"><button type="button" class="btn" data-chat-action="explain"' + (active.stream || active.loading ? ' disabled' : '') + '>解释选区</button><button type="button" class="btn" data-chat-action="translate"' + (active.stream || active.loading ? ' disabled' : '') + '>翻译选区</button></div>' : '');
+      (active.contextRequired ? '<div class="chat-context-pinned">请重新确认提问位置<button type="button" class="btn" data-chat-action="use-current-context"' + (!valid ? ' disabled' : '') + '>使用当前页</button></div>' : '') +
+      (active.pinned && !ctx?.selection ? '<div class="chat-context-pinned">提问位置已固定<button type="button" class="btn btn-ghost" data-chat-action="clear-selection">跟随当前页</button></div>' : '') +
+      (ctx?.selection ? '<div class="chat-quick"><button type="button" class="btn" data-chat-action="explain"' + (active.stream || active.loading ? ' disabled' : '') + '>解释选区</button><button type="button" class="btn" data-chat-action="translate"' + (active.stream || active.loading ? ' disabled' : '') + '>翻译选区</button></div>' : '') +
+      '<div class="chat-quick chat-reading-prompts" aria-label="快捷提问">' + [['quick-page', ctx?.selection ? '解释选区内容' : '解释本页'], ['quick-methods', ctx?.selection ? '梳理选区方法' : '梳理本页方法'], ['quick-limits', ctx?.selection ? '检查选区局限' : '检查本页局限']].filter(([action]) => !ctx?.selection || action !== 'quick-page').map(([action, label]) => '<button class="btn" type="button" data-chat-action="' + action + '"' + (!valid || active.stream || active.loading ? ' disabled' : '') + '>' + label + '</button>').join('') + '</div>';
   }
   function updateStatus() {
     if (!active || !panel) return;
@@ -38,7 +182,7 @@
     if (box) box.innerHTML = (state.error ? '<p class="chat-error" role="alert">' + esc(state.error) + '</p>' : '') + (state.notice ? '<p class="chat-notice" role="status">' + esc(state.notice) + '</p>' : '') +
       (state.stream ? '<div class="chat-stream-status" role="status">正在回答，收到内容后会即时显示。<button class="btn" type="button" data-chat-action="stop">停止</button></div>' : state.error && state.lastAttempt ? '<button type="button" class="btn" data-chat-action="retry">重试上一问题</button>' : '');
     const send = panel.querySelector('#chat-send');
-    if (send) send.disabled = !!state.stream || state.loading || !validContext(contextFor(state)) || !state.draft.trim();
+    if (send) send.disabled = !!state.stream || state.loading || state.contextRequired || !validContext(contextFor(state)) || !state.draft.trim();
     updateContext();
   }
   function updateHistory(prepend = false) {
@@ -91,7 +235,7 @@
     const assistant = state.messages.find(m => m.id === running.assistantId);
     if (assistant?.status === 'pending') assistant.status = 'interrupted';
     if (!running.assistantId && running.sentDraft && !state.draft) {
-      state.draft = running.body.message; saveDraft(state);
+      state.draft = running.body.message; state.pinned = { ...running.context }; saveDraft(state);
       if (active === state) { const input = panel.querySelector('#chat-input'); if (input) input.value = state.draft; }
     }
     state.notice = message;
@@ -101,12 +245,13 @@
     if (!paper || !PAPER_ID.test(paper.id || '')) { clear(); return; }
     const cached = sessions.get(paper.id);
     if (cached && cached.materialRevision !== paper.material_revision) {
-      stop(cached); cached.pinned = null; cached.lastAttempt = null; cached.materialRevision = paper.material_revision; cached.sourceVersion = (cached.sourceVersion || 0) + 1;
-      cached.notice = '原文材料已更新，请重新选择要提问的段落。';
+      stop(cached); cached.contextRequired = !!cached.draft.trim() && (!!cached.pinned || !!cached.contextRequired); cached.pinned = null; cached.lastAttempt = null; cached.materialRevision = paper.material_revision; cached.sourceVersion = (cached.sourceVersion || 0) + 1;
+      cached.notice = '原文材料已更新，请重新选择要提问的段落。'; saveDraft(cached);
     }
     if (active?.paper.id === paper.id) { active.paper = paper; updateStatus(); return active.loadPromise; }
     if (active) { saveDraft(active); stop(active); ++active.version; active.loading = active.loadingEarlier = false; }
-    if (!sessions.has(paper.id)) sessions.set(paper.id, { paper, materialRevision: paper.material_revision, messages: [], draft: restoreDraft(paper.id), live: { document_id: paper.has_file ? 'main' : '', document_name: '正文', page: 1, selection: '' }, pinned: null, version: 0, loading: false, loadingEarlier: false, stream: null, loaded: false, hasMore: false, error: '', notice: '', followBottom: true });
+    const draft = restoreDraft(paper.id);
+    if (!sessions.has(paper.id)) sessions.set(paper.id, { paper, materialRevision: paper.material_revision, messages: [], draft, live: { document_id: paper.has_file ? 'main' : '', document_name: '正文', page: 1, selection: '' }, pinned: null, version: 0, loading: false, loadingEarlier: false, stream: null, loaded: false, hasMore: false, error: '', notice: '', followBottom: true, ...restoreContext(paper, draft) });
     active = sessions.get(paper.id); active.paper = paper; render(); await load(active);
   }
   function clear() {
@@ -121,7 +266,7 @@
   async function askSelection(action, context) {
     const state = active;
     if (!state || !['ask', 'explain', 'translate'].includes(action) || (context?.paper_id && context.paper_id !== state.paper.id)) return;
-    if (context?.selection) state.pinned = { ...context };
+    if (context?.selection && validContext(context)) { state.pinned = { ...context }; state.contextRequired = false; saveDraft(state); }
     updateContext(); updateStatus();
     if (state.loadPromise) await state.loadPromise;
     if (active !== state) return;
@@ -133,14 +278,16 @@
     const state = active;
     if (!state || state.stream || state.loading || state.error?.startsWith('对话读取失败')) return;
     const ctx = contextFor(state);
+    if (state.contextRequired && !retryBody) { state.notice = '请先重新确认提问位置，再发送保留的问题。'; updateStatus(); return; }
     if (!validContext(ctx) && !retryBody) { hooks.toast?.('请先打开有效的 PDF 页。', 'error'); return; }
     const message = action === 'explain' ? '请解释这段选中的原文。' : action === 'translate' ? '请将这段选中的原文翻译成中文，并保留专业术语。' : state.draft.trim();
     const body = retryBody || { message, document_id: ctx.document_id, page: ctx.page, selection: ctx.selection || '', action };
     if (!body.message.trim()) return;
-    const running = { controller: new AbortController(), assistantId: null, terminal: false, body, sentDraft: !retryBody && action === 'ask' };
+    const running = { context: { ...ctx }, controller: new AbortController(), assistantId: null, terminal: false, body, sentDraft: !retryBody && action === 'ask' };
     state.stream = running; state.error = ''; state.notice = ''; state.lastAttempt = body; state.followBottom = true;
     if (action === 'ask' && (!retryBody || state.draft.trim() === body.message)) { state.draft = ''; saveDraft(state); const input = panel.querySelector('#chat-input'); if (input) input.value = ''; }
-    updateStatus();
+    if (state.pinned && !state.pinned.selection) state.pinned = null;
+    updateHistory(); updateStatus();
     const isCurrent = () => active === state && state.stream === running && !running.controller.signal.aborted;
     function event(value) {
       if (!isCurrent() || running.terminal) return;
@@ -169,7 +316,7 @@
         state.error = err.message || String(err);
         const assistant = state.messages.find(m => m.id === running.assistantId);
         if (assistant?.status === 'pending') assistant.status = 'interrupted';
-        if (!running.assistantId && !state.draft && action === 'ask') { state.draft = body.message; saveDraft(state); const input = panel.querySelector('#chat-input'); if (input) input.value = state.draft; }
+        if (!running.assistantId && !state.draft && action === 'ask') { state.draft = body.message; state.pinned = { ...ctx }; saveDraft(state); const input = panel.querySelector('#chat-input'); if (input) input.value = state.draft; }
       }
     } finally {
       if (state.stream === running) { state.stream = null; if (active === state) { updateHistory(); updateStatus(); } }
@@ -179,10 +326,13 @@
     const button = event.target.closest('[data-chat-action]');
     if (!button || button.disabled || !active) return;
     const state = active, action = button.dataset.chatAction;
+    if (['quick-page', 'quick-methods', 'quick-limits'].includes(action)) { prepareQuestion(action); return; }
+    if (action === 'copy' || action === 'append') { await useAnswer(action, button.dataset.chatMessage); return; }
     if (action === 'stop') { stop(); return; }
     if (action === 'reload') { await load(state); return; }
     if (action === 'earlier') { await load(state, true); return; }
-    if (action === 'clear-selection') { state.pinned = null; updateStatus(); return; }
+    if (action === 'use-current-context' && validContext(state.live)) { state.pinned = { ...state.live }; state.contextRequired = false; state.notice = '已使用当前 PDF 位置，请检查问题内容后发送。'; saveDraft(state); updateStatus(); return; }
+    if (action === 'clear-selection') { state.pinned = null; saveDraft(state); updateStatus(); return; }
     if (action === 'explain' || action === 'translate') { await askSelection(action, contextFor(state)); return; }
     if (action === 'retry' && state.lastAttempt) { await send(state.lastAttempt.action, state.lastAttempt); return; }
     if (action === 'source') {
@@ -205,7 +355,7 @@
     if (!next || panel === next) return;
     panel = next;
     panel.addEventListener('click', click);
-    panel.addEventListener('input', event => { if (event.target.id === 'chat-input' && active) { active.draft = event.target.value; saveDraft(active); updateStatus(); } });
+    panel.addEventListener('input', event => { if (event.target.id === 'chat-input' && active) { active.draft = event.target.value; if (!active.draft.trim()) { active.contextRequired = false; if (active.pinned && !active.pinned.selection) active.pinned = null; } saveDraft(active); updateStatus(); } });
     panel.addEventListener('submit', event => { if (event.target.id === 'chat-form') { event.preventDefault(); return send(); } });
     panel.addEventListener('keydown', event => { if (event.target.id === 'chat-input' && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); return send(); } });
     render();

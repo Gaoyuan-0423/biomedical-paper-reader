@@ -96,6 +96,8 @@
     workflowSaving: false,
     workflowVersion: 0,
     tab: 'preview',
+    readingMode: 'notes',
+    noteAppendBusy: false,
     pdf: null,
     pageWrappers: [],
     scale: 1,
@@ -154,6 +156,11 @@
   }
 
   function setWorkspaceView(view) {
+    if (view === 'library' && state.readingMode === 'focus') {
+      state.readingMode = state.tab === 'chat' ? 'chat' : 'notes';
+      document.body.classList.toggle('resources-wide', state.tab === 'resources');
+      updateReadingMode();
+    }
     const wasHidden = !$('pdf-scroll').clientWidth;
     const token = state.renderToken;
     document.body.dataset.view = view;
@@ -166,6 +173,69 @@
       if (token !== state.renderToken) return;
       if (wasHidden || !state.pdfView) rerenderPdf(); else paintVisiblePages();
     });
+  }
+
+  function updateReadingMode() {
+    document.body.dataset.readingMode = state.readingMode;
+    document.body.dataset.readingReady = String(!!state.current);
+    document.querySelectorAll('[data-reading-mode-button]').forEach(button => {
+      button.disabled = !state.current;
+      button.setAttribute('aria-pressed', String(button.dataset.readingModeButton === state.readingMode));
+    });
+  }
+
+  function setReadingMode(mode) {
+    if (!state.current || !['focus', 'notes', 'chat'].includes(mode) || !canLeaveResearch()) return false;
+    // Capture position before CSS changes the visible pane geometry.
+    const page = state.pdfView && $('pdf-scroll').clientWidth ? currentPage() : Number($('pdf-page').value) || state.pdfDeferredPage;
+    state.pdfDeferredPage = page;
+    if (mode !== 'focus') switchTab(mode === 'chat' ? 'chat' : 'preview');
+    state.readingMode = mode;
+    document.body.classList.toggle('resources-wide', mode !== 'focus' && state.tab === 'resources');
+    updateReadingMode();
+    setWorkspaceView(mode === 'focus' || !window.matchMedia('(max-width: 900px)').matches ? 'pdf' : 'notes');
+    const doc = state.pdf, token = state.renderToken;
+    requestAnimationFrame(() => {
+      if (state.pdf !== doc || token !== state.renderToken || !doc) return;
+      if (state.fitWidth) rerenderPdf({ page }); else goToPage(page, false);
+    });
+    return true;
+  }
+
+  async function copyChatText(text) {
+    if (navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(text); return; } catch (_) { /* Native WebKit fallback below. */ }
+    }
+    const previous = document.activeElement, input = document.createElement('textarea');
+    input.value = text; input.style.position = 'fixed'; input.style.opacity = '0';
+    document.body.appendChild(input); input.select();
+    try { if (!document.execCommand('copy')) throw new Error('无法复制，请手动选择回答文字。'); }
+    finally { input.remove(); previous?.focus(); }
+  }
+
+  async function appendChatNote({ paperId, message }) {
+    if (!state.current || state.current.id !== paperId) throw new Error('论文已切换，请回到原论文后重试。');
+    if (state.generating || state.materialBusy || state.noteAppendBusy) throw new Error('请等待当前生成或保存完成后再追加。');
+    if (!canLeaveResearch()) throw new Error('请先保存当前编辑内容。');
+    if (!message || !/^[a-zA-Z0-9_-]{1,100}$/.test(message.id || '') || message.role !== 'assistant' || message.status !== 'completed' || !message.content?.trim()) throw new Error('只能追加已完成的回答。');
+    const paper = state.current, marker = '<!-- bioreader-chat:' + message.id + ' -->';
+    state.noteAppendBusy = true;
+    try {
+      if (!await flushSave()) throw new Error('笔记保存失败，请先重试保存。');
+      if (state.current !== paper || state.generating || state.materialBusy) throw new Error('阅读状态已变化，请重试。');
+      if (!$('editor').value.includes(marker)) {
+        // Keep Markdown headings/lists/tables, but do not transfer model HTML,
+        // images or executable links into the note preview/export pipeline.
+        const safe = value => String(value || '').replace(/\\/g, '\\\\').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+        const sources = (message.sources || []).filter(s => /^S[1-9][0-9]*$/.test(s.id || '') && Number.isInteger(s.page) && s.page > 0);
+        const appendix = sources.map(s => '- ' + safe(s.id + ' · ' + (s.document_name || (s.document_id === 'main' ? '正文' : '补充材料')) + ' · PDF 第 ' + s.page + ' 页').replace(/\n/g, ' ') + '\n\n' + String(s.quote || '').split('\n').map(line => '> ' + safe(line)).join('\n')).join('\n\n');
+        $('editor').value += ($('editor').value.endsWith('\n\n') || !$('editor').value ? '' : '\n\n') + marker + '\n### 阅读问答摘录\n\n' + safe(message.content) + (appendix ? '\n\n**本次回答的原文来源**\n\n' + appendix : '') + '\n';
+        scheduleSave();
+        if (state.tab === 'preview') renderPreview();
+      }
+      if (!await flushSave()) throw new Error('摘录已保留在笔记草稿中，但保存失败；请重试，不会重复追加。');
+      return true;
+    } finally { state.noteAppendBusy = false; }
   }
 
   const modalFocus = new Map();
@@ -681,6 +751,7 @@
 
   // ---------- current paper ----------
   function renderHead() {
+    updateReadingMode();
     renderWorkflow();
     $('btn-capture-evidence').disabled = !state.current;
     const paper = state.current;
@@ -1367,7 +1438,7 @@
           if (fig.caption) children.push(new D.Paragraph({ children: [new D.TextRun({ text: fig.caption, italics: true, color: '6b7280', size: 21 })], spacing: { after: 160 } }));
           continue;
         }
-        if (!t || /^<!-- (?:bioreader-research-appendix:v1 sha256=[0-9a-f]{64}|\/bioreader-research-appendix:v1) -->$/.test(t)) continue;
+        if (!t || /^<!-- (?:bioreader-research-appendix:v1 sha256=[0-9a-f]{64}|\/bioreader-research-appendix:v1|bioreader-chat:[a-zA-Z0-9_-]{1,100}) -->$/.test(t)) continue;
         let hm;
         if ((hm = /^#{1,6}\s+(.*)$/.exec(t))) {
           const level = Math.min(4, t.match(/^#+/)[0].length);
@@ -1404,7 +1475,12 @@
   // ---------- tabs ----------
   function switchTab(name) {
     if (!['preview', 'edit', 'figures', 'evidence', 'resources', 'chat'].includes(name)) return;
+    const resize = state.readingMode === 'focus' || state.tab === 'resources';
+    const page = state.pdfView && $('pdf-scroll').clientWidth ? currentPage() : Number($('pdf-page').value) || state.pdfDeferredPage;
+    const doc = state.pdf;
     state.tab = name;
+    state.readingMode = name === 'chat' ? 'chat' : 'notes';
+    updateReadingMode();
     document.body.dataset.noteTab = name;
     document.body.classList.toggle('resources-wide', name === 'resources');
     document.querySelectorAll('#tabs .tab').forEach((b) => {
@@ -1421,6 +1497,9 @@
     if (name === 'evidence') openEvidence();
     if (name === 'resources') openResources();
     if (name === 'chat') openChat();
+    if (resize && name !== 'resources' && state.fitWidth && doc) requestAnimationFrame(() => {
+      if (state.pdf === doc) rerenderPdf({ page });
+    });
   }
 
   function canLeaveResearch() {
@@ -2153,6 +2232,9 @@
 
   function currentPage() {
     const scroller = $('pdf-scroll');
+    // Hidden narrow-screen panes report zero offsets for every page. Keep the
+    // last visible page instead of treating the final page as the current one.
+    if (scroller.clientWidth === 0 || scroller.clientHeight === 0) return Math.max(1, Math.min(state.pageWrappers.length || 1, Number($('pdf-page').value) || state.pdfDeferredPage || 1));
     const top = scroller.scrollTop + 40;
     let best = 1;
     for (const w of state.pageWrappers) {
@@ -2179,10 +2261,10 @@
     releasePdfCanvases();
   }
 
-  function rerenderPdf() {
+  function rerenderPdf(keepPage) {
     // A hidden narrow-screen view has no measurable width or page offsets.
     if (!state.pdf || !$('pdf-scroll').clientWidth || !$('pdf-scroll').clientHeight) return;
-    const page = state.pdfView ? currentPage() : state.pdfDeferredPage;
+    const page = Number.isInteger(keepPage?.page) ? keepPage.page : state.pdfView ? currentPage() : state.pdfDeferredPage;
     clearPdfSelection();
     rememberReadingPosition();
     state.renderToken++;
@@ -2396,6 +2478,7 @@
 
   // ---------- wiring ----------
   function initEvents() {
+    document.querySelectorAll('[data-reading-mode-button]').forEach(button => button.addEventListener('click', () => setReadingMode(button.dataset.readingModeButton)));
     $('clear-library-filters').addEventListener('click', clearLibraryFilters);
     $('notes-complete').addEventListener('click', () => saveWorkflow({ notes_incomplete: false }));
     $('btn-library-resources').addEventListener('click', async () => {
@@ -2420,6 +2503,7 @@
       button.addEventListener('click', () => setWorkspaceView(button.dataset.view));
     });
     $('btn-toggle-library').addEventListener('click', () => {
+      if (state.readingMode === 'focus') { setReadingMode('notes'); return; }
       const collapsed = document.body.classList.toggle('library-collapsed');
       $('btn-toggle-library').setAttribute('aria-expanded', String(!collapsed));
       $('btn-toggle-library').title = collapsed ? '展开文献库' : '收起文献库';
@@ -2621,7 +2705,7 @@
       if (scrollRaf) return;
       scrollRaf = requestAnimationFrame(() => {
         scrollRaf = null;
-        if (!state.pdfView) return;
+        if (!state.pdfView || !$('pdf-scroll').clientWidth || !$('pdf-scroll').clientHeight) return;
         $('pdf-page').value = currentPage();
         paintVisiblePages();
         rememberReadingPosition();
@@ -2671,7 +2755,7 @@
     });
     if (window.BioChat) window.BioChat.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
-      jump: jumpChatSource, toast,
+      jump: jumpChatSource, toast, copyText: copyChatText, appendNote: appendChatNote,
     });
     if (window.BioResources) window.BioResources.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),

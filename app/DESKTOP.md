@@ -4,9 +4,9 @@
 
 ## 下载与安装预览包
 
-下载入口：[v0.8.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.8.0)，附件以发布页实际提供为准。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
+下载入口：[v0.9.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)，附件以发布页实际提供为准。本次预览包适用于 Apple 芯片 Mac（arm64），不包含 Intel Mac、Windows 或 Linux 安装包。
 
-1. 下载 [BioReader-v0.8.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.8.0/BioReader-v0.8.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
+1. 下载 [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip)；需要校验时，同时下载发布页的 `SHA256SUMS.txt`。
 2. 解压 ZIP，将 `BioReader.app` 拖入“应用程序”，或从解压目录直接打开。更新旧版前先退出正在运行的 BioReader。
 3. 双击打开 App。无需另装 Python 或手动启动浏览器／终端。AI 笔记需要在设置中配置模型接口和 API Key。
 
@@ -34,6 +34,12 @@ BIOREADER_PYTHON=/path/to/python3 ./app/build-macos.sh
 
 界面依赖已随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。AI 笔记需要在设置中配置可用的模型接口及 API Key；Key 以明文保存在本机设置文件中。导出文件时使用现有的下载／保存流程。
 
+## 对照阅读与问答摘录
+
+顶部「专注原文」展开 PDF，「笔记对照」和「边读边问」分别打开笔记或问答。宽窗口可并排阅读，窄窗口仍按单面板切换；正文与补充 PDF 保留连续滚动、缩放和阅读位置。
+
+快捷问题按当前页或选区填入，修改后手动发送。回答可显示 Markdown 表格、列表与代码，点击来源先校验文件再定位。已完成回答可复制，或连同文件名、页码和原文摘录追加到已有笔记；原内容保留，重复点击不会重复追加，保存失败保留草稿。问答使用有界原文片段，不代替完整精读，也不自动执行工具任务。详见 [原文选字与问答](README.md#原文选字与问答)。
+
 ## 本机搜索与资源表
 
 侧栏「搜索正文与笔记」检索本机正文、补充 PDF 文本层和已保存笔记，不调用模型或联网。首次搜索旧 PDF 时生成本地文本缓存可能需要等待；无文本层的扫描件不能搜索。PDF 结果校验来源版本后跳页，有坐标时高亮；笔记结果打开已保存笔记，尚不定位笔记中的具体句子。
@@ -51,7 +57,7 @@ Zotero MCP 是独立运行的服务，不包含在 BioReader 安装包中。尚�
 
 ## 验证与限制
 
-v0.8.0 增加结构化样品整理、组合筛选、CSV／编号导出与全库本地搜索，保留 Zotero MCP 逐篇导入和原文问答。本轮验证使用隔离合成材料，不读取私人论文库或调用真实模型，未重新评测精读内容质量。搜索不包含 OCR、语义检索或跨论文 AI 问答；原生 WebKit 本轮未重新验收。具体自动回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)。
+v0.9.0 改进阅读布局、问答排版、上下文快捷问题和回答摘录，保留样品资源、全库搜索与 Zotero MCP 导入。验证范围及实际回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)；合成材料与模拟回答不等于真实模型或精读科学质量评测。问答仍限于所取原文片段，不包含整库 AI 问答或自主工具执行。原生 WebKit 与 macOS 保存对话框应以该验证记录列明的实际结果为准。
 
 ### v0.4.0 历史发布快照
 
