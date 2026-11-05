@@ -199,12 +199,20 @@ jobs:
         run: |
           python -c "import platform; assert platform.machine().lower() == 'arm64', 'This release requires a native arm64 runner'"
           test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
-          python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7' 'pyinstaller>=6,<7'
-          python -m unittest discover -s app/tests -v
+          # Match the tested local standalone interpreter. setup-python's
+          # framework build becomes ambiguous when v0.10.0 stages symlinks for
+          # MyGo signing; use it only to bootstrap the pinned uv executable.
+          python -m pip install 'uv==0.10.6'
+          python -m uv python install 3.12.11
+          managed_python="$(python -m uv python find --managed-python 3.12.11)"
+          "$managed_python" -m venv app/.desktop-venv
+          app/.desktop-venv/bin/python -c "import sys; assert sys.version_info[:3] == (3,12,11)"
+          app/.desktop-venv/bin/python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7' 'pyinstaller>=6,<7'
+          app/.desktop-venv/bin/python -m unittest discover -s app/tests -v
           node --test app/tests/test_*.cjs
           (cd app/mygo && go test ./...)
-          python scripts/build_mygo.py --version v0.10.0
-          python scripts/package_mygo.py --version v0.10.0 --commit "$EXPECTED_COMMIT"
+          app/.desktop-venv/bin/python scripts/build_mygo.py --version v0.10.0
+          app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.10.0 --commit "$EXPECTED_COMMIT"
           cp app/dist/mygo-release/BioReader-v0.10.0-macos-arm64.dmg "$PREVIEW_ASSETS/"
           cp app/dist/mygo-release/build-info.json app/dist/mygo-release/self-test.json app/dist/mygo-release/SHA256SUMS.txt "$PREVIEW_ASSETS/"
 
