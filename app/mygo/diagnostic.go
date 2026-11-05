@@ -24,6 +24,74 @@ var buildDirty = "true"
 const syntheticCaptionFirstLine = "Samples were collected from three independent synthetic groups."
 const syntheticCaptionSecondLine = "Each group was measured twice using the same imaging settings."
 
+const syntheticFigureObservation = "## Saved figure observation\n\n" +
+	"- Synthetic group A was measured twice.\n- Synthetic group B was measured twice.\n\n" +
+	"| Group | Repeats |\n| --- | --- |\n| A | 2 |\n| B | 2 |\n\n" +
+	"This is a pre-existing synthetic observation used only to check the desktop viewer. " +
+	"It is stored with the figure and must remain independent from the paper-level note. " +
+	"Opening, closing, and reopening the viewer must show the complete saved content " +
+	"without sending a model request, replacing the note, or reducing this paragraph to a card preview.\n\n" +
+	"Final saved observation sentence."
+
+// Runs inside the real native WebView after the existing locale/icon checks.
+// Click actual gallery entry points so a correctly exported but unwired module
+// cannot satisfy the packaged-app acceptance test.
+const nativeFigureReaderSmoke = `
+window.__bioreaderSmokeStage = 'saved figure observation';
+const waitForFigure = async (test, message) => {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    const result = test();
+    if (result) return result;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error(message);
+};
+const paperAddress = '/api/papers/' + papers[0].id;
+const beforeNoteResponse = await fetch(paperAddress);
+verify(beforeNoteResponse.ok, 'Could not read the synthetic paper before opening the viewer');
+const beforeNote = (await beforeNoteResponse.json()).notes;
+const figureResponse = await fetch(paperAddress + '/figures');
+verify(figureResponse.ok, 'Could not read saved figures');
+const savedFigure = (await figureResponse.json()).find(figure => figure.observation && figure.observation.includes('Final saved observation sentence.'));
+verify(savedFigure, 'Saved figure observation fixture is missing');
+const libraryEntry = await waitForFigure(() => [...document.querySelectorAll('.paper-open')].find(node => node.dataset.id === papers[0].id), 'Paper library entry was not rendered');
+libraryEntry.click();
+await waitForFigure(() => [...document.querySelectorAll('.paper-item.active')].some(node => node.dataset.id === papers[0].id), 'Synthetic paper did not open');
+document.querySelector('#view-figures').click();
+const thumbnail = await waitForFigure(() => [...document.querySelectorAll('#fig-grid [data-zoom]')].find(node => node.dataset.zoom === savedFigure.id), 'Figure thumbnail was not rendered');
+thumbnail.click();
+const assertFigureViewer = async () => {
+  const viewer = await waitForFigure(() => {
+    const node = document.querySelector('#figure-reader');
+    return node?.dataset.state === 'open' && node.dataset.imageState === 'ready' && node.dataset.notesState === 'ready' ? node : null;
+  }, 'Figure viewer did not load the saved image and observation');
+  const markdown = document.querySelector('#figure-reader-markdown');
+  verify(markdown.querySelector('h2')?.textContent.trim() === 'Saved figure observation', 'Saved observation heading was not rendered as Markdown');
+  verify(markdown.querySelectorAll('li').length === 2 && markdown.querySelectorAll('table tbody tr').length === 2, 'Saved observation list or table was not rendered');
+  verify(markdown.textContent.includes('Final saved observation sentence.') && markdown.textContent.length > 400, 'Saved observation was truncated');
+  const image = document.querySelector('#figure-reader-image');
+  verify(image.complete && image.naturalWidth > 0 && image.src.includes(paperAddress + '/figures/' + savedFigure.id + '.png'), 'Figure reader did not load the current paper image');
+  const imagePane = document.querySelector('#figure-reader-viewport').getBoundingClientRect();
+  const notePane = document.querySelector('#figure-reader-notes').getBoundingClientRect();
+  verify(imagePane.width > 0 && imagePane.height > 0 && notePane.width > 0 && notePane.height > 0 && (imagePane.right <= notePane.left + 1 || imagePane.bottom <= notePane.top + 1), 'Figure image and note panes are not separately laid out');
+  return viewer;
+};
+let viewer = await assertFigureViewer();
+viewer.querySelector('[data-figure-reader-action="close"]').click();
+await waitForFigure(() => !document.querySelector('#figure-reader'), 'Figure reader did not close');
+const reopen = [...document.querySelectorAll('#fig-grid [data-view-figure-notes]')].find(node => node.dataset.viewFigureNotes === savedFigure.id);
+verify(reopen, 'View notes action is missing');
+reopen.click();
+viewer = await assertFigureViewer();
+viewer.querySelector('[data-figure-reader-action="close"]').click();
+await waitForFigure(() => !document.querySelector('#figure-reader'), 'Reopened figure reader did not close');
+const afterNoteResponse = await fetch(paperAddress);
+verify(afterNoteResponse.ok && (await afterNoteResponse.json()).notes === beforeNote, 'Opening saved figure observations changed paper-level notes');
+const afterFiguresResponse = await fetch(paperAddress + '/figures');
+verify(afterFiguresResponse.ok && (await afterFiguresResponse.json()).find(figure => figure.id === savedFigure.id)?.observation === savedFigure.observation, 'Opening saved figure observations changed the stored observation');
+`
+
 func syntheticPDF() []byte {
 	// Keep the searchable text and PDF.js smoke marker, while exercising a
 	// standalone supplement title followed by smaller caption body lines.
@@ -144,6 +212,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		return err
 	}
 	var figures []struct {
+		ID      string `json:"id"`
 		Page    int    `json:"page"`
 		Caption string `json:"caption"`
 	}
@@ -151,10 +220,12 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		return err
 	}
 	completeCaption := false
+	figureID := ""
 	for _, figure := range figures {
 		if figure.Page == 1 && strings.Contains(figure.Caption, "Supplementary Figure 1") &&
 			strings.Contains(figure.Caption, syntheticCaptionFirstLine) && strings.Contains(figure.Caption, syntheticCaptionSecondLine) {
 			completeCaption = true
+			figureID = figure.ID
 			break
 		}
 	}
@@ -180,6 +251,16 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		return errors.New("native PDF parsing/search failed")
 	}
 	if gui {
+		observationJSON, err := json.Marshal(map[string]string{"observation": syntheticFigureObservation})
+		if err != nil {
+			return err
+		}
+		if figureID == "" {
+			return errors.New("supplementary figure has no ID for the saved-observation diagnostic")
+		}
+		if _, err = requestBytes(client, "PATCH", address+"/figures/"+figureID, "application/json", observationJSON, 200); err != nil {
+			return err
+		}
 		if err = runWindow(service, true); err != nil {
 			return err
 		}
@@ -189,6 +270,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		report["gui_tested"] = true
 		report["locale_tested"] = true
 		report["brand_icon_tested"] = true
+		report["figure_reader_tested"] = true
 	}
 	if _, err = requestBytes(client, "DELETE", address, "", nil, 200); err != nil {
 		return err
@@ -202,13 +284,13 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	}
 	report["checks"] = []string{"Real bundled sidecar on a random loopback socket", "Private owner handshake, required session, foreign-origin rejection", "Bundled frontend and native PDF import/retrieval/search", "Frozen backend extracts both smaller-font supplementary caption lines below a standalone figure title", "Unicode note persistence and deletion", "Child service exits when its owner pipe closes"}
 	if gui {
-		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render", "Chinese/English interface switching preserves the chat composer and Unicode draft, synchronizes both controls and persists the native dialog language", "Brand SVG loads and decodes in the native WebView")
+		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render", "Chinese/English interface switching preserves the chat composer and Unicode draft, synchronizes both controls and persists the native dialog language", "Brand SVG loads and decodes in the native WebView", "Gallery thumbnail and View notes open the saved figure observation as complete Markdown beside its local image; close/reopen preserves both observation and paper note")
 	}
 	return nil
 }
 
 func runDiagnostic(executable, reportPath string, gui bool) (resultErr error) {
-	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false, "caption_tested": false,
+	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false, "caption_tested": false, "figure_reader_tested": false,
 		"source_commit": buildCommit, "build_dirty": buildDirty != "false", "app_version": mygo.App.Version()}
 	defer func() {
 		if resultErr == nil {

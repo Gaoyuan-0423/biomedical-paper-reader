@@ -28,7 +28,7 @@
     } catch (_) { return null; }
   }
 
-  function createParser(marked) {
+  function createParser(marked, observation = false) {
     // The bundled Marked v12 renderer uses positional (href, title, text)
     // arguments. A private instance avoids changing chat/global parser options.
     const renderer = new marked.Renderer();
@@ -45,6 +45,7 @@
     renderer.link = (href, title, text) => {
       const source = SOURCE.exec(String(href || ''));
       if (source) {
+        if (observation) return text;
         // Match the canonical backend citation, including the visible ID.
         return text === source[2]
           ? '<a href="' + href + '" data-bio-note-source="true">' + text + '</a>' : text;
@@ -55,6 +56,9 @@
         (title ? ' title="' + escapeText(title) + '"' : '') + '>' + text + '</a>';
     };
     renderer.image = (href, title, text) => {
+      // Observations have no authenticated figure/citation map. Keep the model's
+      // image label as text instead of fetching or resolving an invented image.
+      if (observation) return escapeText(text || '');
       const figure = FIGURE.exec(String(href || ''));
       if (!figure) return escapeText(text || '图片');
       return '<img src="figure:' + figure[1] + '" data-bio-figure="' + figure[1] + '" alt="' + escapeText(text) + '"' +
@@ -63,21 +67,25 @@
     return new marked.Marked({ renderer, gfm: true, breaks: false, async: false });
   }
 
-  let parser = null, parserLibrary = null;
-  function parse(markdown) {
+  let parser = null, observationParser = null, parserLibrary = null;
+  function parse(markdown, options = {}) {
     const text = String(markdown ?? '');
     const library = global.marked;
     if (!library || typeof library.Marked !== 'function' || typeof library.Renderer !== 'function') {
       return '<pre>' + escapeLiteral(text) + '</pre>';
     }
     try {
-      if (parserLibrary !== library) { parser = createParser(library); parserLibrary = library; }
-      const result = parser.parse(text);
+      if (parserLibrary !== library) {
+        parser = createParser(library);
+        observationParser = createParser(library, true);
+        parserLibrary = library;
+      }
+      const result = (options?.profile === 'observation' ? observationParser : parser).parse(text);
       return typeof result === 'string' ? result : '<pre>' + escapeLiteral(text) + '</pre>';
     } catch (_) {
       return '<pre>' + escapeLiteral(text) + '</pre>';
     }
   }
 
-  global.BioMarkdown = { parse };
+  global.BioMarkdown = { parse, parseObservation: markdown => parse(markdown, { profile: 'observation' }) };
 })(window);

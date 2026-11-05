@@ -30,7 +30,7 @@ function harness(options = {}) {
   }
   const $ = (id) => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const context = vm.createContext({
-    document: { getElementById: $, createElement: element, querySelectorAll: () => [], addEventListener() {}, body: element() },
+    document: { getElementById: $, createElement: element, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, body: element() },
     window: { matchMedia: () => ({ matches: false }), devicePixelRatio: 1 },
     location: { pathname: '/' }, history: { replaceState() {} },
     setTimeout: () => 1, clearTimeout() {}, confirm: () => true,
@@ -43,7 +43,7 @@ function harness(options = {}) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/i18n-app.js'), 'utf8'), context);
   }
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { refreshUI, renderStatusPill, renderHead, requestText, finishInput, renderFigures, chatContext, toast, jumpNoteReference, prepareDesktopClose, appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { refreshUI, renderStatusPill, renderHead, requestText, finishInput, renderFigures, openLightbox, syncFigureReader, editFigureCaption, readSingleFigure, readFigures, chatContext, toast, jumpNoteReference, prepareDesktopClose, appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -1501,4 +1501,134 @@ test('changing interface language during generation keeps the reading mode and m
   assert.equal(h.$('save-status').textContent, 'Saved');
   await i18n.setLocale('zh-CN', { persist: false });
   assert.equal(h.$('editor').value, notes); assert.equal(h.$('save-status').textContent, '已保存');
+});
+
+test('gallery thumbnail and explicit notes action open the same saved observation without altering notes', () => {
+  const h = harness(), calls = [], trigger = {};
+  h.context.window.BioFigureReader = {open: (...args) => calls.push(args), sync() {}};
+  h.state.current.notes = 'Paper body'; h.$('editor').value = 'Unsaved body draft';
+  const figure = {id:'s001', label:'Supplementary Figure 1', caption:'Manual caption', observation:'## Complete saved figure notes\n\nFinal paragraph', page:4};
+  h.state.figures = [figure]; h.renderFigures(); h.openLightbox('s001', trigger);
+  assert.match(h.$('fig-grid').innerHTML, /data-zoom="s001"/); assert.match(h.$('fig-grid').innerHTML, /data-view-figure-notes="s001"/);
+  assert.equal(calls[0][0].figure, figure); assert.equal(calls[0][0].paperId, A); assert.equal(calls[0][1], trigger);
+  assert.equal(h.state.current.notes, 'Paper body'); assert.equal(h.$('editor').value, 'Unsaved body draft');
+});
+async function startFigureRead(h, pending) {
+  h.state.settings.vision_model = 'vision'; h.state.pendingFigure = 'f001';
+  h.api.readFigure = () => pending.promise;
+  const reading = h.readSingleFigure(); h.finishInput('Please explain'); await new Promise(setImmediate); return {reading};
+}
+
+test('single figure read merges only observation and refreshes an open viewer while keeping newer manual caption', async () => {
+  const h = harness(), pending = deferred(), syncs = [];
+  const figure = {id:'f001', caption:'Old caption', observation:'', width:800, page:2};
+  h.state.figures = [figure]; h.$('editor').value = 'Unchanged body draft';
+  h.context.window.BioFigureReader = {sync(value) {syncs.push(value);}};
+  const {reading} = await startFigureRead(h, pending);
+  figure.caption = 'New manual full caption'; h.state.openToken++;
+  pending.resolve({id:'f001',caption:'Old caption',observation:'## Saved\n\nFull tail',width:3,page:999}); await reading;
+  assert.equal(figure.caption,'New manual full caption'); assert.equal(figure.width,800); assert.equal(figure.page,2); assert.match(figure.observation,/Full tail/);
+  assert.equal(syncs.at(-1).figures[0],figure); assert.equal(h.$('editor').value,'Unchanged body draft'); assert.equal(h.state.figReading,false);
+});
+
+test('late single figure results cannot overwrite switched papers, replaced figures or newer observations', async () => {
+  for (const scenario of ['paper','material','replacement','observation','removed']) {
+    const h = harness(), pending = deferred(); const figure = {id:'f001',caption:'Original',observation:''}; h.state.figures=[figure]; h.state.current.material_revision=1;
+    const {reading}=await startFigureRead(h,pending);
+    if(scenario==='paper'){h.state.current={id:B,material_revision:1};h.state.figures=[{id:'f001',observation:'B answer'}];}
+    if(scenario==='material') h.state.current.material_revision=2;
+    if(scenario==='replacement') h.state.figures=[{id:'f001',caption:'New extracted full caption',observation:'New answer'}];
+    if(scenario==='observation') figure.observation='Newer manual answer';
+    if(scenario==='removed') h.state.figures=[];
+    const expected=JSON.stringify(h.state.figures);
+    h.api.figures=async()=>JSON.parse(expected);
+    pending.resolve({id:'f001',caption:'Old returned caption',observation:'Stale answer'}); await reading;
+    assert.equal(JSON.stringify(h.state.figures),expected,scenario); assert.equal(h.state.figReading,false);
+  }
+});
+
+test('failed batch refreshes earlier persisted observations without reporting a successful run', async () => {
+  const h=harness(), syncs=[];h.state.settings.vision_model='vision';h.state.tab='figures';h.state.figures=[{id:'f001',caption:'Manual',observation:''}];h.$('editor').value='Body draft';
+  h.context.window.BioFigureReader={sync(value){syncs.push(value);}};
+  stream(h,[{type:'stage',done:1,total:2},{type:'error',message:'读图请求超时，请稍后重试。'}]);
+  h.api.figures=async()=>[{id:'f001',caption:'Manual',observation:'First figure was saved'}];
+  await h.readFigures(false);
+  assert.equal(syncs.at(-1).figures[0].observation,'First figure was saved');assert.match(h.$('toast').textContent,/读图失败/);assert.doesNotMatch(h.$('toast').textContent,/读图完成/);assert.equal(h.$('editor').value,'Body draft');assert.equal(h.$('gen-status').hidden,true);assert.equal(h.state.figReading,false);
+});
+
+test('batch same-paper reselection completes and late old-paper batches leave new generation untouched', async () => {
+  for(const switchPaper of [false,true]) {
+    const h=harness(), network=deferred();h.state.settings.vision_model='vision';h.state.tab='figures';h.state.figures=[];
+    h.context.fetch=()=>network.promise;const reading=h.readFigures(false);h.state.openToken++;
+    let fetched=0;h.api.figures=async()=>{fetched++;return [{id:'f001',observation:'Saved A'}];};
+    if(switchPaper){h.state.current={id:B};h.state.figures=[{id:'f001',observation:'New B'}];h.state.generating={};h.$('gen-status').innerHTML='New paper task';}
+    stream(h,[{type:'done',figures:[{id:'f001',observation:'Saved A'}]}]);network.resolve(await h.context.fetch());await reading;
+    if(switchPaper){assert.equal(fetched,0);assert.equal(h.state.figures[0].observation,'New B');assert.equal(h.$('gen-status').innerHTML,'New paper task');assert.equal(h.$('gen-status').hidden,false);}
+    else{assert.equal(fetched,1);assert.equal(h.state.figures[0].observation,'Saved A');assert.equal(h.$('gen-status').hidden,true);}
+    assert.equal(h.state.figReading,false);
+  }
+});
+
+test('late figure GET cannot replace a newer refresh, re-extraction, caption edit or observation', async () => {
+  for(const scenario of ['refresh','replacement','caption','observation','revision','crop','splice']) {
+    const h=harness(), pending=deferred(), figure={id:'f001',caption:'First',observation:''};h.state.figures=[figure];h.state.current.material_revision=1;h.api.figures=()=>pending.promise;
+    const loading=h.fetchFigures();
+    if(scenario==='refresh'){h.api.figures=async()=>[{id:'f001',caption:'Refreshed',observation:'Saved'}];await h.fetchFigures();}
+    if(scenario==='replacement')h.state.figures=[{id:'f001',caption:'New full caption'}];
+    if(scenario==='caption')figure.caption='Manual caption';
+    if(scenario==='observation')figure.observation='Saved answer';
+    if(scenario==='revision')h.state.current.material_revision=2;
+    if(scenario==='crop')h.state.figures.push({id:'m002',caption:'New crop'});
+    if(scenario==='splice')h.state.figures.splice(0,1,{id:'f001',caption:'Replacement in same array'});
+    const expected=JSON.stringify(h.state.figures);pending.resolve([{id:'f001',caption:'Stale caption',observation:''}]);await loading;assert.equal(JSON.stringify(h.state.figures),expected,scenario);
+  }
+});
+
+
+test('a same-source replacement reloads the saved observation without applying the old response record', async () => {
+  const h=harness(), pending=deferred();h.state.tab='figures';h.state.figures=[{id:'f001',caption:'Old short caption',observation:''}];
+  const {reading}=await startFigureRead(h,pending);
+  h.state.figures=[{id:'f001',caption:'New full extracted caption',observation:''}];
+  let fetched=0;h.api.figures=async()=>{fetched++;return [{id:'f001',caption:'New full extracted caption',observation:'Saved compatible observation'}];};
+  pending.resolve({id:'f001',caption:'Old short caption',observation:'Saved compatible observation'});await reading;
+  assert.equal(fetched,1);assert.equal(h.state.figures[0].caption,'New full extracted caption');assert.equal(h.state.figures[0].observation,'Saved compatible observation');
+});
+
+
+test('caption saves preserve concurrently completed observations and cannot update a different paper', async () => {
+  for(const switchPaper of [false,true]) {
+    const h=harness(),pending=deferred(),figure={id:'f001',caption:'Old caption',observation:'',width:800};h.state.figures=[figure];h.api.patchFigure=()=>pending.promise;
+    const saving=h.editFigureCaption('f001');h.finishInput('New caption');await new Promise(setImmediate);
+    figure.observation='New completed model observation';
+    if(switchPaper){h.state.current={id:B};h.state.figures=[{id:'f001',caption:'B caption',observation:'B notes'}];}
+    pending.resolve({id:'f001',caption:'New caption',caption_edited:true,observation:'',width:5});await saving;
+    assert.equal(figure.observation,'New completed model observation');assert.equal(figure.width,800);
+    if(switchPaper){assert.equal(h.state.figures[0].caption,'B caption');assert.equal(h.state.figures[0].observation,'B notes');}
+    else{assert.equal(figure.caption,'New caption');assert.equal(figure.caption_edited,true);}
+  }
+});
+
+test('same-paper navigation token changes do not discard a valid figure refresh', async () => {
+  const h=harness(),pending=deferred();h.api.figures=()=>pending.promise;const loading=h.fetchFigures();h.state.openToken++;
+  pending.resolve([{id:'f001',observation:'Authoritative saved answer'}]);await loading;assert.equal(h.state.figures[0].observation,'Authoritative saved answer');
+});
+
+
+test('late extraction response reloads the saved observation instead of rolling it back', async () => {
+  const h=harness(),pending=deferred(),figure={id:'f001',caption:'Old short caption',observation:''};h.state.figures=[figure];h.state.tab='figures';h.api.reextract=()=>pending.promise;
+  const extracting=h.reextractFigures();figure.observation='Read completed after extraction';
+  h.api.figures=async()=>[{id:'f001',caption:'New full caption',observation:'Read completed after extraction'}];
+  pending.resolve({figures:[{id:'f001',caption:'New full caption',observation:''}]});await extracting;
+  assert.equal(h.state.figures[0].caption,'New full caption');assert.equal(h.state.figures[0].observation,'Read completed after extraction');
+});
+
+
+test('batch completion never applies an older figure array before the authoritative refresh arrives', async () => {
+  const h=harness(),refresh=deferred();h.state.settings.vision_model='vision';
+  h.state.figures=[{id:'f001',caption:'Latest manual caption',observation:'Latest saved observation'}];
+  stream(h,[{type:'done',figures:[{id:'f001',caption:'Old caption',observation:'Older batch result'}]}]);
+  h.api.figures=()=>refresh.promise;const reading=h.readFigures(false);await new Promise(setImmediate);
+  assert.equal(h.state.figures[0].caption,'Latest manual caption');assert.equal(h.state.figures[0].observation,'Latest saved observation');
+  refresh.resolve([{id:'f001',caption:'Latest manual caption',observation:'Latest saved observation'}]);await reading;
+  assert.equal(h.state.figures[0].observation,'Latest saved observation');assert.equal(h.$('gen-status').hidden,true);
 });

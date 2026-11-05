@@ -251,4 +251,28 @@
     "Markdown 渲染组件未能加载，请重新启动应用": "The Markdown renderer could not load. Restart the app.",
     "先在右上角「设置」里填写 API Key，再生成笔记": "Enter an API key in Settings at the top right before generating notes"
 });
+  window.BioI18n?.register({
+    "查看 {label} 与读图笔记": "View {label} and its reading notes",
+    "查看笔记": "View notes",
+    "读图笔记": "Figure notes",
+    "原图图注": "Source caption",
+    "还没有读图笔记": "No figure notes yet",
+    "这张图还没有已保存的读图笔记。可返回图库，点击「读图」生成。": "No reading notes have been saved for this figure. Return to the gallery and select Analyze figure to generate them.",
+    "图片暂时无法加载，请重试。": "The image could not load. Please try again.",
+    "适应窗口": "Fit to window",
+    "重新加载图片": "Reload image",
+    "放大图片": "Zoom in",
+    "缩小图片": "Zoom out",
+    "关闭图文阅读": "Close figure reader",
+    "图片区域，可滚动查看放大后的细节": "Image area; scroll to inspect zoomed details",
+    "读图笔记与原图图注": "Figure notes and source caption",
+    "这张图暂无图注。": "This figure has no caption.",
+    "图像缩放 {percent}%": "Image zoom {percent}%",
+    "{source} · PDF 第 {page} 页": "{source} · PDF page {page}",
+    "图片": "Figure",
+    "图文阅读组件未能加载，请重新打开应用": "The figure reader could not load. Restart the app.",
+    "读图结果格式无效，请重试。": "The figure analysis response was invalid. Please try again.",
+    "读图请求超时，请稍后重试。": "Figure analysis timed out. Please try again later.",
+    "无法连接读图模型，请检查网络或服务地址后重试。": "Could not connect to the vision model. Check your network or service URL and try again."
+});
 })();

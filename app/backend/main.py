@@ -1682,9 +1682,40 @@ async def _read_one_figure(settings: dict, d: Path, fig: dict, question: str = "
     return (await chat_once(settings["base_url"], settings["api_key"], settings["vision_model"], messages, max_tokens=1200)).strip()
 
 
+class _FigureObservationConflict(RuntimeError):
+    def __init__(self):
+        super().__init__("图片已删除或内容已更新，请重新打开后重试。")
+
+
+def _figure_source_identity(figure: dict) -> tuple:
+    return (figure.get("id"), figure.get("document_id", "main"), figure.get("page"),
+            tuple(figure.get("bbox") or ()), figure.get("parent"), figure.get("source"))
+
+
+def _save_figure_observation(d: Path, original: dict, observation: str, source_revision):
+    """Merge only this result into live records after the slow model request."""
+    with storage_lock:
+        if not (d / "meta.json").is_file():
+            raise _FigureObservationConflict()
+        figures = load_figures(d)
+        current = next((f for f in figures if f.get("id") == original["id"]), None)
+        revisions = read_meta(d).get("document_revisions", {})
+        if (current is None or _figure_source_identity(current) != _figure_source_identity(original)
+                or revisions.get(original.get("document_id", "main")) != source_revision
+                or current.get("observation", "") != original.get("observation", "")):
+            raise _FigureObservationConflict()
+        # Captions and other figures may have been edited while the model ran.
+        # Preserve them, and never resurrect a deleted figure from a snapshot.
+        current["observation"] = observation
+        save_figures(d, figures)
+        return current, figures
+
+
 async def _read_figures_events(settings: dict, d: Path, force: bool):
     """Async generator: {'type':'progress'} per figure, then {'type':'result', figures}."""
-    figures, todo = _figures_to_read(d, settings, force)
+    with storage_lock:
+        figures, todo = _figures_to_read(d, settings, force)
+        revisions = read_meta(d).get("document_revisions", {})
     if not todo:
         yield {"type": "result", "figures": figures}
         return
@@ -1695,13 +1726,13 @@ async def _read_figures_events(settings: dict, d: Path, force: bool):
             return fig["id"], await _read_one_figure(settings, d, fig)
 
     done = 0
+    originals = {f["id"]: f for f in todo}
     for coro in asyncio.as_completed([one(f) for f in todo]):
         fid, observation = await coro
+        original = originals[fid]
+        _, figures = _save_figure_observation(d, original, observation,
+                                              revisions.get(original.get("document_id", "main")))
         done += 1
-        for f in figures:
-            if f["id"] == fid:
-                f["observation"] = observation
-        save_figures(d, figures)
         yield {"type": "progress", "done": done, "total": len(todo), "figure": fid}
     yield {"type": "result", "figures": figures}
 
@@ -1732,6 +1763,10 @@ async def read_figures(paper_id: str, force: int = 0):
                     yield _sse({"type": "stage", "stage": "figures", **{k: v for k, v in ev.items() if k != "type"}})
                 else:
                     yield _sse({"type": "done", "figures": ev["figures"]})
+        except httpx.TimeoutException:
+            yield _sse({"type": "error", "message": "读图请求超时，请稍后重试。"})
+        except httpx.RequestError:
+            yield _sse({"type": "error", "message": "无法连接读图模型，请检查网络或服务地址后重试。"})
         except (UnsafeURLError, UpstreamError, RuntimeError, OSError) as exc:
             yield _sse({"type": "error", "message": str(exc)})
 
@@ -1748,19 +1783,27 @@ async def read_one_figure(paper_id: str, fid: str, body: FigureQuestion | None =
         raise HTTPException(400, "尚未设置 API Key")
     if not settings.get("vision_model"):
         raise HTTPException(400, "尚未设置读图模型（设置 → 读图模型）")
-    if not _figure_file(d, fid).is_file():
-        raise HTTPException(404, "figure not found")
-    figures = load_figures(d)
-    fig = next((f for f in figures if f["id"] == fid), None)
-    if fig is None:
-        raise HTTPException(404, "figure not found")
+    with storage_lock:
+        if not _figure_file(d, fid).is_file():
+            raise HTTPException(404, "figure not found")
+        figures = load_figures(d)
+        fig = next((f for f in figures if f["id"] == fid), None)
+        if fig is None:
+            raise HTTPException(404, "figure not found")
+        source_revision = read_meta(d).get("document_revisions", {}).get(fig.get("document_id", "main"))
     question = (body.question if body else "") or ""
     try:
-        fig["observation"] = await _read_one_figure(settings, d, fig, question)
+        observation = await _read_one_figure(settings, d, fig, question)
+        saved, _ = _save_figure_observation(d, fig, observation, source_revision)
+    except _FigureObservationConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(504, "读图请求超时，请稍后重试。") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(502, "无法连接读图模型，请检查网络或服务地址后重试。") from exc
     except (UnsafeURLError, UpstreamError) as exc:
         raise HTTPException(400, str(exc)) from exc
-    save_figures(d, figures)
-    return fig
+    return saved
 
 
 # ---------- notes generation ----------
