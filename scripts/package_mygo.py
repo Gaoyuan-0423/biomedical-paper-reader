@@ -46,6 +46,16 @@ def self_test(executable, report, commit, version):
     return diagnostic
 
 
+def uninstall_checked(installed):
+    uninstallers = list(installed.glob('*ninstall*.exe'))
+    if len(uninstallers) != 1:
+        raise RuntimeError('The installed package must contain exactly one uninstaller.')
+    subprocess.run([str(uninstallers[0]), '/S', f'_?={installed}'], check=True, timeout=120)
+    if (installed / 'BioReader.exe').exists() or (installed / 'BioReaderService/BioReaderService.exe').exists():
+        raise RuntimeError('Uninstaller did not remove the desktop executable and backend service.')
+    print('Validated Windows uninstaller: BioReader.exe and BioReaderService.exe removed.', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True)
@@ -89,9 +99,7 @@ def main():
                     frontend_matches(root, installed / 'BioReaderService/_internal/frontend')
                     self_test(installed / 'BioReader.exe', output / 'installer-self-test.json', args.commit, args.version)
                 finally:
-                    uninstallers = list(installed.glob('*ninstall*.exe'))
-                    if uninstallers:
-                        subprocess.run([str(uninstallers[0]), '/S', f'_?={installed}'], check=True, timeout=120)
+                    uninstall_checked(installed)
         else:
             dmg = output / f'BioReader-{args.version}-macos-{arch}.dmg'
             shutil.copy2(target / f'bioreader-{args.version[1:]}-{arch}.dmg', dmg)
@@ -112,7 +120,8 @@ def main():
     (output / 'build-info.json').write_text(json.dumps({'version': args.version, 'commit': args.commit,
         'desktop': 'egoist/mygo', 'mygo_version': 'v0.7.4', 'platform': f'{goos}-{arch}',
         'frontend_files': count, 'artifacts': artifacts, 'self_test': diagnostic,
-        'installer_tested': bool(args.test_installer and goos == 'windows')}, indent=2) + '\n', encoding='utf-8')
+        'installer_tested': bool(args.test_installer and goos == 'windows'),
+        'uninstaller_tested': bool(args.test_installer and goos == 'windows')}, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(artifacts, indent=2))
 
 

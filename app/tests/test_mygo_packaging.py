@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,6 +14,29 @@ SPEC.loader.exec_module(packaging)
 
 
 class MyGoPackagingTests(unittest.TestCase):
+    def test_uninstaller_must_exist_and_remove_both_executables(self):
+        with tempfile.TemporaryDirectory(prefix='bioreader-uninstall-check-') as directory:
+            installed = Path(directory)
+            desktop = installed / 'BioReader.exe'
+            service = installed / 'BioReaderService/BioReaderService.exe'
+            service.parent.mkdir()
+            desktop.write_bytes(b'synthetic executable')
+            service.write_bytes(b'synthetic sidecar')
+            with self.assertRaisesRegex(RuntimeError, 'exactly one uninstaller'):
+                packaging.uninstall_checked(installed)
+            (installed / 'Uninstall.exe').write_bytes(b'synthetic uninstaller')
+            with patch.object(packaging.subprocess, 'run') as run:
+                with self.assertRaisesRegex(RuntimeError, 'did not remove'):
+                    packaging.uninstall_checked(installed)
+                run.assert_called_once()
+            def remove_desktop_only(*args, **kwargs):
+                desktop.unlink()
+            with patch.object(packaging.subprocess, 'run', side_effect=remove_desktop_only):
+                with self.assertRaisesRegex(RuntimeError, 'did not remove'):
+                    packaging.uninstall_checked(installed)
+            with patch.object(packaging.subprocess, 'run', side_effect=lambda *args, **kwargs: service.unlink()):
+                packaging.uninstall_checked(installed)
+
     def test_frontend_must_match_committed_bytes_even_when_checkout_matches_bundle(self):
         with tempfile.TemporaryDirectory(prefix='bioreader-package-bytes-') as directory:
             root = Path(directory)
