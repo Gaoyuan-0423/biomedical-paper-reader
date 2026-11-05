@@ -27,14 +27,15 @@ from typing import Literal, Optional
 from urllib.parse import quote as url_quote
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, Query
-from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse, Response
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
 from external import LookupError_, fetch_crossref, fetch_related, normalize_doi
-from figures import crop_figure, load_figures, parse_pdf, save_figures
+from figures import FigureStorageError, crop_figure, load_figures, parse_pdf, save_figures
+from caption_migration import upgrade_captions
 from note_assets import illustrate_notes, markdown_bundle
 from reading_state import read_positions, save_position
 from reading_workflow import (DERIVED_FIELDS, SidecarError, annotate, atomic_json, defaults, evidence_lock,
@@ -108,6 +109,11 @@ FIGURE_QUESTION_SUFFIX = """
 读者就这张图追问（优先回答，读不清的部分如实说明）：{question}"""
 
 app = FastAPI(title="Biomedical Paper Reader", version="0.2.0")
+
+
+@app.exception_handler(FigureStorageError)
+async def figure_storage_error(_request, error):
+    return JSONResponse(status_code=409, content={"detail": str(error)})
 
 
 # ---------- storage helpers ----------
@@ -302,6 +308,8 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
             item = dict(fig, id=fid, document_id=document_id, document_name="正文" if document_id == "main" else filename)
             if old:
                 item["observation"] = old.get("observation", "")
+                if old.get("observation_language") in ("zh-CN", "en"):
+                    item["observation_language"] = old["observation_language"]
                 if old.get("caption_edited"):
                     item.update(caption=old["caption"], caption_edited=True)
             fresh.append(item)
@@ -434,6 +442,7 @@ class PaperPatch(BaseModel):
     reading_status: Optional[Literal['unread', 'skimmed', 'reading', 'completed']] = None
     reading_decision: Optional[Literal['pending', 'priority', 'reference', 'irrelevant']] = None
     notes_incomplete: Optional[bool] = None
+    notes_language: Optional[Literal['zh-CN', 'en']] = None
     notes_reviewed: bool = False
     notes_source_revision: Optional[int] = Field(default=None, ge=0)
     notes_source_snapshot: Optional[str] = Field(default=None, pattern=r'^[0-9a-f]{32}$')
@@ -1232,6 +1241,8 @@ def patch_paper(paper_id: str, body: PaperPatch):
                     raise HTTPException(422, '笔记来源版本不能超过当前材料版本')
                 meta['notes_material_revision'] = body.notes_source_revision
             meta["notes"] = notes
+            if body.notes_language is not None:
+                meta["notes_language"] = body.notes_language
             meta["notes_updated_at"] = _now()
         for field in ("reading_status", "reading_decision", "notes_incomplete"):
             value = getattr(body, field)
@@ -1535,7 +1546,9 @@ def export_note_bundle(paper_id: str, body: NoteExport):
 def illustrate_existing_notes(paper_id: str, body: NoteExport, all_figures: int = 0):
     d = paper_dir(paper_id)
     figures = [f for f in load_figures(d) if (d / 'figures' / f"{f['id']}.png").is_file()]
-    return {"notes": illustrate_notes(body.notes, figures, "deep" if all_figures else read_meta(d).get("notes_mode", "deep"), drop_unknown=False)}
+    meta = read_meta(d)
+    return {"notes": illustrate_notes(body.notes, figures, "deep" if all_figures else meta.get("notes_mode", "deep"),
+                                      drop_unknown=False, language=meta.get("notes_language", "zh-CN"))}
 
 
 # ---------- figures ----------
@@ -1564,7 +1577,17 @@ def _update_count(d: Path, figures: list[dict]) -> None:
 
 @app.get("/api/papers/{paper_id}/figures")
 def get_figures(paper_id: str):
-    return load_figures(paper_dir(paper_id))
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        meta = read_meta(directory)
+        sources = {"main": directory / "paper.pdf"} if meta.get("has_file") else {}
+        for supplement in meta.get("supplements", []):
+            document_id = supplement.get("id", "")
+            if isinstance(document_id, str) and re.fullmatch(r"[0-9a-f]{32}", document_id):
+                sources[document_id] = directory / "supplements" / (document_id + ".pdf")
+    # Parsing is outside storage_lock. The migrator rereads live records before
+    # merging captions, so a concurrent observation cannot be rolled back.
+    return upgrade_captions(directory, sources, storage_lock)
 
 
 @app.post("/api/papers/{paper_id}/figures/extract")
@@ -1622,6 +1645,8 @@ def patch_figure(paper_id: str, fid: str, body: FigurePatch):
                     f["caption_edited"] = True
                 if body.observation is not None:
                     f["observation"] = body.observation.strip()
+                    if not f["observation"]:
+                        f.pop("observation_language", None)
                 save_figures(d, figures)
                 return f
         raise HTTPException(404, "figure not found")
@@ -1660,26 +1685,37 @@ def _image_payload(path: Path) -> dict:
     return {"mime": "image/jpeg", "data": base64.b64encode(buf.getvalue()).decode("ascii")}
 
 
-def _figures_to_read(d: Path, settings: dict, force: bool) -> tuple[list[dict], list[dict]]:
+def _figures_to_read(d: Path, settings: dict, force: bool, *, all_figures: bool = False,
+                     language: str = "zh-CN") -> tuple[list[dict], list[dict]]:
     figures = load_figures(d)
     parents = [f for f in figures if not f.get("parent")]
     parents.sort(key=lambda f: (f.get("document_id", "main") != "main", f.get("document_id", "main"), f.get("page", 0), f.get("id", "")))
     limit = int(settings.get("max_figures") or 0)
-    selected = parents[:limit] if limit else []
-    todo = [f for f in selected if force or not f.get("observation")]
+    selected = parents if all_figures else (parents[:limit] if limit else [])
+    todo = [f for f in selected if force or not f.get("observation")
+            or (f.get("observation_language") or "zh-CN") != language]
     return figures, todo
 
 
-async def _read_one_figure(settings: dict, d: Path, fig: dict, question: str = "") -> str:
+async def _read_one_figure(settings: dict, d: Path, fig: dict, question: str = "", language: str = "zh-CN") -> str:
     image = _image_payload(d / "figures" / f"{fig['id']}.png")
     prompt = FIGURE_READ_PROMPT.format(label=fig.get("label", ""), caption=(fig.get("caption") or "无")[:1500])
+    if language == "en":
+        prompt = prompt.replace("用中文、Markdown 列表，≤400 字", "用英文、Markdown 列表，≤400 词")
+        prompt += ("\nOutput language: English. Write all observation headings and explanations in English. "
+                   "Use 'not legible' for unreadable details. Preserve gene names, identifiers and quoted source text.")
+    else:
+        prompt += "\n输出语言：简体中文。保留原始基因名、标识符和直接引用的原文。"
     if question.strip():
         prompt += FIGURE_QUESTION_SUFFIX.format(question=question.strip()[:500])
     messages = [{"role": "user", "content": [
         {"type": "text", "text": prompt},
         {"type": "image_url", "image_url": {"url": f"data:{image['mime']};base64,{image['data']}"}},
     ]}]
-    return (await chat_once(settings["base_url"], settings["api_key"], settings["vision_model"], messages, max_tokens=1200)).strip()
+    observation = (await chat_once(settings["base_url"], settings["api_key"], settings["vision_model"], messages, max_tokens=1200)).strip()
+    if not observation:
+        raise UpstreamError("读图模型没有返回有效内容，已有读图笔记已保留。")
+    return observation
 
 
 class _FigureObservationConflict(RuntimeError):
@@ -1692,7 +1728,7 @@ def _figure_source_identity(figure: dict) -> tuple:
             tuple(figure.get("bbox") or ()), figure.get("parent"), figure.get("source"))
 
 
-def _save_figure_observation(d: Path, original: dict, observation: str, source_revision):
+def _save_figure_observation(d: Path, original: dict, observation: str, source_revision, language: str = "zh-CN"):
     """Merge only this result into live records after the slow model request."""
     with storage_lock:
         if not (d / "meta.json").is_file():
@@ -1702,19 +1738,21 @@ def _save_figure_observation(d: Path, original: dict, observation: str, source_r
         revisions = read_meta(d).get("document_revisions", {})
         if (current is None or _figure_source_identity(current) != _figure_source_identity(original)
                 or revisions.get(original.get("document_id", "main")) != source_revision
-                or current.get("observation", "") != original.get("observation", "")):
+                or current.get("observation", "") != original.get("observation", "")
+                or (current.get("observation_language") or "zh-CN") != (original.get("observation_language") or "zh-CN")):
             raise _FigureObservationConflict()
         # Captions and other figures may have been edited while the model ran.
         # Preserve them, and never resurrect a deleted figure from a snapshot.
         current["observation"] = observation
+        current["observation_language"] = language
         save_figures(d, figures)
         return current, figures
 
 
-async def _read_figures_events(settings: dict, d: Path, force: bool):
+async def _read_figures_events(settings: dict, d: Path, force: bool, *, all_figures: bool = False, language: str = "zh-CN"):
     """Async generator: {'type':'progress'} per figure, then {'type':'result', figures}."""
     with storage_lock:
-        figures, todo = _figures_to_read(d, settings, force)
+        figures, todo = _figures_to_read(d, settings, force, all_figures=all_figures, language=language)
         revisions = read_meta(d).get("document_revisions", {})
     if not todo:
         yield {"type": "result", "figures": figures}
@@ -1723,18 +1761,27 @@ async def _read_figures_events(settings: dict, d: Path, force: bool):
 
     async def one(fig: dict) -> tuple[str, str]:
         async with sem:
-            return fig["id"], await _read_one_figure(settings, d, fig)
+            return fig["id"], await _read_one_figure(settings, d, fig, language=language)
 
     done = 0
     originals = {f["id"]: f for f in todo}
-    for coro in asyncio.as_completed([one(f) for f in todo]):
-        fid, observation = await coro
-        original = originals[fid]
-        _, figures = _save_figure_observation(d, original, observation,
-                                              revisions.get(original.get("document_id", "main")))
-        done += 1
-        yield {"type": "progress", "done": done, "total": len(todo), "figure": fid}
-    yield {"type": "result", "figures": figures}
+    tasks = [asyncio.create_task(one(f)) for f in todo]
+    try:
+        for coro in asyncio.as_completed(tasks):
+            fid, observation = await coro
+            original = originals[fid]
+            _, figures = _save_figure_observation(d, original, observation,
+                                                  revisions.get(original.get("document_id", "main")), language)
+            done += 1
+            yield {"type": "progress", "done": done, "total": len(todo), "figure": fid}
+        yield {"type": "result", "figures": figures}
+    finally:
+        # A failed or cancelled all-figure run must not leave queued vision
+        # requests running after its response has ended.
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def _sse(event: dict) -> str:
@@ -1743,10 +1790,12 @@ def _sse(event: dict) -> str:
 
 class FigureQuestion(BaseModel):
     question: str = ""
+    language: Literal["zh-CN", "en"] = "zh-CN"
 
 
 @app.post("/api/papers/{paper_id}/figures/read")
-async def read_figures(paper_id: str, force: int = 0):
+async def read_figures(paper_id: str, force: int = 0, scope: Literal["limited", "all"] = "limited",
+                       language: Literal["zh-CN", "en"] = "zh-CN"):
     """Run the vision model over main figures (SSE progress), caching observations."""
     d = paper_dir(paper_id)
     settings = load_settings()
@@ -1756,9 +1805,9 @@ async def read_figures(paper_id: str, force: int = 0):
         raise HTTPException(400, "尚未设置读图模型（设置 → 读图模型）")
 
     async def generate():
-        yield _sse({"type": "start", "model": settings["vision_model"]})
+        yield _sse({"type": "start", "model": settings["vision_model"], "language": language})
         try:
-            async for ev in _read_figures_events(settings, d, bool(force)):
+            async for ev in _read_figures_events(settings, d, bool(force), all_figures=scope == "all", language=language):
                 if ev["type"] == "progress":
                     yield _sse({"type": "stage", "stage": "figures", **{k: v for k, v in ev.items() if k != "type"}})
                 else:
@@ -1792,9 +1841,10 @@ async def read_one_figure(paper_id: str, fid: str, body: FigureQuestion | None =
             raise HTTPException(404, "figure not found")
         source_revision = read_meta(d).get("document_revisions", {}).get(fig.get("document_id", "main"))
     question = (body.question if body else "") or ""
+    language = body.language if body else "zh-CN"
     try:
-        observation = await _read_one_figure(settings, d, fig, question)
-        saved, _ = _save_figure_observation(d, fig, observation, source_revision)
+        observation = await _read_one_figure(settings, d, fig, question, language)
+        saved, _ = _save_figure_observation(d, fig, observation, source_revision, language)
     except _FigureObservationConflict as exc:
         raise HTTPException(409, str(exc)) from exc
     except httpx.TimeoutException as exc:
@@ -1812,7 +1862,8 @@ MODE_NAMES = {"deep": "完整精读", "quick": "速读筛选"}
 
 
 @app.post("/api/papers/{paper_id}/read")
-async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
+async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1,
+                     language: Literal["zh-CN", "en"] = "zh-CN"):
     with storage_lock:
         d = paper_dir(paper_id)
         meta = read_meta(d)
@@ -1842,6 +1893,7 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
         chunks: list[str] = []
         try:
             yield _sse({"type": "start", "mode": mode, "model": settings["model"], "mode_name": MODE_NAMES[mode],
+                        "language": language,
                         "material_revision": meta["material_revision"], 'notes_revision': meta['notes_revision'],
                         'notes_source_snapshot': generation if mode == 'deep' else ''})
             source_input, original_sources, truncated = text, [], False
@@ -1851,7 +1903,7 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
             figures_for_prompt: list[dict] = []
             if use_figures:
                 if settings.get("vision_model") and mode != "quick":
-                    async for ev in _read_figures_events(settings, d, force=False):
+                    async for ev in _read_figures_events(settings, d, force=False, language=language):
                         if ev["type"] == "progress":
                             yield _sse({"type": "stage", "stage": "figures", "done": ev["done"], "total": ev["total"],
                                         "message": f"读图模型正在观察图片 {ev['done']}/{ev['total']}"})
@@ -1882,7 +1934,7 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
                     validate_source_snapshot(d, read_meta(d), final_sources)
                     snapshot = ns.save_snapshot(d, generation, meta, final_sources)
             messages = build_messages(body_text, mode, meta_for_prompt, figures=figures_for_prompt,
-                                      direction=settings.get("research_direction", ""))
+                                      direction=settings.get("research_direction", ""), language=language)
             yield _sse({"type": "stage", "stage": "write", "message": f"{settings['model']} 正在撰写{MODE_NAMES[mode]}笔记…"})
             async for piece in stream_chat(settings["base_url"], settings["api_key"], settings["model"], messages,
                                            max_tokens=max_tokens, require_done=mode == 'deep'):
@@ -1895,7 +1947,7 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
                 notes = ns.bind_citations(notes, snapshot)
             if use_figures:
                 available = [f for f in figures_for_prompt if (d / "figures" / f"{f['id']}.png").is_file()]
-                notes = illustrate_notes(notes, available, mode)
+                notes = illustrate_notes(notes, available, mode, language=language)
             with storage_lock:
                 current = read_meta(d)
                 if ns.note_state(current) != ns.note_state(meta):
@@ -1904,6 +1956,7 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
                 current['notes_revision'] += 1
                 current['notes_source_snapshot'] = generation if mode == 'deep' else ''
                 current["notes_mode"] = mode
+                current["notes_language"] = language
                 current["notes_updated_at"] = _now()
                 current["notes_incomplete"] = False
                 current["notes_material_revision"] = meta["material_revision"]

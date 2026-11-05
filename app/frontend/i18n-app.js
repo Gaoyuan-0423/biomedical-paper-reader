@@ -252,6 +252,11 @@
     "先在右上角「设置」里填写 API Key，再生成笔记": "Enter an API key in Settings at the top right before generating notes"
 });
   window.BioI18n?.register({
+    "读图结果暂时无法刷新：{error}。请稍后重试。": "Figure notes could not be refreshed: {error}. Please try again shortly.",
+    "读图模型没有返回有效内容，已有读图笔记已保留。": "The figure model returned no usable content. Existing figure notes were kept.",
+    "图片记录文件损坏或无法读取，已停止更新以保留原数据。": "Figure records are damaged or unreadable. Updates were stopped to preserve the original data.",
+    "图片已删除或内容已更新，请重新打开后重试。": "The figure was deleted or updated. Reopen it and try again.",
+    "图注保存响应无效，请重试。": "The caption save response was invalid. Please try again.",
     "查看 {label} 与读图笔记": "View {label} and its reading notes",
     "查看笔记": "View notes",
     "读图笔记": "Figure notes",

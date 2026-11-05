@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -148,6 +149,121 @@ func requestBytes(client *http.Client, method, address, contentType string, body
 	return data, nil
 }
 
+func exerciseCaptionUpgrade(service *serviceProcess, client *http.Client, paperID, figureID string, initial []byte, report map[string]any) error {
+	address := service.ready.URL + "/api/papers/" + paperID
+	directory := filepath.Join(service.dataDirectory, "papers", paperID)
+	primary := filepath.Join(directory, "figures.json")
+	var legacy []map[string]any
+	if err := json.Unmarshal(initial, &legacy); err != nil {
+		return err
+	}
+	var expected map[string]any
+	for _, figure := range legacy {
+		if figure["id"] == figureID {
+			figure["caption"] = "Supplementary Figure 1"
+			figure["observation"] = syntheticFigureObservation
+			delete(figure, "caption_edited")
+			expected = figure
+		}
+	}
+	if expected == nil {
+		return errors.New("legacy caption diagnostic figure is missing")
+	}
+	png, err := requestBytes(client, "GET", address+"/figures/"+figureID+".png", "", nil, 200)
+	if err != nil {
+		return err
+	}
+	legacyJSON, err := json.Marshal(legacy)
+	if err != nil {
+		return err
+	}
+	// This directory belongs to runDiagnostic's disposable synthetic library.
+	// Simulate records saved by an old extractor without using a caption PATCH,
+	// which would correctly mark the text as a deliberate manual edit.
+	if err = os.WriteFile(primary, legacyJSON, 0600); err != nil {
+		return err
+	}
+	if err = os.Remove(filepath.Join(directory, "caption-migrations.json")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	check := func(data []byte) error {
+		var fresh []map[string]any
+		if err := json.Unmarshal(data, &fresh); err != nil {
+			return err
+		}
+		if len(fresh) != len(legacy) {
+			return errors.New("caption upgrade changed the figure count")
+		}
+		for _, figure := range fresh {
+			if figure["id"] != figureID {
+				continue
+			}
+			caption, _ := figure["caption"].(string)
+			if !strings.Contains(caption, syntheticCaptionFirstLine) || !strings.Contains(caption, syntheticCaptionSecondLine) {
+				return errors.New("opening legacy figures did not automatically restore both caption body lines")
+			}
+			figure["caption"] = expected["caption"]
+			if !reflect.DeepEqual(figure, expected) {
+				return errors.New("caption upgrade changed figure identity, crop, or saved observation")
+			}
+			return nil
+		}
+		return errors.New("caption upgrade removed the original figure ID")
+	}
+	upgraded, err := requestBytes(client, "GET", address+"/figures", "", nil, 200)
+	if err != nil {
+		return err
+	}
+	if err = check(upgraded); err != nil {
+		return err
+	}
+	afterPNG, err := requestBytes(client, "GET", address+"/figures/"+figureID+".png", "", nil, 200)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(png, afterPNG) {
+		return errors.New("automatic caption upgrade regenerated the existing crop")
+	}
+	report["caption_upgrade_tested"] = true
+	// A further explicit save preserves this generation as the recovery backup.
+	observation, err := json.Marshal(map[string]string{"observation": syntheticFigureObservation})
+	if err != nil {
+		return err
+	}
+	if _, err = requestBytes(client, "PATCH", address+"/figures/"+figureID, "application/json", observation, 200); err != nil {
+		return err
+	}
+	backupPath := filepath.Join(directory, "figures.json.bak")
+	backup, err := os.ReadFile(backupPath)
+	if err != nil {
+		return err
+	}
+	damaged := []byte(`[{"id":`)
+	if err = os.WriteFile(primary, damaged, 0600); err != nil {
+		return err
+	}
+	recovered, err := requestBytes(client, "GET", address+"/figures", "", nil, 200)
+	if err != nil {
+		return err
+	}
+	if err = check(recovered); err != nil {
+		return fmt.Errorf("figure backup recovery: %w", err)
+	}
+	retained, err := os.ReadFile(primary)
+	if err != nil || !bytes.Equal(retained, damaged) {
+		return errors.New("reading a figure backup overwrote the damaged original")
+	}
+	retained, err = os.ReadFile(backupPath)
+	if err != nil || !bytes.Equal(retained, backup) {
+		return errors.New("reading a figure backup changed the backup")
+	}
+	report["figure_backup_tested"] = true
+	// Restore the synthetic primary through an explicit API save for the later
+	// native viewer diagnostic; reading alone above must never perform this write.
+	_, err = requestBytes(client, "PATCH", address+"/figures/"+figureID, "application/json", observation, 200)
+	return err
+}
+
 func exerciseService(service *serviceProcess, report map[string]any, gui bool) error {
 	if !service.ready.Frozen {
 		return errors.New("diagnostic requires the bundled Python executable")
@@ -233,6 +349,9 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		return errors.New("supplementary figure caption lost its smaller-font body lines")
 	}
 	report["caption_tested"] = true
+	if err = exerciseCaptionUpgrade(service, client, id, figureID, data, report); err != nil {
+		return err
+	}
 	if _, err = requestBytes(client, "PATCH", address, "application/json", []byte(`{"notes":"# 合成诊断\n\nSynthetic note."}`), 200); err != nil {
 		return err
 	}
@@ -251,16 +370,6 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		return errors.New("native PDF parsing/search failed")
 	}
 	if gui {
-		observationJSON, err := json.Marshal(map[string]string{"observation": syntheticFigureObservation})
-		if err != nil {
-			return err
-		}
-		if figureID == "" {
-			return errors.New("supplementary figure has no ID for the saved-observation diagnostic")
-		}
-		if _, err = requestBytes(client, "PATCH", address+"/figures/"+figureID, "application/json", observationJSON, 200); err != nil {
-			return err
-		}
 		if err = runWindow(service, true); err != nil {
 			return err
 		}
@@ -282,7 +391,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	if strings.TrimSpace(string(data)) != "[]" {
 		return errors.New("diagnostic library not empty after deletion")
 	}
-	report["checks"] = []string{"Real bundled sidecar on a random loopback socket", "Private owner handshake, required session, foreign-origin rejection", "Bundled frontend and native PDF import/retrieval/search", "Frozen backend extracts both smaller-font supplementary caption lines below a standalone figure title", "Unicode note persistence and deletion", "Child service exits when its owner pipe closes"}
+	report["checks"] = []string{"Real bundled sidecar on a random loopback socket", "Private owner handshake, required session, foreign-origin rejection", "Bundled frontend and native PDF import/retrieval/search", "Frozen backend extracts both smaller-font supplementary caption lines below a standalone figure title", "Opening legacy title-only captions automatically restores both body lines without changing IDs, crops or saved observations", "Damaged figure records recover saved observations from a valid backup while leaving both original files unchanged", "Unicode note persistence and deletion", "Child service exits when its owner pipe closes"}
 	if gui {
 		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render", "Chinese/English interface switching preserves the chat composer and Unicode draft, synchronizes both controls and persists the native dialog language", "Brand SVG loads and decodes in the native WebView", "Gallery thumbnail and View notes open the saved figure observation as complete Markdown beside its local image; close/reopen preserves both observation and paper note")
 	}
@@ -290,7 +399,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 }
 
 func runDiagnostic(executable, reportPath string, gui bool) (resultErr error) {
-	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false, "caption_tested": false, "figure_reader_tested": false,
+	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false, "caption_tested": false, "caption_upgrade_tested": false, "figure_backup_tested": false, "figure_reader_tested": false,
 		"source_commit": buildCommit, "build_dirty": buildDirty != "false", "app_version": mygo.App.Version()}
 	defer func() {
 		if resultErr == nil {

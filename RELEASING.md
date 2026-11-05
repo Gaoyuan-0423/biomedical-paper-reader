@@ -8,13 +8,13 @@
 
 `main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 补发前核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。v0.3.3 现已正式发布。
 
-### 当前桌面预览版 v0.12.0
+### 当前桌面正式版 v0.12.1
 
-v0.12.0 使用 **Pre-release** 流程，保留 **v0.3.4** 为稳定版及 Latest，不运行会设置正式 Latest 的稳定版工作流。使用 [v0.12.0 双语说明](releases/v0.12.0.md)，运行 `python3 scripts/prepare_release.py v0.12.0`，将新标签绑定到已检查的源码提交。本次公开附件为以下三份程序包和一份合并清单：
+v0.12.1 在完整双平台验收后按正式 Release 发布并设置 Latest。后续通过验收的常规修复默认正式发布；需要公开试用的版本应单独注明 Pre-release。使用 [v0.12.1 双语说明](releases/v0.12.1.md)，运行 `python3 scripts/prepare_release.py v0.12.1`，将新标签绑定到已检查的源码提交。本次公开附件为以下三份程序包和一份合并清单：
 
-- `BioReader-v0.12.0-macos-arm64.dmg`
-- `BioReader-v0.12.0-windows-x64-setup.exe`
-- `BioReader-v0.12.0-windows-x64.zip`
+- `BioReader-v0.12.1-macos-arm64.dmg`
+- `BioReader-v0.12.1-windows-x64-setup.exe`
+- `BioReader-v0.12.1-windows-x64.zip`
 - `SHA256SUMS.txt`
 
 两平台桌面外壳使用 Go + MyGo v0.7.4，现有 Python 阅读服务和 PDF 依赖作为 `BioReaderService` 随包分发。用户不需安装 Python。默认资料目录保持不变：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`。同步发布不表示应用内自动更新或云端文库同步。
@@ -23,19 +23,19 @@ v0.12.0 使用 **Pre-release** 流程，保留 **v0.3.4** 为稳定版及 Latest
 
 在同一个已检查、已提交的干净源码版本上构建 macOS 与 Windows。原生构建入口为 [`app/build-macos.sh`](app/build-macos.sh) 和 [`app/build-windows.ps1`](app/build-windows.ps1)，读取 `SKILL.md` 的版本。构建工具需要 Go 1.27.3+、目标平台的 64 位 Python 3.10+ 和依赖下载网络；脚本创建独立 Python 构建环境。详细参数见 [MyGo 开发说明](app/mygo/README.md)及[桌面构建说明](app/DESKTOP.md)。
 
-已有依赖时可直接运行 `python scripts/build_mygo.py --version v0.12.0 --python /path/to/build-python`。`--skip-backend` 只用于开发，会标记 dirty，不能通过最终发布验收；`--skip-installer` 不会产生本次要求的 Windows 安装 EXE。
+已有依赖时可直接运行 `python scripts/build_mygo.py --version v0.12.1 --python /path/to/build-python`。`--skip-backend` 只用于开发，会标记 dirty，不能通过最终发布验收；`--skip-installer` 不会产生本次要求的 Windows 安装 EXE。
 
 Mac 构建结果在 `app/mygo/build/darwin-arm64/`。在仓库根目录执行：
 
 ```bash
-app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.12.0 --commit "$(git rev-parse HEAD)"
+app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.12.1 --commit "$(git rev-parse HEAD)"
 ```
 
 Windows x64 构建结果在 `app/mygo/build/windows-amd64/`。在一次性的 Windows 测试环境或 CI runner 中执行安装／卸载验收：
 
 ```powershell
 $sourceCommit = git rev-parse HEAD
-.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.12.0 --commit $sourceCommit --test-installer
+.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.12.1 --commit $sourceCommit --test-installer
 ```
 
 [`scripts/package_mygo.py`](scripts/package_mygo.py) 检查实际解压 ZIP 或挂载 DMG 内的前端字节、运行时报告中的源码提交／版本／dirty 标记，并运行随包原生诊断。Mac 还检查 DMG 和 App 签名完整性；这不等于 Apple 开发者签名或公证。Windows 的 `--test-installer` 额外运行静默安装、已安装程序诊断及卸载。正常便携包必须包含 `BioReader/BioReader.exe`、同级 `BioReaderService/` 及全部随附文件；不要沿用旧版只核对顶层 `_internal` 的方式。
@@ -44,7 +44,7 @@ $sourceCommit = git rev-parse HEAD
 
 #### GitHub 原生构建与草稿附件
 
-将同一已检查提交合并至 `main`，创建指向准确源码 SHA 的新标签和一个现有的草稿 Pre-release。运行 [桌面预览工作流](.github/workflows/desktop-preview.yml)，传入 `version`、完整的 `source_commit` 与数字 `release_id`。工作流只从 `main` 调度，核对草稿、标签与源码后，在 macOS arm64 / Windows x64 原生环境分别构建并运行测试；macOS 固定使用 uv 管理的独立 CPython 3.12.11，避免框架 Python 与侧车签名布局冲突。
+将同一已检查提交合并至 `main`，创建指向准确源码 SHA 的新标签和一个现有的草稿 Release。运行 [桌面预览工作流](.github/workflows/desktop-preview.yml)，传入 `version`、完整的 `source_commit` 与数字 `release_id`。工作流只从 `main` 调度，核对草稿、标签与源码后，在 macOS arm64 / Windows x64 原生环境分别构建并运行测试；macOS 固定使用 uv 管理的独立 CPython 3.12.11，避免框架 Python 与侧车签名布局冲突。
 
 构建任务先保存程序包、清单和诊断到 Actions artifacts。单独上传任务根据 Git 树核对前端文件数量、源码／版本、干净状态、原生 GUI 检查与程序摘要；Windows 还要求安装和卸载验证通过。它仅将三份程序附件上传到已存在的草稿：同名同摘要跳过，不同摘要拒绝覆盖。上传失败可重跑失败任务，继续使用同一次运行已保留的构建产物。工作流不发布 Release，不设置 Latest，也不替代最终合并的 `SHA256SUMS.txt`。`upload-preview-assets.yml` 仅保留为 v0.10.0 历史恢复流程，后续版本使用本工作流。
 
@@ -52,9 +52,9 @@ $sourceCommit = git rev-parse HEAD
 
 `BioReader --self-test /absolute/path/report.json --gui-test` 使用隔离临时资料，启动实际随包服务，检查会话限制、PDF／笔记持久化与子进程关闭，并在隐藏的 WKWebView／WebView2 中用 PDF.js 渲染合成 PDF。它覆盖这段原生自动化路径；系统保存对话框、外部浏览器、剪贴板和各 Windows 用户环境仍须按实际交互验证记录描述。没有 `--gui-test` 的检查只覆盖服务路径，不能写成原生窗口验收。不可在最终原生 CI 完成前预填“全部通过”，也不将合成材料和模拟模型测试称为科学阅读质量评测。
 
-合并两平台生成的 SHA-256 清单，逐项核对上述三个程序附件的文件名、字节数和摘要。`build-info.json`、诊断报告及 Actions 结果留作构建证据；它们不替代最终合并的 `SHA256SUMS.txt`。公开 Release 前保持草稿，等三份程序附件、合并清单和对应平台验证齐备，再以 **Pre-release** 发布并明确不设置 Latest。发布后核对标签提交、三份程序附件和清单、预发布标记及 v0.3.4 的稳定 Latest 状态；不覆盖旧标签。
+合并两平台生成的 SHA-256 清单，逐项核对上述三个程序附件的文件名、字节数和摘要。`build-info.json`、诊断报告及 Actions 结果留作构建证据；它们不替代最终合并的 `SHA256SUMS.txt`。公开 Release 前保持草稿，等三份程序附件、合并清单和对应平台验证齐备，再以正式版发布（`--prerelease=false --latest=true`）。发布后核对标签提交、三份程序附件和清单、正式发布标记及当前版本的 Latest 状态；不覆盖旧标签。
 
-本版新增图库读图笔记查看器。验收需覆盖缩略图与「查看笔记」入口、左右／上下布局、图像缩放、完整 Markdown 与空态，并确认打开已有观察不调用模型、不重新生成内容、不修改正文笔记。核对 HTML、危险链接、远程图片和内部伪引用的渲染边界，以及当前文献的图像来源。回归、浏览器、原生自动化和人工交互结果分别记录在 [App 验证文件](app/tests/README.md)；没有实际完成的检查不要写成通过。
+本版修复读图持久化、完整批量读取与已有图注升级。验收需覆盖缩略图与「查看笔记」入口、左右／上下布局、图像缩放、完整 Markdown 与空态，并确认打开已有观察不调用模型、不重新生成内容、不修改正文笔记。核对 HTML、危险链接、远程图片和内部伪引用的渲染边界，以及当前文献的图像来源。回归、浏览器、原生自动化和人工交互结果分别记录在 [App 验证文件](app/tests/README.md)；没有实际完成的检查不要写成通过。
 
 ### 桌面预览版 v0.9.0（历史）
 
@@ -114,13 +114,13 @@ ZIP 应保留 `BioReader.app` 的目录、权限和符号链接，解压后复�
 
 README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. Before the catch-up release on 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow. v0.3.3 has since been published.
 
-### Current desktop preview v0.12.0
+### Current desktop release v0.12.1
 
-v0.12.0 uses the **Pre-release** process. Keep **v0.3.4** as the stable Latest release and do not run the stable-release workflow that sets a new Latest. Use the [v0.12.0 bilingual notes](releases/v0.12.0.md), run `python3 scripts/prepare_release.py v0.12.0`, and bind the new tag to the checked source commit. Publish these three application packages and one combined checksum list:
+Publish v0.12.1 as a regular Release and Latest after complete native validation on both platforms. Subsequent validated maintenance releases use this policy; explicitly identify experimental previews separately. Use the [v0.12.1 bilingual notes](releases/v0.12.1.md), run `python3 scripts/prepare_release.py v0.12.1`, and bind the new tag to the checked source commit. Publish these three application packages and one combined checksum list:
 
-- `BioReader-v0.12.0-macos-arm64.dmg`
-- `BioReader-v0.12.0-windows-x64-setup.exe`
-- `BioReader-v0.12.0-windows-x64.zip`
+- `BioReader-v0.12.1-macos-arm64.dmg`
+- `BioReader-v0.12.1-windows-x64-setup.exe`
+- `BioReader-v0.12.1-windows-x64.zip`
 - `SHA256SUMS.txt`
 
 Both desktop shells use Go + MyGo v0.7.4. The existing Python reading backend and PDF dependencies ship inside `BioReaderService`; users do not install Python. Default library locations remain `~/Library/Application Support/BioReader/` on macOS and `%LOCALAPPDATA%\BioReader` on Windows. Synchronized publication does not provide an in-app updater or cloud library synchronization.
@@ -129,19 +129,19 @@ Both desktop shells use Go + MyGo v0.7.4. The existing Python reading backend an
 
 Build macOS and Windows from the same checked, clean, committed source revision. Native build entry points are [`app/build-macos.sh`](app/build-macos.sh) and [`app/build-windows.ps1`](app/build-windows.ps1); both read the version from `SKILL.md`. Build tools require Go 1.27.3+, native 64-bit Python 3.10+, and network access for dependencies. The scripts create an isolated Python build environment. See the [MyGo developer guide](app/mygo/README.md) and [desktop build guide](app/DESKTOP.md).
 
-With dependencies already installed, run `python scripts/build_mygo.py --version v0.12.0 --python /path/to/build-python`. The development-only `--skip-backend` option marks the build dirty and cannot pass final release validation. `--skip-installer` omits the Windows setup executable required for this release.
+With dependencies already installed, run `python scripts/build_mygo.py --version v0.12.1 --python /path/to/build-python`. The development-only `--skip-backend` option marks the build dirty and cannot pass final release validation. `--skip-installer` omits the Windows setup executable required for this release.
 
 The Mac build is written to `app/mygo/build/darwin-arm64/`. From the repository root, run:
 
 ```bash
-app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.12.0 --commit "$(git rev-parse HEAD)"
+app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.12.1 --commit "$(git rev-parse HEAD)"
 ```
 
 The Windows x64 build is written to `app/mygo/build/windows-amd64/`. Test installation and removal only on a disposable Windows environment or CI runner:
 
 ```powershell
 $sourceCommit = git rev-parse HEAD
-.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.12.0 --commit $sourceCommit --test-installer
+.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.12.1 --commit $sourceCommit --test-installer
 ```
 
 [`scripts/package_mygo.py`](scripts/package_mygo.py) checks frontend bytes inside the actual extracted ZIP or mounted DMG, verifies the runtime's commit/version/dirty metadata, and runs the packaged native diagnostic. Mac validation also checks DMG and application-signature integrity; these checks do not provide Apple Developer ID signing or notarization. On Windows, `--test-installer` also performs a silent install, checks the installed executable, and runs its uninstaller. The portable ZIP must contain `BioReader/BioReader.exe`, the sibling `BioReaderService/` directory, and every accompanying file. The old layout's top-level `_internal` check is no longer sufficient.
@@ -150,7 +150,7 @@ Outputs go to `app/dist/mygo-release/`: platform application assets, `SHA256SUMS
 
 #### Native GitHub builds and draft assets
 
-Merge the checked source into `main`, create a new tag at the exact source SHA, and create one draft pre-release. Run the [desktop preview workflow](.github/workflows/desktop-preview.yml) from `main` with `version`, the full `source_commit`, and numeric `release_id`. It validates the existing draft and tag, then builds and tests on native macOS arm64 and Windows x64 runners. macOS uses uv-managed standalone CPython 3.12.11 to avoid framework-Python signing layout conflicts.
+Merge the checked source into `main`, create a new tag at the exact source SHA, and create one draft release. Run the [desktop preview workflow](.github/workflows/desktop-preview.yml) from `main` with `version`, the full `source_commit`, and numeric `release_id`. It validates the existing draft and tag, then builds and tests on native macOS arm64 and Windows x64 runners. macOS uses uv-managed standalone CPython 3.12.11 to avoid framework-Python signing layout conflicts.
 
 Build jobs first preserve packages, manifests and diagnostics as Actions artifacts. Separate upload jobs verify the frontend count against the Git tree, source/version, clean build, native GUI diagnostics and artifact hashes; Windows also requires installation and removal checks. They upload application assets only to the existing draft, skip an identical asset and refuse to overwrite a different digest. Failed upload jobs can reuse artifacts from the same run. This workflow never publishes the Release, changes Latest or replaces the final combined `SHA256SUMS.txt`. The old `upload-preview-assets.yml` remains a historical v0.10.0 recovery workflow.
 
@@ -158,9 +158,9 @@ Build jobs first preserve packages, manifests and diagnostics as Actions artifac
 
 `BioReader --self-test /absolute/path/report.json --gui-test` uses temporary isolated storage, starts the actual bundled service, checks its session boundary, PDF/note persistence, and child shutdown, and renders a synthetic PDF through PDF.js inside a hidden native WKWebView/WebView2. This covers that automated native path. System save dialogs, external browsers, clipboard behavior, and users' Windows environments need separate acceptance records. Without `--gui-test`, the diagnostic covers only the service path. Do not predeclare success before final native CI completes, and do not describe synthetic fixtures or simulated models as scientific reading-quality evaluation.
 
-Combine both platforms' SHA-256 lists and verify each of the three application assets by filename, byte size, and digest. Retain `build-info.json`, diagnostic reports, and Actions results as build evidence; they do not replace the final combined `SHA256SUMS.txt`. Keep the Release in draft until all three application assets, the merged hash list, and platform validation are ready. Publish as a **Pre-release** without setting Latest, then verify the tag commit, assets, pre-release flag, and v0.3.4's stable Latest status. Do not overwrite an existing tag.
+Combine both platforms' SHA-256 lists and verify each of the three application assets by filename, byte size, and digest. Retain `build-info.json`, diagnostic reports, and Actions results as build evidence; they do not replace the final combined `SHA256SUMS.txt`. Keep the Release in draft until all three application assets, the merged hash list, and platform validation are ready. Publish with `--prerelease=false --latest=true`, then verify the tag commit, assets, regular-release flag and the current version's Latest status. Do not overwrite an existing tag.
 
-This version adds the gallery figure-note viewer. Acceptance should cover thumbnail and View notes entry points, side-by-side and stacked layouts, image zoom, complete Markdown and empty states. Confirm that opening saved observations does not call a model, regenerate content or modify paper-level notes. Check HTML, unsafe links, remote images and internal pseudo-link boundaries, and verify that the displayed image belongs to the current paper. Record regression, browser, native automated and manual results separately in the [App validation log](app/tests/README.md); do not mark unperformed checks as passed.
+This version fixes observation persistence, all-figure reading and legacy caption upgrades. Acceptance should cover thumbnail and View notes entry points, side-by-side and stacked layouts, image zoom, complete Markdown and empty states. Confirm that opening saved observations does not call a model, regenerate content or modify paper-level notes. Check HTML, unsafe links, remote images and internal pseudo-link boundaries, and verify that the displayed image belongs to the current paper. Record regression, browser, native automated and manual results separately in the [App validation log](app/tests/README.md); do not mark unperformed checks as passed.
 
 ### Desktop preview v0.9.0 (historical)
 

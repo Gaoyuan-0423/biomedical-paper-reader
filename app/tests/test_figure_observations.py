@@ -1,6 +1,7 @@
 """Persist model observations independently of paper notes; use synthetic PDFs only."""
 import asyncio
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -109,8 +110,9 @@ class FigureObservationTests(unittest.TestCase):
         self.assertIn(self.main_figure['caption'], prompt[0]['text'])
         self.assertTrue(prompt[1]['image_url']['url'].startswith('data:image/jpeg;base64,'))
         self.assertEqual(next(f for f in records if f['id'] == self.supplement['id']), self.supplement)
-        self.assertEqual({k: v for k, v in response.json().items() if k != 'observation'},
-                         {k: v for k, v in self.main_figure.items() if k != 'observation'})
+        self.assertEqual(response.json()['observation_language'], 'zh-CN')
+        self.assertEqual({k: v for k, v in response.json().items() if k not in ('observation', 'observation_language')},
+                         {k: v for k, v in self.main_figure.items() if k not in ('observation', 'observation_language')})
 
     def test_single_reread_replaces_only_target_observation_and_keeps_other_saved_observations(self):
         self.seed(self.main_figure, 'Previous main observation')
@@ -256,7 +258,7 @@ class FigureObservationTests(unittest.TestCase):
                 after = self.assert_reopened({self.main_figure['id']: MARKDOWN,
                                              self.supplement['id']: 'A newer observation on another figure'})
                 expected = changed['records']
-                next(f for f in expected if f['id'] == self.main_figure['id'])['observation'] = MARKDOWN
+                next(f for f in expected if f['id'] == self.main_figure['id']).update(observation=MARKDOWN, observation_language='zh-CN')
                 self.assertEqual(after, expected)
                 self.assertIn(changed['crop'], after)
                 if mode == 'single':
@@ -329,6 +331,198 @@ class FigureObservationTests(unittest.TestCase):
                         self.assertEqual([e['type'] for e in sse_events(response)], ['start', 'error'])
                     self.assertEqual((self.directory / 'figures.json').read_bytes(), changed['records'])
                     self.assert_reopened({})
+
+    def test_empty_model_results_never_clear_saved_observations_or_claim_batch_success(self):
+        self.seed(self.main_figure, MARKDOWN)
+        settings = {**main.load_settings(), 'max_figures': 1}
+        before = (self.directory / 'figures.json').read_bytes()
+        for result in ('', '\n \t'):
+            for mode in ('single', 'batch'):
+                with self.subTest(result=repr(result), mode=mode):
+                    with patch.object(main, 'chat_once', AsyncMock(return_value=result)), patch.object(main, 'load_settings', return_value=settings):
+                        response = (self.read_single(self.main_figure) if mode == 'single'
+                                    else self.client.post(self.url + '/figures/read?force=1'))
+                    if mode == 'single':
+                        self.assertEqual(response.status_code, 400, response.text)
+                    else:
+                        self.assertEqual([e['type'] for e in sse_events(response)], ['start', 'error'])
+                    self.assertIn('读图模型没有返回有效内容', response.text)
+                    self.assertEqual((self.directory / 'figures.json').read_bytes(), before)
+                    self.assert_reopened({self.main_figure['id']: MARKDOWN})
+
+    def test_explicit_all_reads_beyond_budget_and_cached_figures_without_changing_automatic_note_budget(self):
+        records = main.load_figures(self.directory)
+        for index in range(3, 12):
+            new = dict(self.main_figure, id=f'f{index:03d}', page=index, observation='')
+            records.append(new)
+            shutil.copy2(self.directory / 'figures' / (self.main_figure['id'] + '.png'),
+                         self.directory / 'figures' / (new['id'] + '.png'))
+        main.save_figures(self.directory, records)
+        selected = sorted(records, key=lambda f: (f['document_id'] != 'main', f['document_id'], f['page'], f['id']))
+        for figure in selected[:8]:
+            self.seed(figure, 'Already saved')
+        settings = {**main.load_settings(), 'max_figures': 8}
+        model = AsyncMock(return_value=MARKDOWN)
+        with patch.object(main, 'load_settings', return_value=settings), patch.object(main, 'chat_once', model):
+            limited = sse_events(self.client.post(self.url + '/figures/read'))
+            self.assertEqual([e['type'] for e in limited], ['start', 'done'])
+            model.assert_not_awaited()
+            full = sse_events(self.client.post(self.url + '/figures/read?scope=all'))
+            self.assertEqual(full[-1]['type'], 'done')
+            self.assertEqual({e['figure'] for e in full if e['type'] == 'stage'}, {f['id'] for f in selected[8:]})
+            self.assertEqual(model.await_count, len(selected) - 8)
+            _, automatic = main._figures_to_read(self.directory, settings, True)
+            self.assertEqual([f['id'] for f in automatic], [f['id'] for f in selected[:8]])
+            repeated = sse_events(self.client.post(self.url + '/figures/read?scope=all'))
+            self.assertEqual([e['type'] for e in repeated], ['start', 'done'])
+            self.assertEqual(model.await_count, len(selected) - 8)
+        self.assert_reopened({f['id']: ('Already saved' if f in selected[:8] else MARKDOWN) for f in selected})
+
+    def test_unrecoverable_storage_returns_error_and_never_overwrites_original_files(self):
+        primary, backup = self.directory / 'figures.json', self.directory / 'figures.json.bak'
+        primary.write_bytes(b'[{"id":"f001","observation":')
+        backup.write_bytes(b'broken backup')
+        original = primary.read_bytes()
+        for method, endpoint, body in [('get', '/figures', None),
+                                       ('patch', '/figures/' + self.main_figure['id'], {'caption': 'New caption'}),
+                                       ('post', '/figures/' + self.main_figure['id'] + '/read', {})]:
+            with self.subTest(endpoint=endpoint):
+                response = getattr(self.client, method)(self.url + endpoint, **({'json': body} if body is not None else {}))
+                self.assertEqual(response.status_code, 409, response.text)
+                self.assertIn('图片记录文件损坏或无法读取', response.text)
+                self.assertEqual(primary.read_bytes(), original)
+                self.assertEqual(backup.read_bytes(), b'broken backup')
+                self.assertEqual((self.directory / 'meta.json').read_bytes(), self.meta_before)
+
+    def test_language_specific_batch_cache_reuses_legacy_chinese_but_explicit_english_rereads(self):
+        for figure in self.figures:
+            self.seed(figure, '原先保存的中文观察')
+        model = AsyncMock(return_value='## Observations\n\nThe synthetic groups differ.')
+        with patch.object(main, 'chat_once', model):
+            legacy = sse_events(self.client.post(self.url + '/figures/read?scope=all'))
+            self.assertEqual([event['type'] for event in legacy], ['start', 'done'])
+            model.assert_not_awaited()
+            english = sse_events(self.client.post(self.url + '/figures/read?scope=all&language=en'))
+            self.assertEqual(english[-1]['type'], 'done')
+            self.assertEqual(model.await_count, len(self.figures))
+            for call in model.await_args_list:
+                prompt = call.args[3][0]['content'][0]['text']
+                self.assertIn('Output language: English', prompt)
+                self.assertNotIn('用中文、Markdown', prompt)
+            repeated = sse_events(self.client.post(self.url + '/figures/read?scope=all&language=en'))
+            self.assertEqual([event['type'] for event in repeated], ['start', 'done'])
+            self.assertEqual(model.await_count, len(self.figures))
+        records = self.assert_reopened({f['id']: '## Observations\n\nThe synthetic groups differ.' for f in self.figures})
+        self.assertTrue(all(f['observation_language'] == 'en' for f in records))
+        _, chinese_pending = main._figures_to_read(self.directory, main.load_settings(), False, all_figures=True)
+        self.assertEqual(len(chinese_pending), len(self.figures))
+
+    def test_single_language_survives_reextraction_and_human_edits_but_clears_with_empty_observation(self):
+        model = AsyncMock(return_value='## English observation\n\nAn unchanged synthetic finding.')
+        with patch.object(main, 'chat_once', model):
+            response = self.client.post(self.url + '/figures/' + self.main_figure['id'] + '/read',
+                                        json={'question': 'Explain Panel A.', 'language': 'en'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['observation_language'], 'en')
+        self.assertIn('Output language: English', model.await_args.args[3][0]['content'][0]['text'])
+        response = self.client.post(self.url + '/figures/extract')
+        record = next(f for f in response.json()['figures'] if f['id'] == self.main_figure['id'])
+        self.assertEqual(record['observation_language'], 'en')
+        self.assertEqual(record['observation'], '## English observation\n\nAn unchanged synthetic finding.')
+        edited = self.client.patch(self.url + '/figures/' + record['id'], json={'observation': 'My revised English interpretation'}).json()
+        self.assertEqual(edited['observation_language'], 'en')
+        cleared = self.client.patch(self.url + '/figures/' + record['id'], json={'observation': ''}).json()
+        self.assertNotIn('observation_language', cleared)
+        self.assertEqual(cleared['observation'], '')
+
+    def test_english_deep_and_quick_generation_uses_explicit_language_and_keeps_generated_figure_labels_english(self):
+        settings = {**main.load_settings(), 'vision_model': ''}
+        for mode in ('deep', 'quick'):
+            with self.subTest(mode=mode):
+                captured = []
+
+                async def model(*args, **kwargs):
+                    captured.extend(args[3])
+                    yield '## Summary\n\nFigure 1 shows a synthetic group comparison.'
+
+                with patch.object(main, 'load_settings', return_value=settings), patch.object(main, 'stream_chat', model):
+                    response = self.client.post(self.url + '/read?mode=' + mode + '&language=en')
+                events = sse_events(response)
+                self.assertEqual(events[-1]['type'], 'done', events)
+                self.assertIn('Output language: English', captured[0]['content'])
+                self.assertNotIn('写中文阅读报告', captured[0]['content'])
+                saved = self.client.get(self.url).json()
+                self.assertEqual(saved['notes_language'], 'en')
+                self.assertNotIn('原文图集', saved['notes'])
+                self.assertNotIn(' · 正文', saved['notes'])
+                self.assertIn('Main text', saved['notes'])
+                edited = self.client.patch(self.url, json={'notes': saved['notes'] + '\n\nMy own edit.'}).json()
+                self.assertEqual(edited['notes_language'], 'en')
+
+    def test_unsupported_output_language_is_rejected_without_model_calls_or_mutation(self):
+        before = (self.directory / 'figures.json').read_bytes()
+        endpoints = [('/figures/' + self.main_figure['id'] + '/read', {'language': 'fr'}),
+                     ('/figures/read?scope=all&language=fr', None), ('/read?language=fr', None)]
+        for endpoint, body in endpoints:
+            response = self.client.post(self.url + endpoint, **({'json': body} if body is not None else {}))
+            self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual((self.directory / 'figures.json').read_bytes(), before)
+        self.assertEqual((self.directory / 'meta.json').read_bytes(), self.meta_before)
+
+    def test_failed_or_cancelled_all_figure_run_cancels_inflight_requests_and_does_not_drain_queue(self):
+        records = main.load_figures(self.directory)
+        for index in range(3, 11):
+            record = dict(self.main_figure, id=f'f{index:03d}', page=index, observation='')
+            records.append(record)
+            shutil.copy2(self.directory / 'figures' / (self.main_figure['id'] + '.png'),
+                         self.directory / 'figures' / (record['id'] + '.png'))
+        main.save_figures(self.directory, records)
+        before = (self.directory / 'figures.json').read_bytes()
+
+        async def run(cancel):
+            started, stopped = [], []
+            both_started = asyncio.Event()
+
+            async def model(*args, **kwargs):
+                number = len(started)
+                started.append(number)
+                if len(started) == 2:
+                    both_started.set()
+                try:
+                    if number == 0 and not cancel:
+                        await both_started.wait()
+                        raise main.UpstreamError('Synthetic first-figure failure')
+                    await asyncio.sleep(30)
+                    return 'Must never be saved'
+                except asyncio.CancelledError:
+                    stopped.append(number)
+                    raise
+
+            async def consume():
+                return [event async for event in main._read_figures_events(
+                    main.load_settings(), self.directory, False, all_figures=True)]
+
+            with patch.object(main, 'chat_once', model):
+                task = asyncio.create_task(consume())
+                await asyncio.wait_for(both_started.wait(), timeout=2)
+                if cancel:
+                    task.cancel()
+                try:
+                    await task
+                    self.fail('The failed/cancelled batch must not succeed')
+                except (main.UpstreamError, asyncio.CancelledError):
+                    pass
+                count = len(started)
+                await asyncio.sleep(0.01)
+                self.assertEqual(len(started), count)
+                self.assertLess(count, len(records))
+                self.assertGreaterEqual(len(stopped), 1)
+                self.assertEqual(len(stopped), count if cancel else count - 1)
+
+        for cancel in (False, True):
+            with self.subTest(cancel=cancel):
+                asyncio.run(run(cancel))
+                self.assertEqual((self.directory / 'figures.json').read_bytes(), before)
 
 
 if __name__ == '__main__':
