@@ -7,8 +7,10 @@ trimmed to what this app needs. Coordinates are PDF points, top-left origin.
 from __future__ import annotations
 
 import json
+import os
 import re
 import statistics
+import tempfile
 import threading
 from functools import wraps
 from pathlib import Path
@@ -28,6 +30,9 @@ FOOTER = re.compile(r"\bet\s+al\b.*(?:doi\s*:|10\.\d{4,9}/)|^(?:copyright|©|dow
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.I)
 RENDER_SCALE = 2
 MAX_PAGES = 600
+# Increment when caption extraction behavior changes. Migration caches use this
+# independently of application versions, so routine releases do not rescan PDFs.
+CAPTION_EXTRACTION_VERSION = 2
 _pdfium_lock = threading.RLock()
 
 
@@ -599,6 +604,44 @@ def parse_pdf(pdf_path: Path, figures_dir: Path) -> dict:
     return {"pages": pages, "figures": figures, "metadata": metadata, "warnings": warnings}
 
 
+def extract_captions(pdf_source) -> list[dict]:
+    """Extract caption identities/text without rasterizing or writing any files.
+
+    Accept a path or an in-memory PDF snapshot. Unlike import's best-effort
+    parsing, fail the migration on a page error instead of caching partial work.
+    """
+    captions = []
+    pending = None
+    with pdfplumber.open(pdf_source) as source:
+        if len(source.pages) > MAX_PAGES:
+            raise ValueError(f"PDF 超过 {MAX_PAGES} 页，请拆分后导入")
+        for page in source.pages:
+            lines = reading_order(lines_from_words(page.extract_words(
+                extra_attrs=["size", "fontname"], use_text_flow=False)), page.width)
+            if pending:
+                continued = _continue_caption(pending["run"], page, lines)
+                if continued:
+                    pending["figure"]["caption"] = reflow_caption("\n".join(continued["parts"]))
+                    pending["run"] = continued
+                if not continued or not _caption_can_continue(continued):
+                    pending = None
+            runs = []
+            regions = figure_regions(page, lines, caption_runs=runs)
+            if regions:
+                candidates = []
+                runs = dict(runs)
+                for index, (label, caption, bbox) in enumerate(regions):
+                    figure = {"label": label, "page": page.page_number,
+                              "bbox": checked_bbox(bbox, page.width, page.height),
+                              "caption": reflow_caption(caption)}
+                    captions.append(figure)
+                    if index in runs and _caption_can_continue(runs[index]):
+                        candidates.append({"figure": figure, "run": runs[index]})
+                pending = candidates[0] if len(candidates) == 1 else None
+            page.close()
+    return captions
+
+
 @_serialized_pdfium
 def crop_figure(pdf_path: Path, figures_dir: Path, page_number: int, bbox, fid: str) -> dict:
     """Manual crop in PDF points for one page; the caller assigns id/label/caption.
@@ -618,15 +661,58 @@ def crop_figure(pdf_path: Path, figures_dir: Path, page_number: int, bbox, fid: 
     return {"id": fid, "page": int(page_number), "bbox": bbox, "width": w, "height": h, "source": "manual", "parent": None}
 
 
+class FigureStorageError(RuntimeError):
+    def __init__(self):
+        super().__init__("图片记录文件损坏或无法读取，已停止更新以保留原数据。")
+
+
+def _figure_records(path: Path) -> list[dict]:
+    records = json.loads(path.read_text("utf-8"))
+    if not isinstance(records, list):
+        raise ValueError("figure records must be an array")
+    seen = set()
+    for record in records:
+        if (not isinstance(record, dict) or not isinstance(record.get("id"), str)
+                or not re.fullmatch(r"[a-z]\d{3,6}", record["id"]) or record["id"] in seen
+                or any(record.get(field) is not None and not isinstance(record[field], str)
+                       for field in ("caption", "observation"))):
+            raise ValueError("invalid figure record")
+        seen.add(record["id"])
+    return records
+
+
 def load_figures(d: Path) -> list[dict]:
-    f = d / "figures.json"
-    if not f.is_file():
+    primary, backup = d / "figures.json", d / "figures.json.bak"
+    if not primary.exists() and not backup.exists():
         return []
+    for path in (primary, backup):
+        try:
+            return _figure_records(path)
+        except (OSError, ValueError, UnicodeError):
+            continue
+    # Never turn corrupt storage into a legitimate empty library and then save
+    # over it. A usable backup is read without mutating the damaged original.
+    raise FigureStorageError()
+
+
+def _atomic_figure_json(path: Path, records: list[dict]) -> None:
+    descriptor, temporary = tempfile.mkstemp(prefix=".figures-", suffix=".tmp", dir=path.parent)
     try:
-        return json.loads(f.read_text("utf-8"))
-    except json.JSONDecodeError:
-        return []
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(records, output, ensure_ascii=False, indent=1)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def save_figures(d: Path, figures: list[dict]) -> None:
-    (d / "figures.json").write_text(json.dumps(figures, ensure_ascii=False, indent=1), "utf-8")
+    primary, backup = d / "figures.json", d / "figures.json.bak"
+    if primary.exists() or backup.exists():
+        # Keep the previous complete generation. If the primary was damaged,
+        # load_figures selects the last valid backup instead of backing up junk.
+        previous = load_figures(d)
+        _atomic_figure_json(backup, previous)
+    _atomic_figure_json(primary, figures)

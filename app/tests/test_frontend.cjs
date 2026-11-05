@@ -1494,7 +1494,7 @@ test('changing interface language during generation keeps the reading mode and m
     return originalFetch(url, options);
   };
   await h.generateNotes();
-  assert.equal(request.url, '/api/papers/' + A + '/read?mode=deep');
+  assert.equal(request.url, '/api/papers/' + A + '/read?mode=deep&language=zh-CN');
   assert.equal(request.options.signal.aborted, false);
   assert.equal(h.$('editor').value, notes); assert.equal(h.state.current.notes, notes);
   assert.equal(h.state.current.notes_mode, 'deep');
@@ -1631,4 +1631,88 @@ test('batch completion never applies an older figure array before the authoritat
   assert.equal(h.state.figures[0].caption,'Latest manual caption');assert.equal(h.state.figures[0].observation,'Latest saved observation');
   refresh.resolve([{id:'f001',caption:'Latest manual caption',observation:'Latest saved observation'}]);await reading;
   assert.equal(h.state.figures[0].observation,'Latest saved observation');assert.equal(h.$('gen-status').hidden,true);
+});
+
+test('metadata enrichment cannot invalidate an active figure read or replace a newer note', async () => {
+  const h=harness(), pending=deferred(), paper=h.state.current;
+  paper.notes='Latest note';paper.notes_revision=5;paper.material_revision=2;
+  h.state.figures=[{id:'f001',observation:''}];h.state.settings.vision_model='vision';h.state.tab='figures';
+  h.context.fetch=()=>pending.promise;const reading=h.readFigures(false);
+  h.api.enrich=async()=>({...paper,title:'CrossRef title',notes:'Old response note',notes_revision:3});await h.enrichCurrent();
+  assert.equal(h.state.current,paper);assert.equal(paper.notes,'Latest note');assert.equal(paper.notes_revision,5);assert.equal(paper.title,'CrossRef title');
+  h.api.figures=async()=>[{id:'f001',observation:'Saved after metadata update'}];
+  stream(h,[{type:'done',figures:[{id:'f001',observation:'Saved after metadata update'}]}]);pending.resolve(await h.context.fetch());await reading;
+  assert.equal(h.state.figures[0].observation,'Saved after metadata update');
+});
+
+test('batch progress makes each already-saved observation visible while later figures still run', async () => {
+  const h=harness(), pending=deferred();h.state.settings.vision_model='vision';h.state.tab='figures';h.state.figures=[{id:'f001',observation:''}];
+  let reads=0;const encode=event=>new TextEncoder().encode('data: '+JSON.stringify(event)+'\n\n');
+  h.context.fetch=async()=>({ok:true,body:{getReader:()=>({read:async()=>{reads++;if(reads===1)return {done:false,value:encode({type:'stage',stage:'figures',done:1,total:2})};if(reads===2)return pending.promise;return {done:true};}})}});
+  h.api.figures=async()=>[{id:'f001',observation:'First observation is already persisted'}];const reading=h.readFigures(false);await new Promise(setImmediate);
+  assert.equal(h.state.figures[0].observation,'First observation is already persisted');assert.equal(h.state.figReading,true);
+  pending.resolve({done:false,value:encode({type:'done',figures:[{id:'f001',observation:'First observation is already persisted'}]})});await reading;
+});
+
+test('interrupted batch retains saved observations and reports the missing completion confirmation', async () => {
+  const h=harness();h.state.settings.vision_model='vision';h.state.tab='figures';
+  stream(h,[{type:'stage',stage:'figures',done:1,total:3}]);h.api.figures=async()=>[{id:'f001',observation:'Saved before interruption'}];await h.readFigures(false);
+  assert.equal(h.state.figures[0].observation,'Saved before interruption');assert.match(h.$('toast').textContent,/连接提前结束，未收到保存确认/);assert.equal(h.state.figReading,false);
+});
+
+test('a failed final figure refresh keeps displayed notes and cannot report a successful refresh', async () => {
+  const h=harness();h.state.settings.vision_model='vision';h.state.figures=[{id:'f001',observation:'Existing displayed observation'}];
+  stream(h,[{type:'done',figures:[{id:'f001',observation:'New saved observation'}]}]);h.api.figures=async()=>{throw Error('Synthetic temporary read failure');};await h.readFigures(false);
+  assert.equal(h.state.figures[0].observation,'Existing displayed observation');assert.match(h.$('toast').textContent,/刷新/);assert.doesNotMatch(h.$('toast').textContent,/读图完成，观察已写入/);assert.equal(h.state.figReading,false);assert.equal(h.$('gen-status').hidden,true);
+});
+
+
+test('explicit read-all requests opt into all documents without changing the close-reading budget', async () => {
+  for(const force of [false,true]){
+    const h=harness(),urls=[];h.state.settings.vision_model='vision';h.state.settings.max_figures=8;
+    stream(h,[{type:'done',figures:[]}]);const response=h.context.fetch;h.context.fetch=async url=>{urls.push(url);return response();};await h.readFigures(force);
+    assert.equal(urls[0],'/api/papers/'+A+'/figures/read?scope=all&language=zh-CN'+(force?'&force=1':''));assert.equal(h.state.settings.max_figures,8);
+  }
+});
+
+test('new deep and quick readings capture English before an in-flight interface language switch', async () => {
+  for(const mode of ['deep','quick']) {
+    const h=harness({i18n:true}),i18n=h.context.window.BioI18n;await i18n.setLocale('en',{persist:false});h.$('read-mode').value=mode;
+    const notes='## English model response\n\nKeep this original output.';stream(h,[{type:'chunk',text:notes},{type:'done',notes}]);const reply=h.context.fetch;let url;
+    h.context.fetch=async value=>{url=value;await i18n.setLocale('zh-CN',{persist:false});return reply();};await h.generateNotes();
+    assert.equal(url,'/api/papers/'+A+'/read?mode='+mode+'&language=en');assert.equal(h.state.current.notes,notes);assert.equal(h.state.current.notes_mode,mode);
+  }
+});
+
+test('batch figure reads capture the requested language and do not change it during streaming', async () => {
+  for(const language of ['en','zh-CN']) {
+    const h=harness({i18n:true}),i18n=h.context.window.BioI18n;await i18n.setLocale(language,{persist:false});h.state.settings.vision_model='vision';
+    stream(h,[{type:'done',figures:[{id:'f001',observation:language+' saved note'}]}]);const reply=h.context.fetch;let url;
+    h.context.fetch=async value=>{url=value;await i18n.setLocale(language==='en'?'zh-CN':'en',{persist:false});return reply();};h.api.figures=async()=>[{id:'f001',observation:language+' saved note'}];await h.readFigures(false);
+    assert.equal(url,'/api/papers/'+A+'/figures/read?scope=all&language='+language);assert.equal(h.state.figures[0].observation,language+' saved note');
+  }
+});
+
+test('single figure analysis sends one captured language and leaves the model text untouched', async () => {
+  for(const language of ['en','zh-CN']) {
+    const h=harness({i18n:true}),i18n=h.context.window.BioI18n;await i18n.setLocale(language,{persist:false});h.state.settings.vision_model='vision';h.state.pendingFigure='f001';h.state.figures=[{id:'f001',observation:'Old note'}];let body;
+    h.api.readFigure=async(id,fid,value)=>{body=value;await i18n.setLocale(language==='en'?'zh-CN':'en',{persist:false});return {id:fid,observation:language+' original model answer'};};
+    const reading=h.readSingleFigure();h.finishInput('Focus on samples');await reading;assert.equal(body.language,language);assert.equal(body.question,'Focus on samples');assert.equal(h.state.figures[0].observation,language+' original model answer');
+  }
+});
+
+test('figure refresh and storage failures have English interface messages', async () => {
+  const h=harness({i18n:true}),i18n=h.context.window.BioI18n;await i18n.setLocale('en',{persist:false});
+  assert.match(i18n.t('读图结果暂时无法刷新：{error}。请稍后重试。',{error:'test'}),/could not be refreshed: test/);
+  assert.match(i18n.t('读图模型没有返回有效内容，已有读图笔记已保留。'),/Existing figure notes were kept/);
+  assert.match(i18n.t('图片记录文件损坏或无法读取，已停止更新以保留原数据。'),/preserve the original data/);
+});
+
+
+test('partial generated notes retain their captured language through failed save and retry after a UI switch', async () => {
+  const h=harness({i18n:true}),i18n=h.context.window.BioI18n,bodies=[];await i18n.setLocale('en',{persist:false});let failing=true;
+  h.api.patch=async(id,body)=>{bodies.push(body);if(failing)throw Error('Synthetic disk failure');return {id,...body};};stream(h,[{type:'chunk',text:'Partial English model output'}]);await h.generateNotes();
+  assert.equal(h.state.pendingSave.notes_language,'en');assert.equal(bodies[0].notes_language,'en');
+  await i18n.setLocale('zh-CN',{persist:false});failing=false;edit(h,'Partial English model output + my edit');await h.flushSave();assert.equal(bodies.at(-1).notes_language,'en');assert.equal(h.state.current.notes_language,'en');assert.equal(h.state.current.notesDraftLanguage,undefined);
+  edit(h,'An ordinary later manual edit');await h.flushSave();assert.equal(bodies.at(-1).notes_language,undefined);
 });

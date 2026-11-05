@@ -153,7 +153,7 @@
 支持 Markdown，编辑后自动保存。"></textarea></div>
         <div class="tab-body" id="tab-resources" role="tabpanel" aria-labelledby="view-resources" hidden><div id="resources-panel"></div></div>
         <div class="tab-body" id="tab-evidence" role="tabpanel" aria-labelledby="view-evidence" hidden><div id="evidence-panel"></div></div>
-        <div class="tab-body figures-body" id="tab-figures" role="tabpanel" aria-labelledby="view-figures" hidden><div class="fig-toolbar"><span class="hint" id="fig-hint"><span data-i18n="自动提取论文图表，也可在原文中框选取图。">自动提取论文图表，也可在原文中框选取图。</span></span><div class="fig-toolbar-actions"><button id="btn-fig-read" class="btn" title="逐张观察主图，将结果用于笔记" data-i18n-title="逐张观察主图，将结果用于笔记"><svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg><span data-i18n="全部读图">全部读图</span></button><button id="btn-fig-extract" class="btn" title="重新自动提取" data-i18n-title="重新自动提取"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg><span data-i18n="重新提取">重新提取</span></button></div></div><div class="fig-grid" id="fig-grid"></div></div>
+        <div class="tab-body figures-body" id="tab-figures" role="tabpanel" aria-labelledby="view-figures" hidden><div class="fig-toolbar"><span class="hint" id="fig-hint"><span data-i18n="自动提取论文图表，也可在原文中框选取图。">自动提取论文图表，也可在原文中框选取图。</span></span><div class="fig-toolbar-actions"><button id="btn-fig-read" class="btn" title="读取正文和补充材料的全部图片；跳过已有同语言笔记，不重复读取自动拆分的子图。" data-i18n-title="读取正文和补充材料的全部图片；跳过已有同语言笔记，不重复读取自动拆分的子图。"><svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg><span data-i18n="全部读图">全部读图</span></button><button id="btn-fig-extract" class="btn" title="重新自动提取" data-i18n-title="重新自动提取"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg><span data-i18n="重新提取">重新提取</span></button></div></div><div class="fig-grid" id="fig-grid"></div></div>
       </section>
     </main>
   </div>
@@ -185,7 +185,7 @@
           <label class="field">
             <span><span data-i18n="读图模型（可选）">读图模型（可选）</span></span>
             <input id="set-vision-model" type="text" placeholder="glm-4.6v / gpt-4o / qwen-vl-max">
-            <small><span data-i18n="填写后生成精读时会先让它观察每张主图并把观察写入材料；留空则只用图注。">填写后生成精读时会先让它观察每张主图并把观察写入材料；留空则只用图注。</span></small>
+            <small><span data-i18n="填写后精读会按下方数量读取图片并保存观察；留空则使用已有图注与观察。">填写后精读会按下方数量读取图片并保存观察；留空则使用已有图注与观察。</span></small>
           </label>
         </div><details class="advanced-settings"><summary><span data-i18n="生成参数与文献检索">生成参数与文献检索</span> <span><span data-i18n="高级设置">高级设置</span></span></summary><div class="field-grid">
           <label class="field">
@@ -199,9 +199,9 @@
             <small><span data-i18n="精读报告较长，接口默认输出不够时填 16384 或更大；被接口拒绝时会提示。">精读报告较长，接口默认输出不够时填 16384 或更大；被接口拒绝时会提示。</span></small>
           </label>
           <label class="field">
-            <span><span data-i18n="最多读图张数">最多读图张数</span></span>
+            <span><span data-i18n="精读时最多读图张数">精读时最多读图张数</span></span>
             <input id="set-max-figures" type="number" min="0" max="40">
-            <small><span data-i18n="按页码顺序取前 N 张主图送读图模型，0 关闭。">按页码顺序取前 N 张主图送读图模型，0 关闭。</span></small>
+            <small><span data-i18n="仅限制生成精读时额外读取的图片数量，0 表示不额外读图；不限制图库的「全部读图」。">仅限制生成精读时额外读取的图片数量，0 表示不额外读图；不限制图库的「全部读图」。</span></small>
           </label>
           <label class="field">
             <span><span data-i18n="Semantic Scholar API Key（可选）">Semantic Scholar API Key（可选）</span></span>
@@ -285,8 +285,8 @@
   <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
 
   <script src="i18n.js?v=20261105-v0110"></script>
-  <script src="i18n-shell.js?v=20261105-v0110"></script>
-  <script src="i18n-app.js?v=20261105-v0120"></script>
+  <script src="i18n-shell.js?v=20261106-v0121"></script>
+  <script src="i18n-app.js?v=20261106-v0121"></script>
   <script src="i18n-research.js?v=20261105-v0110"></script>
   <script src="i18n-reading.js?v=20261105-v0110"></script>
   <script src="vendor/pdf.min.js"></script>
@@ -302,6 +302,6 @@
   <script src="reading-nav.js?v=20261105-v0110"></script>
   <script src="note-sources.js?v=20261105-v0110"></script>
   <script src="figure-reader.js?v=20261105-v0120"></script>
-  <script src="app.js?v=20261105-v0120"></script>
+  <script src="app.js?v=20261106-v0121"></script>
 </body>
 </html>

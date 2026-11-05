@@ -551,7 +551,7 @@
   }
 
   function mergeWorkflow(target, updated) {
-    for (const key of ['tasks', 'notes_incomplete', 'notes_stale', 'evidence_pending', 'evidence_count', 'resources_count', 'resources_pending', 'storage_warnings', 'material_revision', 'notes_material_revision', 'notes_revision', 'notes_source_snapshot']) {
+    for (const key of ['tasks', 'notes_language', 'notes_incomplete', 'notes_stale', 'evidence_pending', 'evidence_count', 'resources_count', 'resources_pending', 'storage_warnings', 'material_revision', 'notes_material_revision', 'notes_revision', 'notes_source_snapshot']) {
       if (Object.prototype.hasOwnProperty.call(updated, key)) target[key] = updated[key];
     }
   }
@@ -762,8 +762,13 @@
       const meta = await api.enrich(paper.id, { overwrite: false });
       preserveNewerTags(meta);
       if (state.current !== paper) { updateListItem(meta); return; }
-      state.current = meta;
-      updateListItem(meta);
+      // CrossRef updates bibliographic fields, not live notes, material versions,
+      // or the paper identity used by in-flight figure reads.
+      for (const field of ['doi', 'url', 'authors', 'year', 'journal', 'abstract', 'title']) {
+        if (Object.prototype.hasOwnProperty.call(meta, field)) paper[field] = meta[field];
+      }
+      mergeTags(paper, meta);
+      updateListItem(paper);
       renderHead();
       toast(() => tr('元数据已补全'), 'ok');
     } catch (e) {
@@ -1288,7 +1293,7 @@
     const notes = $('editor').value;
     state.current.notes = notes;
     clearTimeout(state.saveTimer);
-    state.pendingSave = { id, notes, ...(state.current.notes_incomplete ? { notes_incomplete: true } : {}),
+    state.pendingSave = { id, notes, ...(['en', 'zh-CN'].includes(state.current.notesDraftLanguage) ? { notes_language: state.current.notesDraftLanguage } : {}), ...(state.current.notes_incomplete ? { notes_incomplete: true } : {}),
       ...(Number.isInteger(state.current.notesDraftRevision) ? { notes_source_revision: state.current.notesDraftRevision } : {}),
       ...(state.current.notesDraftSnapshot ? { notes_source_snapshot: state.current.notesDraftSnapshot } : {}) };
     setSaveStatus(() => tr('待保存'), 'pending');
@@ -1312,6 +1317,7 @@
       setSaveStatus(() => tr('正在保存…'), 'pending');
       try {
         const body = { notes: pending.notes };
+        if (pending.notes_language !== undefined) body.notes_language = pending.notes_language;
         if (pending.notes_incomplete !== undefined) body.notes_incomplete = pending.notes_incomplete;
         if (pending.notes_source_revision !== undefined) body.notes_source_revision = pending.notes_source_revision;
         if (pending.notes_source_snapshot !== undefined) body.notes_source_snapshot = pending.notes_source_snapshot;
@@ -1320,6 +1326,7 @@
         if (state.current && state.current.id === pending.id) {
           state.current.notes_updated_at = updated.notes_updated_at;
           mergeWorkflow(state.current, updated);
+          if (pending.notes_language !== undefined) delete state.current.notesDraftLanguage;
           if (pending.notes_source_revision !== undefined) delete state.current.notesDraftRevision;
           if (pending.notes_source_snapshot !== undefined) delete state.current.notesDraftSnapshot;
           renderHead();
@@ -1377,6 +1384,7 @@
 
   async function generateNotes() {
     const paper = state.current;
+    const language = window.BioI18n?.getLocale() === 'en' ? 'en' : 'zh-CN';
     if (!paper || state.generating || state.materialBusy) return;
     if (!state.settings || !state.settings.has_api_key) {
       toast(() => tr('请先在「设置」中填写 API Key'), 'error');
@@ -1414,7 +1422,7 @@
     let sourceSnapshot = null;
     window.BioNoteSources?.clear();
     try {
-      const resp = await fetch(paperPath(paper.id, '/read?mode=' + encodeURIComponent(mode)), { method: 'POST', signal: ctrl.signal });
+      const resp = await fetch(paperPath(paper.id, '/read?mode=' + encodeURIComponent(mode) + '&language=' + encodeURIComponent(language)), { method: 'POST', signal: ctrl.signal });
       if (!resp.ok) {
         let msg = resp.statusText;
         try { msg = (await resp.json()).detail || msg; } catch (e) { /* ignore */ }
@@ -1460,6 +1468,8 @@
       if (!completed) throw new Error(tr('连接提前结束，未收到保存确认'));
       paper.notes = acc;
       paper.notes_mode = mode;
+      paper.notes_language = language;
+      delete paper.notesDraftLanguage;
       paper.notes_updated_at = new Date().toISOString();
       paper.notes_incomplete = false;
       delete paper.notesDraftRevision;
@@ -1488,9 +1498,11 @@
       updateNoteActions();
       if (acc) {
         paper.notes_incomplete = true;
+        paper.notes_language = language;
+        paper.notesDraftLanguage = language;
         paper.notesDraftRevision = sourceRevision;
         if (sourceSnapshot) paper.notesDraftSnapshot = sourceSnapshot;
-        state.pendingSave = { id: paper.id, notes: acc, notes_incomplete: true,
+        state.pendingSave = { id: paper.id, notes: acc, notes_incomplete: true, notes_language: language,
           ...(Number.isInteger(sourceRevision) ? { notes_source_revision: sourceRevision } : {}),
           ...(sourceSnapshot ? { notes_source_snapshot: sourceSnapshot } : {}) };
         const saved = await flushSave();
@@ -1934,7 +1946,7 @@
   }
 
   let figuresFetchSequence = 0;
-  async function fetchFigures() {
+  async function fetchFigures({ throwOnError = false } = {}) {
     const paper = state.current;
     if (!paper) return [];
     const fetchSequence = ++figuresFetchSequence, revision = paper.material_revision;
@@ -1946,9 +1958,11 @@
     try {
       const figures = await api.figures(paper.id);
       if (!isCurrent()) return [];
+      if (!Array.isArray(figures)) throw new Error(tr('读图结果格式无效，请重试。'));
       state.figures = figures;
     } catch (e) {
       if (!isCurrent()) return [];
+      if (throwOnError) throw e;
       return state.figures;
     }
     if (state.tab === 'figures') renderFigures();
@@ -2005,11 +2019,12 @@
     const isCurrent = () => state.current === paper && paper.material_revision === revision;
     const question = await requestText(() => tr('读图 · {label}', { label: fig.label }), () => tr('想重点核查什么？例如：F 面板两组的差别和显著性。留空则进行整体观察。'), '', () => tr('开始读图'));
     if (question === null || !isCurrent() || !isSameFigure()) return;
+    const language = window.BioI18n?.getLocale() === 'en' ? 'en' : 'zh-CN';
     state.figReading = true;
     const btn = document.querySelector('[data-read-fig="' + fid + '"]');
     if (btn) { btn.disabled = true; btn.innerHTML = icon('eye') + uiHtml(() => tr('观察中…')); }
     try {
-      const updated = await api.readFigure(paperId, fid, { question });
+      const updated = await api.readFigure(paperId, fid, { question, language });
       if (!isCurrent()) return;
       if (!isSameFigure()) {
         // The backend may have retained this result across a same-source re-extraction.
@@ -2020,6 +2035,7 @@
       if (updated?.id !== fid || typeof updated.observation !== 'string') throw new Error(tr('读图结果格式无效，请重试。'));
       // A read request owns only its observation; caption/geometry are edited elsewhere.
       fig.observation = updated.observation;
+      if (['en', 'zh-CN'].includes(updated.observation_language)) fig.observation_language = updated.observation_language;
       renderFigures();
       toast(() => tr('观察已更新到卡片（生成笔记时会一并使用）'), 'ok');
     } catch (e) {
@@ -2116,6 +2132,7 @@
     if (!state.settings || !state.settings.has_api_key) { toast(() => tr('请先设置 API Key'), 'error'); openSettings(); return; }
     if (!state.settings.vision_model) { toast(() => tr('请先在设置里填写「读图模型」'), 'error'); openSettings(); return; }
     const paper = state.current, paperId = paper.id, revision = paper.material_revision;
+    const language = window.BioI18n?.getLocale() === 'en' ? 'en' : 'zh-CN';
     const isCurrent = () => state.current === paper && paper.material_revision === revision;
     state.figReading = true;
     const btn = $('btn-fig-read');
@@ -2123,7 +2140,7 @@
     setGenerating(true, () => tr('读图模型正在观察图片 …'));
     let completed = false;
     try {
-      const resp = await fetch(paperPath(paperId, '/figures/read') + (force ? '?force=1' : ''), { method: 'POST' });
+      const resp = await fetch(paperPath(paperId, '/figures/read?scope=all&language=' + encodeURIComponent(language)) + (force ? '&force=1' : ''), { method: 'POST' });
       if (!resp.ok) {
         let msg = resp.statusText;
         try { msg = (await resp.json()).detail || msg; } catch (e) { /* ignore */ }
@@ -2145,7 +2162,11 @@
             let event;
             try { event = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
             if (!isCurrent()) continue;
-            if (event.type === 'stage') setStage(() => tr('读图 {done}/{total}', { done: event.done, total: event.total }), { done: event.done, total: event.total });
+            if (event.type === 'stage') {
+              setStage(() => tr('读图 {done}/{total}', { done: event.done, total: event.total }), { done: event.done, total: event.total });
+              // Each progress event follows a successful persistent save.
+              if (event.done) void fetchFigures();
+            }
             else if (event.type === 'done') {
               if (!Array.isArray(event.figures)) throw new Error(tr('读图结果格式无效，请重试。'));
               completed = true;
@@ -2153,17 +2174,23 @@
           }
         }
       }
+      if (isCurrent() && !completed) throw new Error(tr('连接提前结束，未收到保存确认'));
     } catch (e) {
       completed = false;
       if (isCurrent()) toast(() => tr('读图失败：{error}', { error: tr(e.message) }), 'error', 6000);
     } finally {
-      // A failed batch may still have saved earlier figures. Refresh only the
-      // original live paper, without presenting a failed run as a success.
-      if (isCurrent()) await fetchFigures();
-      if (isCurrent() && completed) toast(() => tr('读图完成，观察已写入图片卡片'), 'ok');
-      state.figReading = false;
-      btn.disabled = false;
-      if (!state.generating) setGenerating(false);
+      // A failed batch may still have saved earlier figures. Keep current notes
+      // on a failed GET, and never say refreshed results are visible when not.
+      try {
+        if (isCurrent()) await fetchFigures({ throwOnError: true });
+        if (isCurrent() && completed) toast(() => tr('读图完成，观察已写入图片卡片'), 'ok');
+      } catch (e) {
+        if (isCurrent()) toast(() => tr('读图结果暂时无法刷新：{error}。请稍后重试。', { error: tr(e.message) }), 'error', 6000);
+      } finally {
+        state.figReading = false;
+        btn.disabled = false;
+        if (!state.generating) setGenerating(false);
+      }
     }
   }
 

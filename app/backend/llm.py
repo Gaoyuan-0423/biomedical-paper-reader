@@ -120,6 +120,7 @@ def build_messages(
     figures: list[dict] | None = None,
     images: list[dict] | None = None,
     direction: str = "",
+    language: str = "zh-CN",
 ) -> list[dict]:
     """images: [{mime, data(base64)}] aligned 1:1 with `figures`; omitted if empty."""
     structure = QUICK_READ_STRUCTURE if mode == "quick" else DEEP_READ_STRUCTURE
@@ -159,6 +160,14 @@ def build_messages(
         + "\n<<<论文文本结束>>>"
     )
     system = {"role": "system", "content": SYSTEM_PROMPT + "\n\n" + structure + "\n\n在对应图的解释处独立一行插入清单给出的 Markdown 插图引用，严格使用原 ID，不编造路径或 ID；速读只插入实际讨论的图。插入图片不等于完成视觉核查：无视觉观察时仍只依据正文与图注，不补写图内视觉细节。"}
+    if language == 'en':
+        system['content'] = system['content'].replace('写中文阅读报告', '撰写英文阅读报告')
+        system['content'] += ('\nOutput language: English. Write the entire reading report, including every heading, '
+                              'table header and explanation, in English. The Chinese structure above describes '
+                              'the required content, not its output language. Preserve identifiers, gene names, '
+                              'citation markers and verbatim source quotations.')
+    else:
+        system['content'] += '\n输出语言：简体中文。保留标识符、基因名、来源编号和直接引用的原文。'
     if meta.get('note_source_enabled'):
         system['content'] += ('\n原文块带有 [N1] 等来源编号。关键结论、样本量、分组和方法参数应在相邻陈述后引用实际支持它的编号。'
                               '只能引用本轮明确提供的可核验原文块；压缩概览和视觉观察不等于原文。'

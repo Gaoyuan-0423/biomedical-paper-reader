@@ -11,7 +11,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.12.0 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.12.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.12.1 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.12.1)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 
@@ -22,7 +22,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 Python 依赖见 `backend/requirements.txt`（fastapi、uvicorn、pypdf、httpx、python-multipart、
 pdfplumber、pypdfium2、Pillow）。
 
-## v0.12.0：查看已有读图笔记
+## v0.12.1：查看已有读图笔记
 
 在「图库」点击图片缩略图或「查看笔记」，打开图像与读图笔记的对照查看器：
 
@@ -51,7 +51,7 @@ pdfplumber、pypdfium2、Pillow）。
 - 论文标题、作者、标签、图注、PDF 原文、笔记、模型回答和导出内容保持原语言。界面语言不修改模型提示词或生成语言；需要英文阅读报告时仍按原有方式明确提出。
 - 顶部品牌、浏览器图标和桌面应用图标统一为书页与叶片图案。Go + MyGo 原生下载、退出及错误提示提供中英文本；系统文件选择器中的系统按钮由操作系统本身决定。
 
-本版继续作为 Pre-release，稳定版及 Latest 保留 v0.3.4。当前验证范围和跨平台原生验收状态见 [App 验证记录](tests/README.md)。
+本版通过双平台验收后作为正式 Release 和 Latest 发布。当前验证范围和跨平台原生验收状态见 [App 验证记录](tests/README.md)。
 
 ## 阅读工作台
 
