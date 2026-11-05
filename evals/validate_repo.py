@@ -17,6 +17,12 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def manifest_order(path):
+    name = path.parent.name
+    version = re.search(r'-v(\d+)\.(\d+)\.(\d+)(?:$|-)', name)
+    return name[:10], tuple(map(int, version.groups())) if version else (0, 0, 0), name
+
+
 def prose(text):
     """Exclude fenced examples; their paths can be user-supplied placeholders."""
     return re.sub(r'(?ms)^\s*(`{3,}|~{3,})[^\n]*\n.*?^\s*\1\s*$', '', text)
@@ -40,7 +46,8 @@ def check_links(root):
     for path in sorted(root.rglob('*.md')):
         parts = path.relative_to(root).parts
         if (any(p in {'.git', '.venv', '.desktop-venv', '.validation', 'venv'} for p in parts)
-                or parts[:2] in {('app', 'build'), ('app', 'dist')}):
+                or parts[:2] in {('app', 'build'), ('app', 'dist')}
+                or parts[:3] in {('app', 'mygo', 'build'), ('app', 'mygo', 'resources')}):
             continue
         for match in LINK.finditer(prose(path.read_text(encoding='utf-8'))):
             target = match[1].strip('<>')
@@ -99,6 +106,11 @@ def check_manifest(root, manifest):
 
 
 class IntegrityTests(unittest.TestCase):
+    def test_same_day_manifests_use_numeric_version_order(self):
+        manifests = [Path(name) / 'manifest.json' for name in
+                     ['2026-11-05-v0.9.0', '2026-11-05-v0.10.0', '2026-11-04-v0.99.0']]
+        self.assertEqual(max(manifests, key=manifest_order).parent.name, '2026-11-05-v0.10.0')
+
     def test_links_and_anchors(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -114,7 +126,8 @@ class IntegrityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             (root / 'README.md').write_text('# Project\n')
-            for folder in ('app/.desktop-venv', 'app/build', 'app/dist'):
+            for folder in ('app/.desktop-venv', 'app/build', 'app/dist',
+                           'app/mygo/build', 'app/mygo/resources'):
                 target = root / folder
                 target.mkdir(parents=True)
                 (target / 'dependency.md').write_text('[dependency link](missing.md)\n')
@@ -158,7 +171,7 @@ def main():
         result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(IntegrityTests))
         return 0 if result.wasSuccessful() else 1
     errors, count, external = check_links(ROOT)
-    manifests = sorted((ROOT / 'evals/runs').glob('*/manifest.json'))
+    manifests = sorted((ROOT / 'evals/runs').glob('*/manifest.json'), key=manifest_order)
     manifest = args.manifest or (manifests[-1] if manifests else None)
     if manifest is not None and manifest.is_file():
         errors += check_manifest(ROOT, json.loads(manifest.read_text()))

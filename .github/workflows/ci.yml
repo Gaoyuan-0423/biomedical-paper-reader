@@ -29,9 +29,12 @@ jobs:
           node --check app/frontend/chat.js
           node --check app/frontend/zotero.js
           node --check app/frontend/library-search.js
-          node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs app/tests/test_zotero.cjs app/tests/test_library_search.cjs
+          node --check app/frontend/safe-markdown.js
+          node --check app/frontend/note-sources.js
+          node --check app/frontend/reading-nav.js
+          node --test app/tests/test_*.cjs
       - name: Helper scripts compile
-        run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py
+        run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py scripts/build_mygo.py scripts/package_mygo.py
 
   desktop-tests:
     runs-on: ubuntu-24.04

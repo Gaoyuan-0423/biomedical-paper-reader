@@ -6,7 +6,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.9.0。提供 macOS arm64 与 Windows x64 桌面预览包。新增专注原文、笔记对照和边读边问三种阅读布局，改进问答 Markdown 排版，支持当前阅读上下文的快捷问题，以及复制或追加已完成回答和来源到笔记；保留蓝白工作台、连续 PDF 阅读、样品整理、全库搜索和 Zotero MCP 导入。默认中文完整精读，支持英文及明确要求的中英双语，另有速读和指定图／方法解析。
+版本：v0.10.0。增加精读笔记原文引用、章节／图表／笔记联动导航，桌面层迁移到 Go + MyGo；提供 macOS arm64 DMG、Windows x64 安装 EXE 与便携 ZIP。保留蓝白界面、星标标签、结构化样品资源、全库本地搜索和 Zotero MCP。默认中文完整精读，也支持英文、双语、速读及专题阅读。
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -45,12 +45,12 @@
 
 #### macOS / Windows 桌面版（预览）
 
-下载入口：[v0.9.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)。按系统选择同版附件，以发布页实际提供为准：
+下载入口：[v0.10.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.10.0)。按系统选择同版附件，以发布页实际提供为准：
 
 | 系统 | 下载与打开 |
 |---|---|
-| Apple 芯片 Mac（arm64） | [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip)，解压后打开 `BioReader.app` |
-| Windows 10 / 11（x64） | [BioReader-v0.9.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-windows-x64.zip)，完整解压文件夹后打开其中的 `BioReader.exe`，保留全部随附文件 |
+| Apple 芯片 Mac（arm64） | [BioReader-v0.10.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-macos-arm64.dmg)，打开 DMG 后将 `BioReader.app` 拖入应用程序 |
+| Windows 10 / 11（x64） | [安装 EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-windows-x64-setup.exe)，或 [BioReader-v0.10.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-windows-x64.zip)，完整解压文件夹后打开其中的 `BioReader.exe`，保留全部随附文件 |
 
 桌面包不需要另装 Python 或手动启动浏览器／终端。Windows 需要 Microsoft Edge WebView2 Runtime；缺少时安装[微软官方 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。用户数据独立保存：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`；退出旧版再替换程序，已有论文、笔记和设置保留。
 
@@ -59,6 +59,12 @@
 ![BioReader v0.5.0 蓝白阅读工作台：文献库、补充 PDF 与数据资源记录](docs/screenshots/bioreader-v0.5.0-bluewhite.png)
 
 蓝白工作台 v0.5.0 实测截图（1440px，当前版已简化阅读状态并更新资源表格）：左侧筛选与待办，中间正文／补充材料阅读，右侧资源记录与原文定位。截图使用原创合成 PDF 和虚构记录。
+
+#### 原文引用与阅读导航
+
+新生成的精读笔记可显示“原文 · 页码”按钮，点击后核验来源文件版本并定位原文，有可靠坐标时高亮。引用只来自本次提供给模型的真实原文片段；旧笔记不自动猜测出处。导出会保留文件名、PDF 页码与原文摘录。
+
+原文下方的“阅读导航”默认收起，可切换章节、图表和笔记目录。章节使用 PDF 自带书签，图表按当前正文／补充文件分别显示；点击图表同时定位原图与笔记中对应图片，笔记标题也可直接跳转。没有书签时不会生成猜测页码。
 
 #### 对照阅读与问答摘录
 
@@ -153,7 +159,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.9.0. with macOS arm64 and Windows x64 desktop preview packages. This release adds focused PDF, notes comparison and reading-with-chat layouts, readable Markdown answers, context-specific question starters, and copying or appending completed answers with sources to notes. It retains the blue-and-white workspace, continuous PDF reading, structured samples, local library search and Zotero MCP imports. Full close reading in Chinese is the default. English and Chinese–English bilingual reports are available on explicit request, alongside quick screening and focused figure/method analysis.
+Version: v0.10.0. Adds verifiable source links to close-reading notes and linked PDF outline, figure and note navigation. The Go + MyGo desktop shell ships as a macOS arm64 DMG and Windows x64 installer/portable ZIP, with the Python reading service bundled inside. Existing blue-and-white layouts, sample records, local search and Zotero MCP remain available.
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -192,16 +198,22 @@ A full close-reading report follows this structure: opening guide → article in
 
 #### macOS / Windows desktop preview
 
-Download page: [v0.9.0 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0). Choose the matching platform asset from the files actually published:
+Download page: [v0.10.0 desktop preview](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.10.0). Choose the matching platform asset from the files actually published:
 
 | Platform | Download and open |
 |---|---|
-| Apple silicon Mac (arm64) | [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip); extract and open `BioReader.app` |
-| Windows 10 / 11 (x64) | [BioReader-v0.9.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-windows-x64.zip); extract the entire folder and open `BioReader.exe`, retaining all bundled files |
+| Apple silicon Mac (arm64) | [BioReader-v0.10.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-macos-arm64.dmg); open the DMG and drag `BioReader.app` to Applications |
+| Windows 10 / 11 (x64) | [Installer EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-windows-x64-setup.exe), or [BioReader-v0.10.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-windows-x64.zip); extract the entire folder and open `BioReader.exe`, retaining all bundled files |
 
 Desktop packages do not require Python or manually starting a browser/terminal. Windows requires Microsoft Edge WebView2 Runtime; install the [official Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if it is missing. User data remains separate: `~/Library/Application Support/BioReader/` on macOS and `%LOCALAPPDATA%\BioReader` on Windows. Quit the old version before replacing program files; existing papers, notes and settings are preserved.
 
 Both platforms are released under the same version from the same checked source commit. Update by downloading the new package for your platform; there is no in-app updater or cross-device library sync. See the [desktop guide](app/DESKTOP.md) for installation, source builds and platform limits, and the [App validation record](app/tests/README.md) for actual regression/build results. The macOS app has no Apple Developer ID signature or notarization. AI, DOI lookup and related-paper searches still require network access.
+
+#### Source links and reading navigation
+
+New close-reading notes can link to the exact original excerpts supplied to the model. Clicking verifies the PDF revision before navigating, with highlighting where reliable geometry exists. Older notes remain readable without invented source links. Exports retain file names, PDF pages and original quotations.
+
+The collapsible reading navigator contains native PDF bookmarks, figures from the active main/supplementary file, and note headings. Figure selection locates both the PDF page and the matching note image. PDFs without bookmarks show an explicit empty state.
 
 #### Read alongside notes and keep useful answers
 

@@ -1,9 +1,9 @@
-name: Windows desktop build
+name: Windows MyGo desktop build
 
 on:
   push:
-    branches: [main, codex/windows-release]
-    paths: ['app/**', 'scripts/package_windows.py', '.github/workflows/windows-build.yml', 'SKILL.md', 'releases/**']
+    branches: [main, codex/reading-links-mygo]
+    paths: ['app/**', 'scripts/build_mygo.py', 'scripts/package_mygo.py', '.github/workflows/windows-build.yml', 'SKILL.md', 'releases/**']
   workflow_dispatch:
 
 permissions:
@@ -30,6 +30,10 @@ jobs:
         with:
           python-version: '3.12'
           architecture: x64
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: app/mygo/go.sum
       - name: Validate release version
         run: |
           $match = [regex]::Match((Get-Content SKILL.md -Raw), '版本 (v\d+\.\d+\.\d+)')
@@ -62,23 +66,32 @@ jobs:
         run: |
           python -m unittest discover -s app/tests -v
           if ($LASTEXITCODE -ne 0) { throw 'Backend regression failed.' }
-          node --test app/tests/test_frontend.cjs app/tests/test_chat.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_zotero.cjs app/tests/test_library_search.cjs
+          $tests = Get-ChildItem app/tests/test_*.cjs | ForEach-Object { $_.FullName }
+          node --test @tests
           if ($LASTEXITCODE -ne 0) { throw 'Frontend regression failed.' }
-      - name: Build Windows executable
-        run: ./app/build-windows.ps1 -SkipInstall
-      - name: Validate bundle, package and test extracted executable
+      - name: Test MyGo desktop lifecycle and navigation
+        working-directory: app/mygo
         run: |
-          python scripts/package_windows.py --version $env:BIOREADER_VERSION --commit $env:GITHUB_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Windows package validation failed.' }
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'MyGo tests failed.' }
+      - name: Build MyGo executable and Windows installer
+        run: |
+          python scripts/build_mygo.py --version $env:BIOREADER_VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'MyGo build failed.' }
+      - name: Validate portable bundle and installed native WebView
+        run: |
+          python scripts/package_mygo.py --version $env:BIOREADER_VERSION --commit $env:GITHUB_SHA --test-installer
+          if ($LASTEXITCODE -ne 0) { throw 'MyGo package validation failed.' }
       - name: Upload checked Windows package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: BioReader-${{ env.BIOREADER_VERSION }}-windows-x64
           path: |
-            app/dist/windows-release/*.zip
-            app/dist/windows-release/SHA256SUMS.txt
-            app/dist/windows-release/build-info.json
-            app/dist/windows-release/self-test.json
+            app/dist/mygo-release/*.zip
+            app/dist/mygo-release/*.exe
+            app/dist/mygo-release/SHA256SUMS.txt
+            app/dist/mygo-release/build-info.json
+            app/dist/mygo-release/*self-test.json
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

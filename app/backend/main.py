@@ -54,6 +54,7 @@ from paper_chat import (CHAT_TIMEOUT, MAX_OUTPUT, ChatIn, active_requests, chat_
 import zotero_import as zi
 from zotero_mcp import ZoteroMCPClient, MCPError
 from library_search import search_library
+import note_sources as ns
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -164,6 +165,8 @@ def read_meta(d: Path) -> dict:
         meta.setdefault("has_file", (d / "paper.pdf").is_file())
         meta.setdefault("tags", [])
         meta.setdefault("tags_revision", 0)
+        meta.setdefault('notes_revision', 0)
+        meta.setdefault('notes_source_snapshot', '')
         meta.setdefault("journal", "")
         meta.setdefault("supplements", [])
         return annotate_paper(d, meta)
@@ -183,6 +186,8 @@ def annotate_paper(d: Path, meta: dict) -> dict:
 
 def write_meta(d: Path, meta: dict) -> None:
     with storage_lock:
+        meta.setdefault('notes_revision', 0)
+        meta.setdefault('notes_source_snapshot', '')
         defaults(meta)
         atomic_json(d / "meta.json", {k: v for k, v in meta.items() if k not in DERIVED_FIELDS + RESOURCE_DERIVED_FIELDS})
         annotate_paper(d, meta)
@@ -430,6 +435,7 @@ class PaperPatch(BaseModel):
     notes_incomplete: Optional[bool] = None
     notes_reviewed: bool = False
     notes_source_revision: Optional[int] = Field(default=None, ge=0)
+    notes_source_snapshot: Optional[str] = Field(default=None, pattern=r'^[0-9a-f]{32}$')
 
 
 class EvidenceIn(BaseModel):
@@ -1202,13 +1208,20 @@ def patch_paper(paper_id: str, body: PaperPatch):
         if body.favorite is not None:
             meta["favorite"] = body.favorite
         if body.notes is not None:
+            notes = (ns.partial_notes(d, meta, body.notes, body.notes_source_snapshot)
+                     if body.notes_source_snapshot is not None else body.notes)
+            if (notes != meta.get('notes', '') or body.notes_source_snapshot is not None and
+                    body.notes_source_snapshot != meta.get('notes_source_snapshot')):
+                meta['notes_revision'] += 1
+            if body.notes_source_snapshot is not None:
+                meta['notes_source_snapshot'] = body.notes_source_snapshot
             if not meta.get("notes", "").strip():
                 meta["notes_material_revision"] = meta["material_revision"]
             if body.notes_source_revision is not None:
                 if body.notes_source_revision > meta['material_revision']:
                     raise HTTPException(422, '笔记来源版本不能超过当前材料版本')
                 meta['notes_material_revision'] = body.notes_source_revision
-            meta["notes"] = body.notes
+            meta["notes"] = notes
             meta["notes_updated_at"] = _now()
         for field in ("reading_status", "reading_decision", "notes_incomplete"):
             value = getattr(body, field)
@@ -1233,6 +1246,32 @@ def patch_paper(paper_id: str, body: PaperPatch):
             meta["doi"] = body.doi.strip()
         write_meta(d, meta)
         return meta
+
+
+@app.get('/api/papers/{paper_id}/note-sources')
+def get_note_sources(paper_id: str):
+    d = paper_dir(paper_id)
+    meta = read_meta(d)
+    result = ns.current_sources(d, meta)
+    with storage_lock:
+        if ns.note_state(read_meta(d)) != ns.note_state(meta):
+            raise HTTPException(409, '笔记版本已变化，请刷新后重试')
+    return result
+
+
+@app.get('/api/papers/{paper_id}/note-sources/{snapshot_id}/{source_id}')
+def resolve_note_source(paper_id: str, snapshot_id: str, source_id: str, notes_revision: int = Query(ge=0)):
+    d = paper_dir(paper_id)
+    with storage_lock:
+        meta = read_meta(d)
+        source = ns.lookup_current(d, meta, snapshot_id, source_id, notes_revision)
+    resolved = verified_source(d, meta, source)
+    with storage_lock:
+        latest = read_meta(d)
+        ns.lookup_current(d, latest, snapshot_id, source_id, notes_revision)
+        validate_source_snapshot(d, latest, [source])
+    return {'source': {**resolved, 'snapshot_id': snapshot_id, 'paper_id': paper_id},
+            'paper_id': paper_id, 'notes_revision': notes_revision, 'snapshot_id': snapshot_id}
 
 
 async def auto_tag_paper(paper_id: str):
@@ -1465,6 +1504,7 @@ def prepare_note_export(paper_id: str, body: NoteExport):
         # literal resource fields cannot be mistaken for narrative citations.
         raw_notes = append_research_appendix(body.notes, [], [])
         notes = illustrate_existing_notes(paper_id, NoteExport(notes=raw_notes))['notes']
+        notes = ns.portable_notes(d, meta, notes)
         evidence = [public_evidence(d, meta, r) for r in load_evidence(d)]
         return {'notes': append_research_appendix(notes, evidence, public_resources(d, meta))}
 
@@ -1735,12 +1775,26 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
             raise HTTPException(400, "PDF 提取到的文本过少（可能是扫描件），无法生成笔记")
         budget = int(settings["max_chars"])
         max_tokens = int(settings.get("max_tokens") or 0) or None
+        key, generation = str(d), uuid.uuid4().hex
+        if key in ns.active_generations:
+            raise HTTPException(409, '这篇文献正在生成笔记，请先停止或等待完成')
+        ns.active_generations[key] = generation
+
+    def finish_generation():
+        with storage_lock:
+            if ns.active_generations.get(key) == generation:
+                ns.active_generations.pop(key, None)
 
     async def generate():
         chunks: list[str] = []
-        yield _sse({"type": "start", "mode": mode, "model": settings["model"], "mode_name": MODE_NAMES[mode],
-                    "material_revision": meta["material_revision"]})
         try:
+            yield _sse({"type": "start", "mode": mode, "model": settings["model"], "mode_name": MODE_NAMES[mode],
+                        "material_revision": meta["material_revision"], 'notes_revision': meta['notes_revision'],
+                        'notes_source_snapshot': generation if mode == 'deep' else ''})
+            source_input, original_sources, truncated = text, [], False
+            if mode == 'deep':
+                yield _sse({'type': 'stage', 'stage': 'sources', 'message': '正在准备可回跳的原文片段…'})
+                source_input, original_sources, truncated = await asyncio.to_thread(ns.prepare_sources, d, meta)
             figures_for_prompt: list[dict] = []
             if use_figures:
                 if settings.get("vision_model") and mode != "quick":
@@ -1752,48 +1806,66 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1):
                             figures_for_prompt = [f for f in ev["figures"] if not f.get("parent")]
                 else:
                     figures_for_prompt = [f for f in load_figures(d) if not f.get("parent")]
-            body_text = text
-            if len(text) > budget:
-                async for ev in condense_long_text(settings["base_url"], settings["api_key"], settings["model"], text, budget):
+            body_text, final_sources = source_input, original_sources
+            if len(source_input) > budget:
+                options = {'preserve_sources': True} if mode == 'deep' else {}
+                async for ev in condense_long_text(settings["base_url"], settings["api_key"], settings["model"], source_input,
+                                                    max(3000, int(budget * .5)) if mode == 'deep' else budget, **options):
                     if ev["type"] == "progress":
                         yield _sse({"type": "stage", "stage": "condense", "done": ev["done"], "total": ev["total"],
                                     "message": f"全文 {len(text)} 字符超出预算 {budget}，正在分段整理 {ev['done']}/{ev['total']}"})
                     else:
                         body_text = ev["text"]
+                if mode == 'deep':
+                    body_text, final_sources = ns.condensed_context(body_text, original_sources, budget)
                 meta_for_prompt = {**meta, "condensed": True}
             else:
                 meta_for_prompt = meta
+            if mode == 'deep':
+                meta_for_prompt = {**meta_for_prompt, 'note_source_enabled': True}
+                if truncated:
+                    body_text = '注意：材料过长，只提供有限原文片段，不得声称已核查全部材料。\n' + body_text
+                with storage_lock:
+                    validate_source_snapshot(d, read_meta(d), final_sources)
+                    snapshot = ns.save_snapshot(d, generation, meta, final_sources)
             messages = build_messages(body_text, mode, meta_for_prompt, figures=figures_for_prompt,
                                       direction=settings.get("research_direction", ""))
             yield _sse({"type": "stage", "stage": "write", "message": f"{settings['model']} 正在撰写{MODE_NAMES[mode]}笔记…"})
-            async for piece in stream_chat(settings["base_url"], settings["api_key"], settings["model"], messages, max_tokens=max_tokens):
+            async for piece in stream_chat(settings["base_url"], settings["api_key"], settings["model"], messages,
+                                           max_tokens=max_tokens, require_done=mode == 'deep'):
                 chunks.append(piece)
                 yield _sse({"type": "chunk", "text": piece})
+            notes = "".join(chunks).strip()
+            if not notes:
+                raise UpstreamError('模型没有返回可用笔记，原笔记已保留')
+            if mode == 'deep':
+                notes = ns.bind_citations(notes, snapshot)
+            if use_figures:
+                available = [f for f in figures_for_prompt if (d / "figures" / f"{f['id']}.png").is_file()]
+                notes = illustrate_notes(notes, available, mode)
+            with storage_lock:
+                current = read_meta(d)
+                if ns.note_state(current) != ns.note_state(meta):
+                    raise HTTPException(409, '生成期间笔记已被编辑，原笔记已保留；本次内容不能覆盖较新的编辑')
+                current["notes"] = notes
+                current['notes_revision'] += 1
+                current['notes_source_snapshot'] = generation if mode == 'deep' else ''
+                current["notes_mode"] = mode
+                current["notes_updated_at"] = _now()
+                current["notes_incomplete"] = False
+                current["notes_material_revision"] = meta["material_revision"]
+                write_meta(d, current)
+            yield _sse({"type": "done", "notes": notes, "paper": summary_of(current)})
         except (UnsafeURLError, UpstreamError) as exc:
             yield _sse({"type": "error", "message": str(exc)})
-            return
+        except HTTPException as exc:
+            yield _sse({'type': 'error', 'message': str(exc.detail), 'status': exc.status_code})
         except Exception as exc:  # noqa: BLE001 - surface upstream failures to the UI
             yield _sse({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
-            return
-        notes = "".join(chunks).strip()
-        if use_figures:
-            available = [f for f in figures_for_prompt if (d / "figures" / f"{f['id']}.png").is_file()]
-            notes = illustrate_notes(notes, available, mode)
-        with storage_lock:
-            current = read_meta(d)
-            current["notes"] = notes
-            current["notes_mode"] = mode
-            current["notes_updated_at"] = _now()
-            current["notes_incomplete"] = False
-            current["notes_material_revision"] = meta["material_revision"]
-            write_meta(d, current)
-        yield _sse({"type": "done", "notes": notes, "paper": summary_of(current)})
+        finally:
+            finish_generation()
 
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return _ChatStreamingResponse(generate(), finish_generation)
 
 
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

@@ -121,6 +121,7 @@
     readingSaving: null,
     readingTimer: null,
     figures: [],
+    noteHeadings: [],
     figDataUrls: {},
     figReading: false,
     cropping: false,
@@ -211,6 +212,19 @@
     document.body.appendChild(input); input.select();
     try { if (!document.execCommand('copy')) throw new Error('无法复制，请手动选择回答文字。'); }
     finally { input.remove(); previous?.focus(); }
+  }
+
+  async function prepareDesktopClose() {
+    if (state.generating) { toast('正在生成笔记，请先停止生成后退出。', 'error'); return false; }
+    if (state.materialBusy || state.figReading || state.noteAppendBusy || window.BioZotero?.isImporting()) {
+      toast('正在保存或处理文献，请等待完成后退出。', 'error'); return false;
+    }
+    if (!canLeaveResearch()) return false;
+    if (!await flushSave()) return false;
+    rememberReadingPosition();
+    await flushReadingPositions();
+    if (state.readingPending.size) { toast('阅读位置尚未保存，请稍后再退出。', 'error'); return false; }
+    return !state.pendingSave && !state.saveInFlight && !state.generating && !state.materialBusy && !state.figReading && !state.noteAppendBusy && !window.BioZotero?.isImporting() && canLeaveResearch();
   }
 
   async function appendChatNote({ paperId, message }) {
@@ -472,7 +486,7 @@
   }
 
   function mergeWorkflow(target, updated) {
-    for (const key of ['tasks', 'notes_incomplete', 'notes_stale', 'evidence_pending', 'evidence_count', 'resources_count', 'resources_pending', 'storage_warnings', 'material_revision', 'notes_material_revision']) {
+    for (const key of ['tasks', 'notes_incomplete', 'notes_stale', 'evidence_pending', 'evidence_count', 'resources_count', 'resources_pending', 'storage_warnings', 'material_revision', 'notes_material_revision', 'notes_revision', 'notes_source_snapshot']) {
       if (Object.prototype.hasOwnProperty.call(updated, key)) target[key] = updated[key];
     }
   }
@@ -908,6 +922,8 @@
   }
 
   function clearWorkspace() {
+    window.BioNoteSources?.clear();
+    window.BioReadingNav?.setPaper(null);
     if (window.BioEvidence) window.BioEvidence.clear();
     if (window.BioResources) window.BioResources.clear();
     if (window.BioChat) window.BioChat.clear();
@@ -950,6 +966,8 @@
       rememberReadingPosition();
       preserveNewerTags(full);
       state.current = full;
+      window.BioNoteSources?.clear();
+      window.BioReadingNav?.setPaper(full);
       if (window.BioEvidence) window.BioEvidence.clear();
       if (window.BioResources) window.BioResources.clear();
       if (window.BioChat) window.BioChat.clear();
@@ -975,6 +993,7 @@
     history.replaceState(null, '', '?paper=' + encodeURIComponent(state.current.id));
     state.relatedData = null;
     state.figures = [];
+    updateReadingNavigation();
     state.figDataUrls = {};
     renderFigures();
     renderDocuments();
@@ -990,6 +1009,7 @@
 
   function renderDocuments() {
     const paper = state.current;
+    window.BioReadingNav?.setPaper(paper);
     $('document-toolbar').hidden = !paper;
     if (!paper) return;
     const docs = [{ id: 'main', filename: '正文 · ' + (paper.filename || '尚未附加'), pages: paper.pages },
@@ -1058,6 +1078,92 @@
   }
 
   // ---------- notes ----------
+  function updateNoteHeadings(root) {
+    state.noteHeadings = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6')).map((node, index) => {
+      node.id = 'note-heading-' + index;
+      return { id: node.id, title: node.textContent.trim(), level: Number(node.tagName.slice(1)) };
+    });
+    if (state.current) window.BioReadingNav?.setNoteHeadings({ paperId: state.current.id, headings: state.noteHeadings });
+  }
+
+  function updateReadingNavigation() {
+    window.BioReadingNav?.setPaper(state.current);
+    if (!state.current) return;
+    window.BioReadingNav?.setFigures({ paperId: state.current.id, figures: state.figures });
+    window.BioReadingNav?.setNoteHeadings({ paperId: state.current.id, headings: state.noteHeadings });
+  }
+
+  function updateNavigationDocument() {
+    if (!state.current || !window.BioReadingNav) return;
+    const supplement = (state.current.supplements || []).find(doc => doc.id === state.documentId);
+    void window.BioReadingNav.setDocument({ paperId: state.current.id, documentId: state.documentId,
+      documentName: supplement?.filename || state.current.filename || '正文', pdf: state.pdf });
+  }
+
+  function scrollNoteHeading(heading) {
+    const node = document.getElementById(heading.id);
+    if (!node || node.textContent.trim() !== heading.title || !$('preview').contains(node)) return false;
+    node.scrollIntoView({ block: 'start' });
+    node.classList.add('note-navigation-target');
+    setTimeout(() => node.classList.remove('note-navigation-target'), 2200);
+    return true;
+  }
+
+  async function jumpReadingPage(target, guard) {
+    if (!guard.isCurrent() || state.current?.id !== target.paperId || !canLeaveResearch() || state.materialBusy) return false;
+    const jumped = await jumpChatSource({ paper_id: target.paperId, document_id: target.documentId, page: target.page }, 'preview', guard.isCurrent);
+    if (jumped && window.matchMedia('(max-width: 900px)').matches) window.BioReadingNav?.setOpen(false);
+    return jumped;
+  }
+
+  async function jumpReadingFigure(figure, guard) {
+    if (!guard.isCurrent() || state.current?.id !== figure.paperId || !canLeaveResearch() || state.materialBusy) return false;
+    const jumped = await jumpChatSource({ paper_id: figure.paperId, document_id: figure.document_id || 'main', page: figure.page }, 'preview', guard.isCurrent);
+    if (!jumped || !guard.isCurrent()) return false;
+    // A figure's immutable id resolves duplicate labels in different PDFs.
+    const anchor = Array.from($('preview').querySelectorAll('[data-note-source-fig]')).find(node => node.dataset.noteSourceFig === figure.id);
+    if (anchor) {
+      const image = anchor.previousElementSibling;
+      (image || anchor).scrollIntoView({ block: 'start' });
+      anchor.classList.add('note-navigation-target');
+      setTimeout(() => anchor.classList.remove('note-navigation-target'), 2200);
+    } else {
+      // Only an unambiguous figure heading is eligible as a fallback.
+      const label = String(figure.label || '').replace(/^(?:figure|fig\.?|图)\s*/i, '').trim();
+      const matches = state.noteHeadings.filter(heading => {
+        const match = /(?:figure|fig\.?|图)\s*(S?\d+)(?!\d)/i.exec(heading.title);
+        return match && match[1].toLowerCase() === label.toLowerCase();
+      });
+      if ((figure.document_id || 'main') === 'main' && matches.length === 1) scrollNoteHeading(matches[0]);
+      else toast('已定位原图；当前笔记尚无这张图的独立解读位置。');
+    }
+    if (window.matchMedia('(max-width: 900px)').matches) window.BioReadingNav?.setOpen(false);
+    return true;
+  }
+
+  function jumpReadingHeading(heading, guard) {
+    if (!guard.isCurrent() || state.current?.id !== heading.paperId || !canLeaveResearch()) return false;
+    switchTab('preview');
+    const jumped = scrollNoteHeading(heading);
+    if (jumped && window.matchMedia('(max-width: 900px)').matches) window.BioReadingNav?.setOpen(false);
+    return jumped;
+  }
+
+  async function jumpNoteReference(reference) {
+    if (!/^[0-9a-f]{32}$/.test(reference?.snapshotId || '') || !/^N[1-9][0-9]{0,4}$/.test(reference?.sourceId || '')) throw new Error('引用格式无效。');
+    const paper = state.current;
+    if (!paper || paper.id !== reference.paperId || state.generating || state.materialBusy || !canLeaveResearch()) return false;
+    const material = paper.material_revision;
+    if (!await flushSave()) throw new Error('请先保存当前笔记后重试。');
+    if (state.current !== paper || state.generating || state.materialBusy || material !== paper.material_revision) return false;
+    const notes = $('editor').value, revision = paper.notes_revision;
+    if (!Number.isInteger(revision)) throw new Error('笔记版本尚未就绪，请重新打开文献后重试。');
+    const isCurrent = () => state.current === paper && !state.generating && !state.materialBusy && material === paper.material_revision && revision === paper.notes_revision && $('editor').value === notes;
+    const result = await api.json(paperPath(paper.id, '/note-sources/' + reference.snapshotId + '/' + reference.sourceId + '?notes_revision=' + revision));
+    if (!isCurrent()) return false;
+    return jumpChatSource({ ...result.source, paper_id: paper.id }, 'preview', isCurrent);
+  }
+
   function figureMarkdownRefs(md) {
     return [...md.matchAll(/!\[([^\]]*)\]\(figure:([a-z]\d+)\)/g)];
   }
@@ -1089,11 +1195,14 @@
     if (!source.trim()) {
       preview.innerHTML = emptyState('edit', state.current ? '把阅读变成自己的理解' : '你的阅读笔记，从这里开始',
         state.current ? '选择精读或速读，生成结构化笔记；也可以切换到「编辑」，记录自己的思考。' : '打开一篇文献，即可生成阅读笔记、核查图表，或记录灵感。');
+      updateNoteHeadings(preview);
       return;
     }
-    if (!window.marked) { preview.innerHTML = '<pre>' + escapeHtml(source) + '</pre>'; return; }
-    preview.innerHTML = marked.parse(source, { gfm: true, breaks: false });
+    if (!window.BioMarkdown) { preview.innerHTML = '<pre>' + escapeHtml(source) + '</pre>'; updateNoteHeadings(preview); return; }
+    preview.innerHTML = window.BioMarkdown.parse(source);
     hydrateFigureImages(preview);
+    window.BioNoteSources?.render(state.current, preview, { streaming: !!streaming || !!state.generating });
+    updateNoteHeadings(preview);
     if (window.hljs) preview.querySelectorAll('pre code').forEach((el) => { try { hljs.highlightElement(el); } catch (e) { /* ignore */ } });
     if (streaming) {
       const box = $('tab-preview');
@@ -1108,7 +1217,8 @@
     state.current.notes = notes;
     clearTimeout(state.saveTimer);
     state.pendingSave = { id, notes, ...(state.current.notes_incomplete ? { notes_incomplete: true } : {}),
-      ...(Number.isInteger(state.current.notesDraftRevision) ? { notes_source_revision: state.current.notesDraftRevision } : {}) };
+      ...(Number.isInteger(state.current.notesDraftRevision) ? { notes_source_revision: state.current.notesDraftRevision } : {}),
+      ...(state.current.notesDraftSnapshot ? { notes_source_snapshot: state.current.notesDraftSnapshot } : {}) };
     setSaveStatus('待保存', 'pending');
     updateNoteActions();
     state.saveTimer = setTimeout(flushSave, 800);
@@ -1132,15 +1242,24 @@
         const body = { notes: pending.notes };
         if (pending.notes_incomplete !== undefined) body.notes_incomplete = pending.notes_incomplete;
         if (pending.notes_source_revision !== undefined) body.notes_source_revision = pending.notes_source_revision;
+        if (pending.notes_source_snapshot !== undefined) body.notes_source_snapshot = pending.notes_source_snapshot;
         const updated = await api.patch(pending.id, body);
         updateListItem(updated);
         if (state.current && state.current.id === pending.id) {
           state.current.notes_updated_at = updated.notes_updated_at;
           mergeWorkflow(state.current, updated);
           if (pending.notes_source_revision !== undefined) delete state.current.notesDraftRevision;
+          if (pending.notes_source_snapshot !== undefined) delete state.current.notesDraftSnapshot;
           renderHead();
           updateNoteActions();
-          if (!state.pendingSave && $('editor').value === pending.notes) setSaveStatus('已保存', 'saved');
+          if (!state.pendingSave && $('editor').value === pending.notes) {
+            if (pending.notes_source_snapshot !== undefined && typeof updated.notes === 'string') {
+              state.current.notes = updated.notes;
+              $('editor').value = updated.notes;
+            }
+            setSaveStatus('已保存', 'saved');
+            if (state.tab === 'preview') renderPreview();
+          }
         }
       } catch (e) {
         // Retain the newest draft for Cmd/Ctrl+S or the next autosave attempt.
@@ -1220,6 +1339,8 @@
     let saved = false;
     let donePaper = null;
     let sourceRevision = paper.material_revision;
+    let sourceSnapshot = null;
+    window.BioNoteSources?.clear();
     try {
       const resp = await fetch(paperPath(paper.id, '/read?mode=' + encodeURIComponent(mode)), { method: 'POST', signal: ctrl.signal });
       if (!resp.ok) {
@@ -1248,6 +1369,7 @@
               if (now - lastRender > 250) { renderPreview(acc, true); lastRender = now; }
             } else if (event.type === 'start') {
               if (Number.isInteger(event.material_revision)) sourceRevision = event.material_revision;
+              if (/^[0-9a-f]{32}$/.test(event.notes_source_snapshot || '')) sourceSnapshot = event.notes_source_snapshot;
               setGenerating(true, event.model + ' 正在' + (event.mode_name || mode) + '，笔记会实时出现…');
             } else if (event.type === 'stage') {
               setStage(event.message || event.stage, event.total ? { done: event.done, total: event.total } : null);
@@ -1269,6 +1391,7 @@
       paper.notes_updated_at = new Date().toISOString();
       paper.notes_incomplete = false;
       delete paper.notesDraftRevision;
+      delete paper.notesDraftSnapshot;
       paper.notes_stale = false;
       paper.tasks = (paper.tasks || []).filter(t => !['notes_incomplete', 'notes_stale'].includes(t.id));
       if (donePaper) mergeWorkflow(paper, donePaper);
@@ -1294,8 +1417,10 @@
       if (acc) {
         paper.notes_incomplete = true;
         paper.notesDraftRevision = sourceRevision;
+        if (sourceSnapshot) paper.notesDraftSnapshot = sourceSnapshot;
         state.pendingSave = { id: paper.id, notes: acc, notes_incomplete: true,
-          ...(Number.isInteger(sourceRevision) ? { notes_source_revision: sourceRevision } : {}) };
+          ...(Number.isInteger(sourceRevision) ? { notes_source_revision: sourceRevision } : {}),
+          ...(sourceSnapshot ? { notes_source_snapshot: sourceSnapshot } : {}) };
         const saved = await flushSave();
         if (saved) setSaveStatus('部分内容已保存 · 未完成', 'saved');
       } else {
@@ -1306,6 +1431,7 @@
       state.generating = null;
       renderDocuments(); updateNoteActions(); renderWorkflow();
       setGenerating(false);
+      renderPreview();
     }
     if (completed && saved) {
       void autoTags(paper, true);
@@ -1698,14 +1824,17 @@
     if (!paper || (!original.trim() && !hasResearchRecords(paper))) return '';
     const theme = $('wechat-theme').value;
     const md = (await api.prepareExport(paper.id, original)).notes;
-    let prepared = md;
-    for (const m of figureMarkdownRefs(md)) {
+    const host = document.createElement('div');
+    host.innerHTML = WechatExport.render(md, theme);
+    for (const image of host.querySelectorAll('img[data-bio-figure]')) {
       try {
-        const url = await figureDataUrl(m[2], paper.id);
-        prepared = prepared.split('(figure:' + m[2] + ')').join('(' + url + ')');
+        const fid = image.dataset.bioFigure;
+        if (!FIG_RE.test(fid || '') || image.getAttribute('src') !== 'figure:' + fid) throw new Error('图片引用无效');
+        // Only the validated local figure endpoint may supply embedded image data.
+        image.setAttribute('src', await figureDataUrl(fid, paper.id));
       } catch (e) { throw new Error('图片无法加载：' + e.message); }
     }
-    return WechatExport.render(prepared, theme);
+    return host.innerHTML;
   }
 
   async function copyWechat() {
@@ -1740,12 +1869,14 @@
       state.figures = [];
     }
     if (state.tab === 'figures') renderFigures();
+    updateReadingNavigation();
     if (state.tab === 'preview' && !state.generating) renderPreview();
     return state.figures;
   }
 
   function renderFigures() {
     const grid = $('fig-grid');
+    updateReadingNavigation();
     if (!state.current) { grid.innerHTML = emptyState('image', '让证据回到图表', '打开一篇文献，查看提取的图表与读图观察。'); return; }
     const figures = state.figures;
     if (!figures.length) {
@@ -2032,6 +2163,7 @@
     state.pdfDeferredPage = 1;
     if (state.pdf) { try { state.pdf.destroy(); } catch (e) { /* ignore */ } }
     state.pdf = null;
+    updateNavigationDocument();
     state.pageWrappers = [];
     $('pdf-pages').innerHTML = '';
     $('pdf-total').textContent = '0';
@@ -2072,6 +2204,7 @@
       if (token !== state.renderToken) { doc.destroy(); return; }
       state.pdf = doc;
       state.pdfContext = { paperId: paper.id, documentId };
+      updateNavigationDocument();
       $('pdf-empty').hidden = true;
       $('pdf-empty').setAttribute('aria-busy', 'false');
       $('pdf-total').textContent = doc.numPages;
@@ -2735,6 +2868,16 @@
   }
 
   async function init() {
+    if (window.BioReadingNav) window.BioReadingNav.init($('reading-navigation'), {
+      onPage: jumpReadingPage, onFigure: jumpReadingFigure, onHeading: jumpReadingHeading,
+      onToggle: () => {
+        const page = currentPage(), token = state.renderToken;
+        requestAnimationFrame(() => { if (token === state.renderToken && state.pdf) goToPage(page, false); });
+      },
+    });
+    if (window.BioNoteSources) window.BioNoteSources.init({
+      request: id => api.json(paperPath(id, '/note-sources')), jump: jumpNoteReference, toast,
+    });
     if (window.BioLibrarySearch) window.BioLibrarySearch.init({
       panel: $('library-search-body'), footer: $('library-search-footer'), modal: $('library-search-modal'),
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
@@ -2816,5 +2959,6 @@
     }
   }
 
+  window.BioDesktop = { prepareClose: prepareDesktopClose };
   document.addEventListener('DOMContentLoaded', init);
 })();

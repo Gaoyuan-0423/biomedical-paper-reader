@@ -207,6 +207,12 @@ select { cursor: pointer; }
 .pdf-text-layer br::selection { background: transparent; }
 .pdf-scroll.cropping .pdf-text-layer { pointer-events: none; user-select: none; }
 .pdf-source-highlight { position: absolute; pointer-events: none; z-index: 3; background: #facc1540; outline: 2px solid #eab308; border-radius: 2px; }
+.note-citation { display: inline; padding: 1px 6px; margin: 0 3px; border: 1px solid var(--primary-border); border-radius: 5px; color: var(--primary); background: var(--surface-subtle); font: 11px/1.7 var(--font-ui, sans-serif); vertical-align: baseline; cursor: pointer; }
+.note-citation:hover { background: var(--primary-soft, #eff6ff); }
+.note-citation:disabled { color: var(--muted); cursor: default; }
+.note-citation:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.note-navigation-target { background: #dbeafe; border-radius: 4px; }
+#preview :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: 12px; }
 .pdf-selection-tools { position: fixed; z-index: 70; display: flex; gap: 2px; padding: 4px; border: 1px solid var(--primary-border); border-radius: 9px; background: var(--panel); box-shadow: 0 4px 18px var(--shadow-popover); }
 .pdf-selection-tools .btn { min-height: 34px; padding: 6px 12px; color: var(--primary-ink); }
 .pdf-page::before { content: '第 ' attr(data-page) ' 页'; position: absolute; bottom: 5px; right: 9px; color: var(--muted); font-size: 11px; pointer-events: none; }

@@ -34,7 +34,7 @@ function harness() {
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { jumpNoteReference, prepareDesktopClose, appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -51,6 +51,62 @@ function harness() {
 function edit(h, notes) { h.$('editor').value = notes; h.scheduleSave(); }
 
 function answer(id = 'answer1') { return { id, role: 'assistant', status: 'completed', content: '## Finding\n\n**Sample** [S1]', sources: [{id: 'S1', document_id: C, document_name: 'supplement.pdf', page: 2, quote: 'Original evidence.'}] }; }
+test('note source jump saves draft first and resolves using the returned note revision', async () => {
+  const h = harness(), calls = [];
+  h.state.current.notes_revision = 1;
+  h.api.patch = async (id, body) => { calls.push('save'); return { id, ...body, notes_revision: 2 }; };
+  h.api.json = async url => { calls.push(url); return {source: {document_id: C, page: 2}}; };
+  edit(h, 'Current edited note');
+  await h.jumpNoteReference({paperId: A, snapshotId: B, sourceId: 'N1'});
+  assert.equal(calls[0], 'save'); assert.match(calls[1], /note-sources\/b{32}\/N1\?notes_revision=2$/);
+  assert.equal(h.$('editor').value, 'Current edited note');
+});
+test('late note source cannot navigate after switching paper or editing the note', async () => {
+  for (const action of ['switch', 'edit']) {
+    const h = harness(), pending = deferred(); h.state.current.notes_revision = 1;
+    h.api.json = () => pending.promise;
+    const jump = h.jumpNoteReference({paperId:A,snapshotId:B,sourceId:'N1'});
+    await new Promise(setImmediate);
+    if (action === 'switch') h.state.current = {id:C,notes_revision:1}; else h.$('editor').value = 'Changed during resolve';
+    pending.resolve({source:{document_id:'main',page:9}});
+    assert.equal(await jump, false); assert.notEqual(h.$('pdf-page').value, 9);
+  }
+});
+test('note references reject malformed ids and do not resolve unsaved failed drafts', async () => {
+  const h = harness(); h.state.current.notes_revision = 1;
+  await assert.rejects(h.jumpNoteReference({paperId:A,snapshotId:'../bad',sourceId:'N1'}), /格式/);
+  h.api.patch = async () => { throw new Error('Disk full'); }; edit(h, 'Keep my note');
+  await assert.rejects(h.jumpNoteReference({paperId:A,snapshotId:B,sourceId:'N1'}), /先保存/);
+  assert.equal(h.$('editor').value, 'Keep my note'); assert.ok(h.state.pendingSave);
+});
+test('partial generation binds canonical references once and later edits retain the snapshot', async () => {
+  const h = harness(), writes = [];
+  h.state.current.has_file = true; h.state.current.material_revision = 1;
+  const canonical = 'Finding [N1](note-source:' + B + ':N1)';
+  h.api.patch = async (id, body) => { writes.push(body); return {id,...body,notes:body.notes_source_snapshot?canonical:body.notes,notes_revision:writes.length,notes_source_snapshot:B}; };
+  stream(h,[{type:'start',notes_source_snapshot:B,material_revision:1},{type:'chunk',text:'Finding [N1]'}]);
+  await h.generateNotes();
+  assert.equal(writes[0].notes_source_snapshot,B); assert.equal(h.$('editor').value,canonical);
+  assert.equal(h.state.current.notes,canonical); assert.equal(h.state.current.notesDraftSnapshot,undefined);
+  edit(h, canonical+'\nMy addition'); await h.flushSave(); assert.equal(writes[1].notes_source_snapshot,undefined);
+});
+test('native close waits for note persistence and retains failed drafts', async () => {
+  const h = harness(), pending = deferred(); h.api.patch=()=>pending.promise;
+  edit(h,'Final edit before closing'); let closed=false;
+  const closing=h.prepareDesktopClose().then(value=>{closed=value;return value;});
+  await new Promise(setImmediate); assert.equal(closed,false);
+  pending.resolve({id:A,notes:'Final edit before closing'}); assert.equal(await closing,true);
+  h.api.patch=async()=>{throw new Error('Disk full');}; edit(h,'Unsaved edit');
+  assert.equal(await h.prepareDesktopClose(),false); assert.equal(h.$('editor').value,'Unsaved edit');
+});
+test('native close refuses active generation, import, research drafts or unsaved reading position', async () => {
+  const h=harness(); h.state.generating=true; assert.equal(await h.prepareDesktopClose(),false); h.state.generating=false;
+  h.context.window.BioZotero={isImporting:()=>true}; assert.equal(await h.prepareDesktopClose(),false); delete h.context.window.BioZotero;
+  h.context.window.BioResources={canLeave:()=>false}; assert.equal(await h.prepareDesktopClose(),false); delete h.context.window.BioResources;
+  h.state.readingPending.set(A+':main',{paperId:A,documentId:'main',position:{page:2,scale:1,fit_width:true}});
+  h.api.saveReading=async()=>{throw new Error('Offline');}; assert.equal(await h.prepareDesktopClose(),false);
+  h.api.saveReading=async()=>({}); assert.equal(await h.prepareDesktopClose(),true);
+});
 test('hidden PDF retains visible page for narrow-screen question context', () => {
   const h = harness();
   h.state.pageWrappers = [1, 2, 3].map(page => ({offsetTop: 0, dataset: {page: String(page)}}));
@@ -1274,7 +1330,7 @@ test('generation uses authoritative material freshness from done event', async (
 test('loading figures adds exact source links to an already saved note preview', async () => {
   const h = harness(), created = [], originalCreate = h.context.document.createElement;
   h.$('editor').value = '![Figure 1](figure:f001)';
-  h.context.window.marked = h.context.marked = { parse: () => '<p>figure</p>' };
+  h.context.window.BioMarkdown = { parse: () => '<p>figure</p>' };
   h.context.document.createElement = () => {
     const element = originalCreate(); element.after = sibling => created.push(sibling); return element;
   };
