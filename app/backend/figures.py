@@ -80,6 +80,7 @@ def lines_from_words(words):
         for fragment in fragments:
             lines.append({
                 "text": words_text(fragment),
+                "words": fragment,  # Caption-only reflow can restore inline font fragments.
                 "bbox": [min(w["x0"] for w in fragment), min(w["top"] for w in fragment), max(w["x1"] for w in fragment), max(w["bottom"] for w in fragment)],
                 "size": statistics.median(float(w.get("size", 10)) for w in fragment),
                 "bold": sum("bold" in w.get("fontname", "").lower() for w in fragment) > len(fragment) / 2,
@@ -191,7 +192,206 @@ def reflow_caption(text):
 
 # ---------- figures ----------
 
-def figure_regions(page, lines):
+
+def _caption_margin(line, height):
+    text = line["text"].strip()
+    return (line["bbox"][3] < height * 0.07 or
+            (line["bbox"][1] > height * 0.85 and
+             (bool(FOOTER.search(text)) or bool(re.fullmatch(r"\d{1,4}", text)))))
+
+
+def _caption_boundary(line):
+    text = line["text"].strip()
+    return (bool(CAPTION.match(text)) or bool(HEADING.fullmatch(text)) or
+            bool(re.match(r"^(?:(?:supplementary|supplemental)\s+)?(?:table|表)\s*[sS]?\d+\b", text, re.I)) or
+            (bool(HEADING.match(text)) and line.get("bold") and len(text.split()) <= 8))
+
+
+def _caption_sentence_end(text):
+    return bool(re.search(r"[.!?。！？;；][)\]\"'”’]*$", text.strip()))
+
+
+def _caption_continuation_marker(text):
+    # A new panel, an explicit continuation, or a legend's abbreviation list
+    # can follow a completed sentence. An ordinary next paragraph cannot.
+    return (bool(re.match(r"^(?:\([A-Za-z](?:[–-][A-Za-z])?\)|[A-Za-z][.)])(?:\s+|$)", text)) or
+            bool(re.match(r"^\(?(?:continued|cont\.)(?:\W|$)", text, re.I)) or
+            bool(re.match(r"^[^\W\d][\w/+−-]{0,15},\s+[^;,\n]{2,70};\s+[^\W\d][\w/+−-]{0,15},\s+", text)))
+
+
+def _caption_prose_heading(line):
+    text = line["text"].strip()
+    return (line.get("bold") and 3 < len(text) < 120 and len(text.split()) <= 10
+            and not _caption_sentence_end(text) and not _caption_continuation_marker(text))
+
+
+def _caption_objects(page):
+    # A new plot/table interrupts a legend. Small inline keys and margin rules do not.
+    return [[float(obj.get(k, 0)) for k in ("x0", "top", "x1", "bottom")]
+            for items in (page.images, page.curves, page.rects) for obj in items
+            if float(obj.get("x1", 0)) - float(obj.get("x0", 0)) > 30
+            and float(obj.get("bottom", 0)) - float(obj.get("top", 0)) > 20
+            and ((float(obj.get("x1", 0)) - float(obj.get("x0", 0))) *
+                 (float(obj.get("bottom", 0)) - float(obj.get("top", 0))) < page.width * page.height * 0.92)
+            and float(obj.get("bottom", 0)) > page.height * 0.07
+            and float(obj.get("top", 0)) < page.height * 0.93]
+
+
+def _caption_lane(page, lines, caption, figure_bbox):
+    mid = page.width / 2
+    left, right = 0.0, float(page.width)
+    # Only split a narrow figure when another text/caption column is visible.
+    # Full-width legends below a narrow plot therefore remain full width.
+    below = [line for line in lines if caption["bbox"][1] - 20 <= line["bbox"][1] <= caption["bbox"][1] + 180]
+    if figure_bbox[2] <= mid + 4 and caption["bbox"][2] < mid:
+        if sum(line["bbox"][0] >= mid for line in below) >= 2 or any(CAPTION.match(line["text"]) and line["bbox"][0] >= mid for line in lines):
+            right = mid
+    elif figure_bbox[0] >= mid - 4 and caption["bbox"][0] >= mid:
+        if sum(line["bbox"][2] < mid for line in below) >= 2 or any(CAPTION.match(line["text"]) and line["bbox"][2] < mid for line in lines):
+            left = mid
+    return left, right
+
+
+def _caption_rows(lines, lane):
+    """Rejoin font-split fragments for legends, without changing crop/source lines."""
+    left, right = lane
+    groups = []
+    for line in sorted(lines, key=lambda item: (item["bbox"][3], item["bbox"][0])):
+        box = line["bbox"]
+        if box[0] < left - 4 or box[2] > right + 4:
+            continue
+        target = next((group for group in reversed(groups[-6:])
+                       if abs(statistics.median(item["bbox"][3] for item in group) - box[3]) <= max(2.5, line["size"] * 0.42)), None)
+        if target is None:
+            groups.append([line])
+        else:
+            target.append(line)
+    rows = []
+    for group in groups:
+        fragments = [[]]
+        edge = None
+        for line in sorted(group, key=lambda item: item["bbox"][0]):
+            if edge is not None and line["bbox"][0] - edge > max(36, line["size"] * 3.5):
+                fragments.append([])
+            fragments[-1].append(line)
+            edge = max(edge or 0, line["bbox"][2])
+        for fragment in fragments:
+            words = [word for line in fragment for word in line.get("words", [])]
+            text = words_text(sorted(words, key=lambda word: (word["x0"], word["top"]))) if words and all(line.get("words") for line in fragment) else " ".join(line["text"] for line in fragment)
+            rows.append({"text": text, "parts": fragment,
+                         "bbox": [min(line["bbox"][0] for line in fragment), min(line["bbox"][1] for line in fragment),
+                                  max(line["bbox"][2] for line in fragment), max(line["bbox"][3] for line in fragment)],
+                         "size": statistics.median(word["size"] for word in words) if words else statistics.median(line["size"] for line in fragment),
+                         "bold": all(line.get("bold", False) for line in fragment)})
+    return sorted(rows, key=lambda item: (item["bbox"][1], item["bbox"][0]))
+
+
+def _read_caption_rows(page, rows, start, lane, title_size, prior=None):
+    first = rows[start]
+    parts = list(prior["parts"]) if prior else []
+    parts.append(first["text"])
+    body = [first] if prior else []
+    sizes = [prior["size"], first["size"]] if prior else []
+    previous = first
+    blocked = False
+    objects = _caption_objects(page)
+    for row in rows[start + 1:]:
+        box, last = row["bbox"], previous["bbox"]
+        if box[3] <= first["bbox"][1] + 2:
+            continue
+        if _caption_margin(row, page.height):
+            if box[1] > last[3]:
+                break
+            continue
+        if _caption_boundary(row):
+            blocked = True
+            break
+        if body and _caption_sentence_end(previous["text"]) and _caption_prose_heading(row):
+            blocked = True
+            break
+        # Reject other columns and diagrams rather than walking over them to later text.
+        body_left = min(item["bbox"][0] for item in body) if body else first["bbox"][0]
+        indent = max(36, title_size * 3.5) if body else max(45, first["bbox"][2] - first["bbox"][0] + 40)
+        if abs(box[0] - body_left) > indent:
+            continue
+        if any(obj[0] < box[2] and obj[2] > box[0] and obj[3] > last[3] + 2 and obj[1] < box[3] for obj in objects):
+            blocked = True
+            break
+        if body and _caption_sentence_end(previous["text"]) and not _caption_continuation_marker(row["text"]):
+            body_width = max(item["bbox"][2] for item in body) - body_left
+            if last[2] - last[0] < body_width * 0.78:
+                blocked = True
+                break
+        if box[1] - last[3] > max(18, title_size * 1.8):
+            blocked = True
+            break
+        size = statistics.median(sizes) if sizes else title_size
+        compatible = abs(row["size"] - size) <= max(1, size * 0.15) if sizes else title_size * 0.7 <= row["size"] <= title_size * 1.15
+        if not compatible:
+            blocked = True
+            break
+        parts.append(row["text"])
+        previous = row
+        # Isolated superscript glyphs must not establish a new paragraph/font or
+        # make a short, completed final line look like a full-width continuation.
+        if len(row["text"].strip()) > 3:
+            body.append(row)
+            sizes.append(row["size"])
+        if len(parts) > 240 or sum(map(len, parts)) > 24000:
+            blocked = True
+            break
+    if not body:
+        return {"parts": parts, "blocked": True}
+    return {"parts": parts, "blocked": blocked, "size": statistics.median(sizes),
+            "left": min(row["bbox"][0] for row in body), "right": max(row["bbox"][2] for row in body),
+            "last": body[-1]["bbox"], "last_text": body[-1]["text"], "rows": len(body), "lane": lane,
+            "width": float(page.width), "height": float(page.height), "page": page.page_number,
+            "pages": (prior["pages"] + 1) if prior else 1,
+            "geometry_ok": not (getattr(page, "rotation", 0) or tuple(getattr(page, "bbox", (0, 0))[:2]) != (0, 0)
+                                or (getattr(page, "cropbox", None) and tuple(page.cropbox) != tuple(page.mediabox)))}
+
+
+def _caption_text(page, lines, caption, figure_bbox):
+    lane = _caption_lane(page, lines, caption, figure_bbox)
+    rows = _caption_rows(lines, lane)
+    start = next((i for i, row in enumerate(rows) if any(part is caption for part in row["parts"])), None)
+    if start is None:
+        return {"parts": [caption["text"]], "blocked": True}
+    return _read_caption_rows(page, rows, start, lane, caption["size"])
+
+
+def _caption_can_continue(run):
+    if run.get("blocked") or not run.get("geometry_ok") or run.get("rows", 0) < 2 or run.get("pages", 0) >= 3:
+        return False
+    last = run["last"]
+    return (last[3] >= run["height"] * 0.8 and run["right"] - run["left"] >= run["width"] * 0.25
+            and abs(last[0] - run["left"]) <= max(8, run["size"])
+            and run["right"] - last[2] <= max(10, run["size"] * 1.2))
+
+
+def _continue_caption(run, page, lines):
+    """Continue only a full bottom line into a matching, text-only next-page column."""
+    if not _caption_can_continue(run) or page.page_number != run["page"] + 1:
+        return None
+    if abs(page.width - run["width"]) > 2 or abs(page.height - run["height"]) > 2 or _caption_objects(page):
+        return None
+    if getattr(page, "rotation", 0) or tuple(getattr(page, "bbox", (0, 0))[:2]) != (0, 0) or (getattr(page, "cropbox", None) and tuple(page.cropbox) != tuple(page.mediabox)):
+        return None
+    rows = [row for row in _caption_rows(lines, run["lane"]) if not _caption_margin(row, page.height)]
+    if len(rows) < 2 or rows[0]["bbox"][1] > page.height * 0.2:
+        return None
+    if _caption_sentence_end(run["last_text"]) and not _caption_continuation_marker(rows[0]["text"]):
+        return None
+    for row in rows[:2]:
+        if (_caption_boundary(row) or _caption_prose_heading(row)
+                or abs(row["size"] - run["size"]) > max(0.7, run["size"] * 0.08)
+                or abs(row["bbox"][0] - run["left"]) > max(6, run["size"])
+                or abs(row["bbox"][2] - run["right"]) > max(20, (run["right"] - run["left"]) * 0.15)):
+            return None
+    return _read_caption_rows(page, rows, 0, run["lane"], run["size"], prior=run)
+
+
+def figure_regions(page, lines, *, caption_runs=None):
     """Caption-anchored unions keep multi-panel figures whole instead of bitmap pieces."""
     captions = [l for l in lines if CAPTION.match(l["text"])]
     objects = []
@@ -224,19 +424,11 @@ def figure_regions(page, lines):
             bbox[1] = max(0, min(bbox[1], min(l["bbox"][1] for l in panel_labels) - 5))
         if (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) < 1000:
             continue
-        parts = [caption["text"]]
-        last_bottom = bottom
-        for candidate in sorted(lines, key=lambda l: (l["bbox"][1], l["bbox"][0])):
-            bx0, bt, bx1, bb = candidate["bbox"]
-            if bt <= top + 2 or bt > last_bottom + 16 or bx0 > x1 + 30 or bx1 < x0 - 10:
-                continue
-            footer = bt > page.height * 0.85 and (FOOTER.search(candidate["text"]) or re.fullmatch(r"\d{1,4}", candidate["text"].strip()))
-            if footer or CAPTION.match(candidate["text"]) or HEADING.fullmatch(candidate["text"]) or abs(candidate["size"] - caption["size"]) > max(0.7, caption["size"] * 0.1):
-                break
-            parts.append(candidate["text"])
-            last_bottom = max(last_bottom, bb)
+        run = _caption_text(page, lines, caption, bbox)
+        if caption_runs is not None:
+            caption_runs.append((len(regions), run))
         match = CAPTION.match(caption["text"])
-        regions.append((f"Figure {match.group(1) or match.group(2)}", "\n".join(parts), bbox))
+        regions.append((f"Figure {match.group(1) or match.group(2)}", "\n".join(run["parts"]), bbox))
     if not regions:
         bitmaps = [[i["x0"], i["top"], i["x1"], i["bottom"]] for i in page.images if i["width"] > 60 and i["height"] > 45 and i["width"] * i["height"] < page.width * page.height * 0.85]
         groups = []
@@ -317,6 +509,7 @@ def parse_pdf(pdf_path: Path, figures_dir: Path) -> dict:
     metadata = {}
     counter = 0
     text_reader = None
+    pending_caption = None
     with pdfplumber.open(str(pdf_path)) as source, pdfium.PdfDocument(str(pdf_path)) as renderer:
         if len(source.pages) > MAX_PAGES:
             raise ValueError(f"PDF 超过 {MAX_PAGES} 页，请拆分后导入")
@@ -360,25 +553,46 @@ def parse_pdf(pdf_path: Path, figures_dir: Path) -> dict:
                 source_blocks = [{'text': text, 'bbox': None}] if text else []
             pages.append({"number": number, "text": text, "width": float(page.width), "height": float(page.height),
                           "blocks": source_blocks})
+            if pending_caption:
+                try:
+                    continued = _continue_caption(pending_caption["run"], page, lines)
+                except Exception as exc:  # noqa: BLE001 - keep already extracted figures
+                    continued = None
+                    warnings.append(f"第 {number} 页图注续接失败：{type(exc).__name__}")
+                if continued:
+                    for figure in pending_caption["figures"]:
+                        figure["caption"] = reflow_caption("\n".join(continued["parts"]))
+                    pending_caption["run"] = continued
+                if not continued or not _caption_can_continue(continued):
+                    pending_caption = None
+            caption_runs = []
             try:
-                regions = figure_regions(page, lines)
+                regions = figure_regions(page, lines, caption_runs=caption_runs)
             except Exception as exc:  # noqa: BLE001
                 regions = []
                 warnings.append(f"第 {number} 页候选图提取失败：{type(exc).__name__}")
             if regions:
                 image = render_page(renderer, index)
-                for label, caption, bbox in regions:
+                candidates = []
+                runs = dict(caption_runs)
+                for region_index, (label, caption, bbox) in enumerate(regions):
                     bbox = checked_bbox(bbox, page.width, page.height)
                     counter += 1
                     fid = f"f{counter:03d}"
                     w, h = save_crop(image, bbox, page.width, page.height, figures_dir / f"{fid}.png")
                     parent = {"id": fid, "label": label, "caption": reflow_caption(caption), "page": number, "bbox": bbox, "width": w, "height": h, "source": "auto", "parent": None}
                     figures.append(parent)
+                    related = [parent]
                     for panel_label, panel_bbox in subfigure_regions(lines, bbox):
                         counter += 1
                         cid = f"f{counter:03d}"
                         pw, ph = save_crop(image, panel_bbox, page.width, page.height, figures_dir / f"{cid}.png")
                         figures.append({"id": cid, "label": label + panel_label, "caption": parent["caption"], "page": number, "bbox": [round(v, 2) for v in panel_bbox], "width": pw, "height": ph, "source": "auto", "parent": fid})
+                        related.append(figures[-1])
+                    if region_index in runs and _caption_can_continue(runs[region_index]):
+                        candidates.append({"run": runs[region_index], "figures": related})
+                # Ambiguous multiple legends at the foot of a page are not extended.
+                pending_caption = candidates[0] if len(candidates) == 1 else None
             page.close()
     if not figures:
         warnings.append("未自动定位到图片；矢量图、跨页图或扫描件可用「取图」手动框选")

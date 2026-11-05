@@ -8,13 +8,13 @@
 
 `main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 补发前核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。v0.3.3 现已正式发布。
 
-### 当前桌面预览版 v0.11.0
+### 当前桌面预览版 v0.11.1
 
-v0.11.0 使用 **Pre-release** 流程，保留 **v0.3.4** 为稳定版及 Latest，不运行会设置正式 Latest 的稳定版工作流。使用 [v0.11.0 双语说明](releases/v0.11.0.md)，运行 `python3 scripts/prepare_release.py v0.11.0`，将新标签绑定到已检查的源码提交。本次公开附件为以下三份程序包和一份合并清单：
+v0.11.1 使用 **Pre-release** 流程，保留 **v0.3.4** 为稳定版及 Latest，不运行会设置正式 Latest 的稳定版工作流。使用 [v0.11.1 双语说明](releases/v0.11.1.md)，运行 `python3 scripts/prepare_release.py v0.11.1`，将新标签绑定到已检查的源码提交。本次公开附件为以下三份程序包和一份合并清单：
 
-- `BioReader-v0.11.0-macos-arm64.dmg`
-- `BioReader-v0.11.0-windows-x64-setup.exe`
-- `BioReader-v0.11.0-windows-x64.zip`
+- `BioReader-v0.11.1-macos-arm64.dmg`
+- `BioReader-v0.11.1-windows-x64-setup.exe`
+- `BioReader-v0.11.1-windows-x64.zip`
 - `SHA256SUMS.txt`
 
 两平台桌面外壳使用 Go + MyGo v0.7.4，现有 Python 阅读服务和 PDF 依赖作为 `BioReaderService` 随包分发。用户不需安装 Python。默认资料目录保持不变：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`。同步发布不表示应用内自动更新或云端文库同步。
@@ -23,19 +23,19 @@ v0.11.0 使用 **Pre-release** 流程，保留 **v0.3.4** 为稳定版及 Latest
 
 在同一个已检查、已提交的干净源码版本上构建 macOS 与 Windows。原生构建入口为 [`app/build-macos.sh`](app/build-macos.sh) 和 [`app/build-windows.ps1`](app/build-windows.ps1)，读取 `SKILL.md` 的版本。构建工具需要 Go 1.27.3+、目标平台的 64 位 Python 3.10+ 和依赖下载网络；脚本创建独立 Python 构建环境。详细参数见 [MyGo 开发说明](app/mygo/README.md)及[桌面构建说明](app/DESKTOP.md)。
 
-已有依赖时可直接运行 `python scripts/build_mygo.py --version v0.11.0 --python /path/to/build-python`。`--skip-backend` 只用于开发，会标记 dirty，不能通过最终发布验收；`--skip-installer` 不会产生本次要求的 Windows 安装 EXE。
+已有依赖时可直接运行 `python scripts/build_mygo.py --version v0.11.1 --python /path/to/build-python`。`--skip-backend` 只用于开发，会标记 dirty，不能通过最终发布验收；`--skip-installer` 不会产生本次要求的 Windows 安装 EXE。
 
 Mac 构建结果在 `app/mygo/build/darwin-arm64/`。在仓库根目录执行：
 
 ```bash
-app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.11.0 --commit "$(git rev-parse HEAD)"
+app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.11.1 --commit "$(git rev-parse HEAD)"
 ```
 
 Windows x64 构建结果在 `app/mygo/build/windows-amd64/`。在一次性的 Windows 测试环境或 CI runner 中执行安装／卸载验收：
 
 ```powershell
 $sourceCommit = git rev-parse HEAD
-.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.11.0 --commit $sourceCommit --test-installer
+.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.11.1 --commit $sourceCommit --test-installer
 ```
 
 [`scripts/package_mygo.py`](scripts/package_mygo.py) 检查实际解压 ZIP 或挂载 DMG 内的前端字节、运行时报告中的源码提交／版本／dirty 标记，并运行随包原生诊断。Mac 还检查 DMG 和 App 签名完整性；这不等于 Apple 开发者签名或公证。Windows 的 `--test-installer` 额外运行静默安装、已安装程序诊断及卸载。正常便携包必须包含 `BioReader/BioReader.exe`、同级 `BioReaderService/` 及全部随附文件；不要沿用旧版只核对顶层 `_internal` 的方式。
@@ -114,13 +114,13 @@ ZIP 应保留 `BioReader.app` 的目录、权限和符号链接，解压后复�
 
 README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. Before the catch-up release on 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow. v0.3.3 has since been published.
 
-### Current desktop preview v0.11.0
+### Current desktop preview v0.11.1
 
-v0.11.0 uses the **Pre-release** process. Keep **v0.3.4** as the stable Latest release and do not run the stable-release workflow that sets a new Latest. Use the [v0.11.0 bilingual notes](releases/v0.11.0.md), run `python3 scripts/prepare_release.py v0.11.0`, and bind the new tag to the checked source commit. Publish these three application packages and one combined checksum list:
+v0.11.1 uses the **Pre-release** process. Keep **v0.3.4** as the stable Latest release and do not run the stable-release workflow that sets a new Latest. Use the [v0.11.1 bilingual notes](releases/v0.11.1.md), run `python3 scripts/prepare_release.py v0.11.1`, and bind the new tag to the checked source commit. Publish these three application packages and one combined checksum list:
 
-- `BioReader-v0.11.0-macos-arm64.dmg`
-- `BioReader-v0.11.0-windows-x64-setup.exe`
-- `BioReader-v0.11.0-windows-x64.zip`
+- `BioReader-v0.11.1-macos-arm64.dmg`
+- `BioReader-v0.11.1-windows-x64-setup.exe`
+- `BioReader-v0.11.1-windows-x64.zip`
 - `SHA256SUMS.txt`
 
 Both desktop shells use Go + MyGo v0.7.4. The existing Python reading backend and PDF dependencies ship inside `BioReaderService`; users do not install Python. Default library locations remain `~/Library/Application Support/BioReader/` on macOS and `%LOCALAPPDATA%\BioReader` on Windows. Synchronized publication does not provide an in-app updater or cloud library synchronization.
@@ -129,19 +129,19 @@ Both desktop shells use Go + MyGo v0.7.4. The existing Python reading backend an
 
 Build macOS and Windows from the same checked, clean, committed source revision. Native build entry points are [`app/build-macos.sh`](app/build-macos.sh) and [`app/build-windows.ps1`](app/build-windows.ps1); both read the version from `SKILL.md`. Build tools require Go 1.27.3+, native 64-bit Python 3.10+, and network access for dependencies. The scripts create an isolated Python build environment. See the [MyGo developer guide](app/mygo/README.md) and [desktop build guide](app/DESKTOP.md).
 
-With dependencies already installed, run `python scripts/build_mygo.py --version v0.11.0 --python /path/to/build-python`. The development-only `--skip-backend` option marks the build dirty and cannot pass final release validation. `--skip-installer` omits the Windows setup executable required for this release.
+With dependencies already installed, run `python scripts/build_mygo.py --version v0.11.1 --python /path/to/build-python`. The development-only `--skip-backend` option marks the build dirty and cannot pass final release validation. `--skip-installer` omits the Windows setup executable required for this release.
 
 The Mac build is written to `app/mygo/build/darwin-arm64/`. From the repository root, run:
 
 ```bash
-app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.11.0 --commit "$(git rev-parse HEAD)"
+app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.11.1 --commit "$(git rev-parse HEAD)"
 ```
 
 The Windows x64 build is written to `app/mygo/build/windows-amd64/`. Test installation and removal only on a disposable Windows environment or CI runner:
 
 ```powershell
 $sourceCommit = git rev-parse HEAD
-.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.11.0 --commit $sourceCommit --test-installer
+.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.11.1 --commit $sourceCommit --test-installer
 ```
 
 [`scripts/package_mygo.py`](scripts/package_mygo.py) checks frontend bytes inside the actual extracted ZIP or mounted DMG, verifies the runtime's commit/version/dirty metadata, and runs the packaged native diagnostic. Mac validation also checks DMG and application-signature integrity; these checks do not provide Apple Developer ID signing or notarization. On Windows, `--test-installer` also performs a silent install, checks the installed executable, and runs its uninstaller. The portable ZIP must contain `BioReader/BioReader.exe`, the sibling `BioReaderService/` directory, and every accompanying file. The old layout's top-level `_internal` check is no longer sufficient.

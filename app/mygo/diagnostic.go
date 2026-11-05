@@ -21,8 +21,19 @@ import (
 var buildCommit = "development"
 var buildDirty = "true"
 
+const syntheticCaptionFirstLine = "Samples were collected from three independent synthetic groups."
+const syntheticCaptionSecondLine = "Each group was measured twice using the same imaging settings."
+
 func syntheticPDF() []byte {
-	stream := "BT /F1 12 Tf 60 740 Td (BioReader synthetic desktop diagnostic.) Tj ET"
+	// Keep the searchable text and PDF.js smoke marker, while exercising a
+	// standalone supplement title followed by smaller caption body lines.
+	stream := strings.Join([]string{
+		"BT /F1 12 Tf 60 740 Td (BioReader synthetic desktop diagnostic.) Tj ET",
+		"q 0.85 0.9 1 rg 60 440 400 240 re f Q",
+		"BT /F1 13 Tf 60 420 Td (Supplementary Figure 1) Tj ET",
+		"BT /F1 9.5 Tf 60 402 Td (" + syntheticCaptionFirstLine + ") Tj ET",
+		"BT /F1 9.5 Tf 60 388 Td (" + syntheticCaptionSecondLine + ") Tj ET",
+	}, "\n")
 	objects := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -128,6 +139,29 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	if !bytes.Equal(data, syntheticPDF()) {
 		return errors.New("PDF bytes changed")
 	}
+	data, err = requestBytes(client, "GET", address+"/figures", "", nil, 200)
+	if err != nil {
+		return err
+	}
+	var figures []struct {
+		Page    int    `json:"page"`
+		Caption string `json:"caption"`
+	}
+	if err = json.Unmarshal(data, &figures); err != nil {
+		return err
+	}
+	completeCaption := false
+	for _, figure := range figures {
+		if figure.Page == 1 && strings.Contains(figure.Caption, "Supplementary Figure 1") &&
+			strings.Contains(figure.Caption, syntheticCaptionFirstLine) && strings.Contains(figure.Caption, syntheticCaptionSecondLine) {
+			completeCaption = true
+			break
+		}
+	}
+	if !completeCaption {
+		return errors.New("supplementary figure caption lost its smaller-font body lines")
+	}
+	report["caption_tested"] = true
 	if _, err = requestBytes(client, "PATCH", address, "application/json", []byte(`{"notes":"# 合成诊断\n\nSynthetic note."}`), 200); err != nil {
 		return err
 	}
@@ -166,7 +200,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	if strings.TrimSpace(string(data)) != "[]" {
 		return errors.New("diagnostic library not empty after deletion")
 	}
-	report["checks"] = []string{"Real bundled sidecar on a random loopback socket", "Private owner handshake, required session, foreign-origin rejection", "Bundled frontend and native PDF import/retrieval/search", "Unicode note persistence and deletion", "Child service exits when its owner pipe closes"}
+	report["checks"] = []string{"Real bundled sidecar on a random loopback socket", "Private owner handshake, required session, foreign-origin rejection", "Bundled frontend and native PDF import/retrieval/search", "Frozen backend extracts both smaller-font supplementary caption lines below a standalone figure title", "Unicode note persistence and deletion", "Child service exits when its owner pipe closes"}
 	if gui {
 		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render", "Chinese/English interface switching preserves the chat composer and Unicode draft, synchronizes both controls and persists the native dialog language", "Brand SVG loads and decodes in the native WebView")
 	}
@@ -174,7 +208,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 }
 
 func runDiagnostic(executable, reportPath string, gui bool) (resultErr error) {
-	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false,
+	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false, "caption_tested": false,
 		"source_commit": buildCommit, "build_dirty": buildDirty != "false", "app_version": mygo.App.Version()}
 	defer func() {
 		if resultErr == nil {
