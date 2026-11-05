@@ -1,0 +1,223 @@
+name: Upload verified v0.10.0 preview assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: 'Must match the audited v0.10.0 source commit'
+        required: true
+        default: '0e7f665a53ffa99ee3e885952e6a3311a575b2d3'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upload-preview-v0.10.0
+  cancel-in-progress: false
+
+jobs:
+  upload-preview:
+    if: github.repository == 'Gaoyuan-0423/biomedical-paper-reader' && github.ref == 'refs/heads/main'
+    name: Verify and upload ${{ matrix.platform }} assets to the draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: ubuntu-latest
+          - platform: macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      PREVIEW_PLATFORM: ${{ matrix.platform }}
+      PREVIEW_ASSETS: ${{ runner.temp }}/preview-assets
+    steps:
+      - name: Prepare strict draft and artifact verification
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/preview_assets.py" <<'PY'
+          import hashlib, io, json, os, subprocess, sys, urllib.error, urllib.parse, urllib.request, zipfile
+          from pathlib import Path
+
+          REPO = 'Gaoyuan-0423/biomedical-paper-reader'
+          COMMIT = '0e7f665a53ffa99ee3e885952e6a3311a575b2d3'
+          TAG = 'v0.10.0'
+          RELEASE_ID = 434813618
+          ARTIFACT_ID = 13390492133
+          RUN_ID = 41972393737
+          OUTER_SHA = '9cea2bfb55dbf2167ed91481f34aade5a472626ad72db9dc26fca9ddb13164df'
+          WINDOWS = {
+              'BioReader-v0.10.0-windows-x64.zip': (45733227, 'c1e49dbaf9c9896236503131608c9d9aff541a6885015ab136e9585bbe54f837'),
+              'BioReader-v0.10.0-windows-x64-setup.exe': (34776713, '8f37bab66213335d3bd4d14f4ac9da7772e0d38bd29cd11f162e58770d9dd3d5'),
+          }
+          folder = Path(os.environ['PREVIEW_ASSETS'])
+          folder.mkdir(parents=True, exist_ok=True)
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{REPO}/{path}']))
+
+          def draft():
+              require(os.environ.get('EXPECTED_COMMIT') == COMMIT, 'Unexpected requested source commit.')
+              release = api(f'releases/{RELEASE_ID}')
+              require(release['id'] == RELEASE_ID and release['tag_name'] == TAG and release['draft'] is True,
+                      'Target release is not the expected existing draft; refusing changes.')
+              require(api(f'commits/{TAG}')['sha'] == COMMIT, 'Release tag points to different source.')
+              return release
+
+          def diagnostic(value):
+              require(value.get('status') == 'passed' and value.get('source_commit') == COMMIT
+                      and value.get('build_dirty') is False and value.get('backend_frozen') is True
+                      and value.get('gui_tested') is True and value.get('app_version') == '0.10.0'
+                      and value.get('desktop') == 'egoist/mygo' and value.get('mygo_version') == 'v0.7.4',
+                      'Native runtime diagnostic or source provenance is invalid.')
+
+          def verify_assets():
+              info = json.loads((folder / 'build-info.json').read_text('utf-8'))
+              require(info.get('version') == TAG and info.get('commit') == COMMIT
+                      and info.get('desktop') == 'egoist/mygo' and info.get('mygo_version') == 'v0.7.4'
+                      and info.get('frontend_files') == 231, 'Unexpected build manifest.')
+              diagnostic(info['self_test'])
+              saved = json.loads((folder / 'self-test.json').read_text('utf-8'))
+              require(saved == info['self_test'], 'Manifest and native diagnostic disagree.')
+              windows = os.environ['PREVIEW_PLATFORM'] == 'windows'
+              expected_names = set(WINDOWS) if windows else {'BioReader-v0.10.0-macos-arm64.dmg'}
+              require(info.get('platform') == ('windows-amd64' if windows else 'darwin-arm64'), 'Wrong target architecture.')
+              require(len(info['artifacts']) == len(expected_names)
+                      and {item['name'] for item in info['artifacts']} == expected_names, 'Unexpected release filenames.')
+              if windows:
+                  require(info.get('installer_tested') is True and info.get('uninstaller_tested') is True,
+                          'Windows installation and uninstallation must both be verified.')
+                  diagnostic(json.loads((folder / 'installer-self-test.json').read_text('utf-8')))
+              sums = (folder / 'SHA256SUMS.txt').read_text('utf-8').splitlines()
+              for item in info['artifacts']:
+                  path = folder / item['name']
+                  size, sha = path.stat().st_size, hashlib.sha256(path.read_bytes()).hexdigest()
+                  require(size == item['bytes'] and sha == item['sha256'] and f'{sha}  {path.name}' in sums,
+                          f'Artifact checksum mismatch: {path.name}')
+                  if windows:
+                      require((size, sha) == WINDOWS[path.name], f'Windows artifact differs from the audited build: {path.name}')
+              return info['artifacts']
+
+          def download_windows():
+              artifact = api(f'actions/artifacts/{ARTIFACT_ID}')
+              require(artifact['name'] == 'BioReader-v0.10.0-windows-x64' and not artifact['expired']
+                      and artifact['workflow_run']['id'] == RUN_ID and artifact['workflow_run']['head_sha'] == COMMIT
+                      and artifact['digest'] == 'sha256:' + OUTER_SHA, 'Unexpected Windows Actions artifact.')
+              # Do not forward the repository token to the signed blob-storage redirect.
+              class NoRedirect(urllib.request.HTTPRedirectHandler):
+                  def redirect_request(self, req, fp, code, msg, headers, newurl):
+                      return None
+              request = urllib.request.Request(f'https://api.github.com/repos/{REPO}/actions/artifacts/{ARTIFACT_ID}/zip',
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'X-GitHub-Api-Version': '2022-11-28'})
+              try:
+                  response = urllib.request.build_opener(NoRedirect).open(request, timeout=60)
+              except urllib.error.HTTPError as redirect:
+                  require(redirect.code in (301, 302, 303, 307, 308), 'Artifact download did not return a valid redirect.')
+                  location = redirect.headers['Location']
+                  require(urllib.parse.urlsplit(location).scheme == 'https', 'Artifact redirect is not HTTPS.')
+                  response = urllib.request.urlopen(location, timeout=90)
+              with response:
+                  data = response.read()
+              require(len(data) == 80513838 and hashlib.sha256(data).hexdigest() == OUTER_SHA, 'Actions ZIP checksum mismatch.')
+              allowed = set(WINDOWS) | {'build-info.json', 'self-test.json', 'installer-self-test.json', 'SHA256SUMS.txt'}
+              with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                  require(set(archive.namelist()) == allowed, 'Unexpected files in Actions ZIP.')
+                  archive.extractall(folder)
+              verify_assets()
+
+          def upload():
+              artifacts = verify_assets()
+              uploaded = []
+              for item in artifacts:
+                  release = draft()
+                  existing = [asset for asset in release['assets'] if asset['name'] == item['name']]
+                  if existing:
+                      require(len(existing) == 1 and existing[0]['state'] == 'uploaded'
+                              and existing[0]['size'] == item['bytes'] and existing[0].get('digest') == 'sha256:' + item['sha256'],
+                              f'Existing asset differs or is incomplete; refusing overwrite: {item["name"]}')
+                  else:
+                      subprocess.run(['gh', 'release', 'upload', TAG, str(folder / item['name']), '--repo', REPO], check=True)
+                  release = draft()
+                  matching = [asset for asset in release['assets'] if asset['name'] == item['name']]
+                  require(len(matching) == 1 and matching[0]['state'] == 'uploaded'
+                          and matching[0]['size'] == item['bytes'] and matching[0].get('digest') == 'sha256:' + item['sha256'],
+                          f'Uploaded asset failed server-side verification: {item["name"]}')
+                  uploaded.append({'id': matching[0]['id'], **item})
+                  print('Verified draft asset:', item['name'], item['sha256'])
+              require(draft()['draft'] is True, 'Release unexpectedly left draft state.')
+              (folder / 'draft-upload-verification.json').write_text(json.dumps({
+                  'release_id': RELEASE_ID, 'tag': TAG, 'commit': COMMIT, 'draft': True, 'assets': uploaded,
+              }, indent=2) + '\n', encoding='utf-8')
+
+          draft()
+          if sys.argv[1] == 'download':
+              download_windows()
+          elif sys.argv[1] == 'upload':
+              upload()
+          elif sys.argv[1] != 'verify':
+              raise RuntimeError('Unknown operation.')
+          PY
+          python3 "$RUNNER_TEMP/preview_assets.py" verify
+
+      - name: Download the exact audited Windows artifact
+        if: matrix.platform == 'windows'
+        run: python3 "$RUNNER_TEMP/preview_assets.py" download
+
+      - name: Check out the exact macOS release source
+        if: matrix.platform == 'macos'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 0e7f665a53ffa99ee3e885952e6a3311a575b2d3
+          persist-credentials: false
+      - name: Set up macOS Python
+        if: matrix.platform == 'macos'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - name: Set up macOS Go
+        if: matrix.platform == 'macos'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: app/mygo/go.sum
+      - name: Build and validate the macOS DMG in its native WebView
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          python -c "import platform; assert platform.machine().lower() == 'arm64', 'This release requires a native arm64 runner'"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7' 'pyinstaller>=6,<7'
+          python -m unittest discover -s app/tests -v
+          node --test app/tests/test_*.cjs
+          (cd app/mygo && go test ./...)
+          python scripts/build_mygo.py --version v0.10.0
+          python scripts/package_mygo.py --version v0.10.0 --commit "$EXPECTED_COMMIT"
+          cp app/dist/mygo-release/BioReader-v0.10.0-macos-arm64.dmg "$PREVIEW_ASSETS/"
+          cp app/dist/mygo-release/build-info.json app/dist/mygo-release/self-test.json app/dist/mygo-release/SHA256SUMS.txt "$PREVIEW_ASSETS/"
+
+      - name: Upload verified files to the existing draft without replacing assets
+        shell: bash
+        run: python3 "$RUNNER_TEMP/preview_assets.py" upload
+
+      - name: Preserve verification metadata
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preview-v0.10.0-${{ matrix.platform }}-verification
+          path: |
+            ${{ runner.temp }}/preview-assets/*.json
+            ${{ runner.temp }}/preview-assets/SHA256SUMS.txt
+          if-no-files-found: warn
+          retention-days: 14
