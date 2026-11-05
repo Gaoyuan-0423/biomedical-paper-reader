@@ -339,7 +339,8 @@ ${headingCss(t)}`;
   }
 
   global.WechatExport = {
-    themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name })),
+    // Theme names belong to the UI; exported note text and document metadata remain unchanged.
+    get themes() { return Object.entries(THEMES).map(([key, theme]) => ({ key, name: global.BioI18n?.t(theme.name) ?? theme.name, labelKey: theme.name })); },
     render,
     copy,
     wrapDocument,

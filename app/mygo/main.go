@@ -27,7 +27,8 @@ func sameOrigin(raw, origin string) bool {
 	return err == nil && u.User == nil && u.Scheme+"://"+u.Host == origin
 }
 
-func configureWindow(win *mygo.Window, origin string) {
+func configureWindow(win *mygo.Window, origin, dataDirectory string) {
+	text := func(chinese, english string) string { return nativeText(dataDirectory, chinese, english) }
 	page := win.Page()
 	var closeAllowed, checkingClose atomic.Bool
 	win.OnClose(func(event *mygo.CloseEvent) {
@@ -47,7 +48,7 @@ func configureWindow(win *mygo.Window, origin string) {
 				closeAllowed.Store(true)
 				win.Close()
 			} else if err != nil {
-				_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: win, Type: mygo.MessageWarning, Title: "暂时无法关闭", Message: "尚未确认笔记已经保存，请回到阅读界面保存后重试。"})
+				_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: win, Type: mygo.MessageWarning, Title: text("暂时无法关闭", "Cannot close yet"), Message: text("尚未确认笔记已经保存，请回到阅读界面保存后重试。", "Your notes may not be saved. Return to the reading window, save them and try again.")})
 			}
 		}()
 	})
@@ -75,7 +76,7 @@ func configureWindow(win *mygo.Window, origin string) {
 		if name == "." || name == "" {
 			name = "BioReader-export"
 		}
-		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: win, Title: "保存导出文件", DefaultPath: name})
+		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: win, Title: text("保存导出文件", "Save exported file"), DefaultPath: name})
 		if err != nil || path == "" {
 			event.PreventDefault()
 			return
@@ -84,12 +85,13 @@ func configureWindow(win *mygo.Window, origin string) {
 	})
 	page.OnDownloadDone(func(download *mygo.Download) {
 		if download.Err != nil {
-			_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: win, Type: mygo.MessageError, Title: "导出未完成", Message: download.Err.Error()})
+			_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: win, Type: mygo.MessageError, Title: text("导出未完成", "Export did not finish"), Message: download.Err.Error()})
 		}
 	})
 }
 
 func runWindow(service *serviceProcess, smoke bool) error {
+	text := func(chinese, english string) string { return nativeText(service.dataDirectory, chinese, english) }
 	var smokeErr error
 	var once sync.Once
 	var mainWindow *mygo.Window
@@ -106,13 +108,13 @@ func runWindow(service *serviceProcess, smoke bool) error {
 	mygo.App.WhenReady(func() {
 		defer func() {
 			if failure := recover(); failure != nil {
-				err := fmt.Errorf("阅读窗口无法启动: %v", failure)
+				err := fmt.Errorf("%s: %v", text("阅读窗口无法启动", "The reading window could not start"), failure)
 				if !smoke {
 					detail := err.Error()
 					if runtime.GOOS == "windows" {
-						detail += "\n\n请安装 Microsoft Edge WebView2 Runtime：\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/"
+						detail += "\n\n" + text("请安装 Microsoft Edge WebView2 Runtime：", "Install the Microsoft Edge WebView2 Runtime:") + "\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/"
 					}
-					_, _ = mygo.Dialog.Message(mygo.MessageOptions{Type: mygo.MessageError, Title: "BioReader 无法启动", Message: "无法创建阅读界面。", Detail: detail})
+					_, _ = mygo.Dialog.Message(mygo.MessageOptions{Type: mygo.MessageError, Title: text("BioReader 无法启动", "BioReader could not start"), Message: text("无法创建阅读界面。", "The reading interface could not be created."), Detail: detail})
 				}
 				finish(err)
 			}
@@ -127,7 +129,7 @@ func runWindow(service *serviceProcess, smoke bool) error {
 			MinWidth: 800, MinHeight: 600, Hidden: smoke, StateKey: stateKey, BackgroundColor: "#f5f8ff",
 			Page: mygo.PageOptions{TrustedOrigins: []string{service.ready.URL}, Session: session, DevTools: mygo.DevToolsDisabled}})
 		mainWindow = win
-		configureWindow(win, service.ready.URL)
+		configureWindow(win, service.ready.URL, service.dataDirectory)
 		if smoke {
 			win.Page().OnDidFinishLoad(func() {
 				if !sameOrigin(win.Page().URL(), service.ready.URL) {
@@ -151,6 +153,33 @@ window.__bioreaderSmokeStage = 'PDF canvas';
 await page.render({canvasContext: canvas.getContext('2d'), viewport, intent: 'print'}).promise;
 const text = await page.getTextContent();
 await pdf.destroy();
+window.__bioreaderSmokeStage = 'interface locale';
+const verify = (condition, message) => { if (!condition) throw new Error(message); };
+verify(window.BioI18n && window.BioChat, 'Reading interface modules are unavailable');
+const controls = [...document.querySelectorAll('[data-ui-locale]')];
+verify(controls.length === 2, 'Both interface language controls must be present');
+await window.BioChat.open(papers[0]);
+const draft = document.querySelector('#chat-input'), history = document.querySelector('#chat-history');
+verify(draft && history, 'Chat composer did not initialize');
+const originalDraft = '中文草稿 · Keep this question';
+draft.value = originalDraft;
+draft.dispatchEvent(new Event('input', {bubbles: true}));
+draft.setSelectionRange(2, 5);
+for (const locale of ['en', 'zh-CN', 'en']) {
+  verify(await window.BioI18n.setLocale(locale), 'Interface language was not saved');
+  verify(document.documentElement.lang === locale && controls.every(control => control.value === locale), 'Language controls are not synchronized');
+  verify(document.querySelector('#chat-input') === draft && draft.value === originalDraft && draft.selectionStart === 2 && draft.selectionEnd === 5, 'Switching languages changed the chat draft or composer');
+  verify(document.querySelector('#chat-history') === history, 'Switching languages replaced chat history');
+  const settings = document.querySelector('#btn-settings [data-i18n="设置"]');
+  verify(settings && settings.textContent.trim() === (locale === 'en' ? 'Settings' : '设置'), 'Native WebView did not translate the visible interface');
+}
+const savedLocaleResponse = await fetch('/api/ui-preferences');
+verify(savedLocaleResponse.ok && (await savedLocaleResponse.json()).locale === 'en', 'Interface language was not persisted by the bundled backend');
+window.__bioreaderSmokeStage = 'brand icon';
+const icon = document.querySelector('.brand-mark img');
+verify(icon && icon.getAttribute('src') === 'brand-mark.svg', 'Brand icon is missing');
+if (icon.decode) await icon.decode();
+verify(icon.complete && icon.naturalWidth > 0 && icon.naturalHeight > 0, 'Brand icon did not load in the native WebView');
 window.__bioreaderSmokeStage = 'complete';
 return text.items.some(item => item.str.includes('BioReader synthetic'));
 })()`)
@@ -172,7 +201,7 @@ return text.items.some(item => item.str.includes('BioReader synthetic'));
 			if smoke {
 				finish(err)
 			} else {
-				_, _ = mygo.Dialog.Message(mygo.MessageOptions{Type: mygo.MessageError, Title: "BioReader", Message: "阅读界面加载失败。", Detail: err.Error()})
+				_, _ = mygo.Dialog.Message(mygo.MessageOptions{Type: mygo.MessageError, Title: "BioReader", Message: text("阅读界面加载失败。", "The reading interface could not load."), Detail: err.Error()})
 				mygo.App.Quit()
 			}
 		}
@@ -214,7 +243,7 @@ func main() {
 	service, err := startService(executable, "")
 	if err != nil {
 		mygo.App.WhenReady(func() {
-			_, _ = mygo.Dialog.Message(mygo.MessageOptions{Type: mygo.MessageError, Title: "BioReader 无法启动", Message: err.Error()})
+			_, _ = mygo.Dialog.Message(mygo.MessageOptions{Type: mygo.MessageError, Title: nativeText(nativeDataDirectory(), "BioReader 无法启动", "BioReader could not start"), Message: nativeText(nativeDataDirectory(), "阅读服务无法启动，请保留完整应用文件夹后重试。", "The reading service could not start. Keep the complete application folder and try again."), Detail: err.Error()})
 			mygo.App.Quit()
 		})
 		_ = mygo.App.Run()

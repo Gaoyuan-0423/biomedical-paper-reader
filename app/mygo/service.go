@@ -24,12 +24,13 @@ type serviceReady struct {
 }
 
 type serviceProcess struct {
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	done      chan struct{}
-	closeOnce sync.Once
-	ready     serviceReady
-	token     string
+	cmd           *exec.Cmd
+	stdin         io.WriteCloser
+	done          chan struct{}
+	closeOnce     sync.Once
+	ready         serviceReady
+	token         string
+	dataDirectory string
 }
 
 func validServiceURL(raw string) bool {
@@ -46,7 +47,8 @@ func startService(executable, diagnosticData string) (*serviceProcess, error) {
 	if _, err := rand.Read(secret); err != nil {
 		return nil, err
 	}
-	p := &serviceProcess{cmd: exec.Command(executable), token: hex.EncodeToString(secret), done: make(chan struct{})}
+	dataDirectory := serviceDataDirectory(diagnosticData)
+	p := &serviceProcess{cmd: exec.Command(executable), token: hex.EncodeToString(secret), done: make(chan struct{}), dataDirectory: dataDirectory}
 	hideServiceConsole(p.cmd)
 	// Explorer-launched GUI executables may have no valid console handles.
 	// A nil writer makes os/exec attach the child to the null device instead.

@@ -11,6 +11,20 @@ import urllib.request
 from pathlib import Path
 
 
+def desktop_config(app, version):
+    config = {'name': 'BioReader', 'slug': 'bioreader',
+        'identifier': 'org.biomedicalpaperreader.bioreader', 'version': version[1:],
+        'publisher': 'BioReader', 'out': 'build',
+        'macos': {'dmgTitle': 'BioReader ' + version},
+        'windows': {'displayName': 'BioReader', 'installDirName': 'BioReader'}}
+    if (app / 'BioReader.png').is_file():
+        # MyGo derives the Windows executable and NSIS installer ICO from PNG.
+        config['icon'] = '../BioReader.png'
+    if (app / 'BioReader.icns').is_file():
+        config['macos']['icon'] = '../BioReader.icns'
+    return config
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True)
@@ -36,7 +50,7 @@ def main():
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     changes = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=all', '--',
         'app/mygo', 'app/service.py', 'app/service_security.py', 'app/BioReader-service.spec',
-        'app/backend', 'app/frontend', 'scripts/build_mygo.py'], cwd=root, text=True)
+        'app/backend', 'app/frontend', 'app/BioReader.png', 'app/BioReader.icns', 'scripts/build_mygo.py'], cwd=root, text=True)
     dirty = bool(changes) or args.skip_backend
     env['MYGO_LDFLAGS'] = f'-X main.buildCommit={commit} -X main.buildDirty={str(dirty).lower()}'
     if not args.skip_backend:
@@ -68,13 +82,7 @@ def main():
                 shutil.copy2(source, notices / (module.name.replace('@', '-') + '-' + source.name))
     go_root = subprocess.check_output(['go', 'env', 'GOROOT'], cwd=project, env=env, text=True).strip()
     shutil.copy2(Path(go_root) / 'LICENSE', notices / 'Go-LICENSE')
-    config = {'name': 'BioReader', 'slug': 'bioreader',
-        'identifier': 'org.biomedicalpaperreader.bioreader', 'version': args.version[1:],
-        'publisher': 'BioReader', 'out': 'build',
-        'macos': {'dmgTitle': 'BioReader ' + args.version},
-        'windows': {'displayName': 'BioReader', 'installDirName': 'BioReader'}}
-    if (app / 'BioReader.icns').is_file():
-        config['macos']['icon'] = '../BioReader.icns'
+    config = desktop_config(app, args.version)
     (project / 'mygo.json').write_text(json.dumps(config, indent=2) + '\n', encoding='utf-8')
     command = ['go', 'run', 'github.com/egoist/mygo/cmd/mygo@v0.7.4', 'build', '-platform', f'{goos}/{arch}']
     if args.skip_installer:

@@ -1,0 +1,375 @@
+name: Build and upload desktop preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: 'Full 40-character commit SHA already referenced by the release tag'
+        required: true
+        type: string
+      version:
+        description: 'Release tag, for example v0.11.0'
+        required: true
+        type: string
+      release_id:
+        description: 'ID of the existing draft release (this workflow never publishes it)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-preview-${{ inputs.release_id }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_COMMIT: ${{ inputs.source_commit }}
+  RELEASE_VERSION: ${{ inputs.version }}
+  RELEASE_ID: ${{ inputs.release_id }}
+
+jobs:
+  validate:
+    if: github.repository == 'Gaoyuan-0423/biomedical-paper-reader' && github.ref == 'refs/heads/main'
+    name: Validate the existing draft and exact source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require a versioned draft whose tag matches the requested commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          repo = 'Gaoyuan-0423/biomedical-paper-reader'
+          version, commit, release_id = (os.environ[key] for key in ('RELEASE_VERSION', 'SOURCE_COMMIT', 'RELEASE_ID'))
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', version) or not re.fullmatch(r'[a-f0-9]{40}', commit) or not re.fullmatch(r'[1-9]\d*', release_id):
+              raise RuntimeError('Expected vMAJOR.MINOR.PATCH, a full lowercase commit SHA and a numeric release ID.')
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          release = api(f'releases/{release_id}')
+          if release['id'] != int(release_id) or release['tag_name'] != version or release['draft'] is not True:
+              raise RuntimeError('The requested release must already exist as the matching draft.')
+          if api(f'commits/{version}')['sha'] != commit:
+              raise RuntimeError('The release tag does not reference the requested source commit.')
+          print('Validated existing draft:', release_id, version, commit)
+          PY
+
+  build:
+    needs: validate
+    name: Build and test ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm64
+            runner: macos-15
+            python_arch: arm64
+          - platform: windows-x64
+            runner: windows-2022
+            python_arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - name: Preserve original Git bytes on both platforms
+        shell: bash
+        run: git config --global core.autocrlf false
+      - name: Check out the exact release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+      - name: Set up native Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: app/mygo/go.sum
+      - name: Verify checkout and version metadata
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          python scripts/prepare_release.py "$RELEASE_VERSION" --output "$RUNNER_TEMP/release-notes.md"
+      - name: Install standalone macOS Python and dependencies
+        if: matrix.platform == 'macos-arm64'
+        shell: bash
+        run: |
+          python -c "import platform; assert platform.machine().lower() == 'arm64', 'A native arm64 runner is required'"
+          # The standalone interpreter matches the validated local packaging path.
+          # setup-python's framework layout conflicts with MyGo resource signing
+          # after the PyInstaller sidecar's library symlinks are materialized.
+          python -m pip install 'uv==0.10.6'
+          python -m uv python install 3.12.11
+          managed_python="$(python -m uv python find --managed-python 3.12.11)"
+          "$managed_python" -m venv app/.desktop-venv
+          app/.desktop-venv/bin/python -c "import sys; assert sys.version_info[:3] == (3, 12, 11)"
+          app/.desktop-venv/bin/python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7' 'pyinstaller>=6,<7'
+      - name: Install Windows dependencies
+        if: matrix.platform == 'windows-x64'
+        shell: pwsh
+        run: |
+          python -c "import platform, struct; assert platform.machine().lower() in ('amd64', 'x86_64') and struct.calcsize('P') == 8"
+          if ($LASTEXITCODE -ne 0) { throw 'A native Windows x64 Python is required.' }
+          python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7' 'pyinstaller>=6,<7'
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+      - name: Ensure Windows WebView2 Runtime
+        if: matrix.platform == 'windows-x64'
+        shell: pwsh
+        run: |
+          python -c "import sys; sys.path.insert(0, 'app'); from desktop_diagnostics import windows_webview_runtime; print(windows_webview_runtime())"
+          if ($LASTEXITCODE -ne 0) {
+            $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+            $signature = Get-AuthenticodeSignature $installer
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation(?:,|$)') {
+              throw 'WebView2 installer signature is not valid Microsoft Authenticode.'
+            }
+            $process = Start-Process $installer -ArgumentList '/silent', '/install' -Wait -PassThru
+            Write-Host "WebView2 bootstrapper exit code: $($process.ExitCode)"
+            python -c "import sys; sys.path.insert(0, 'app'); from desktop_diagnostics import windows_webview_runtime; print(windows_webview_runtime())"
+            if ($LASTEXITCODE -ne 0) { throw 'WebView2 Runtime remains unavailable.' }
+          }
+      - name: Run all macOS regressions
+        if: matrix.platform == 'macos-arm64'
+        shell: bash
+        run: |
+          app/.desktop-venv/bin/python -m unittest discover -s app/tests -v
+          node --test app/tests/test_*.cjs
+          go -C app/mygo test ./...
+      - name: Run all Windows regressions
+        if: matrix.platform == 'windows-x64'
+        shell: pwsh
+        run: |
+          python -m unittest discover -s app/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Backend regression failed.' }
+          $tests = Get-ChildItem app/tests/test_*.cjs | ForEach-Object { $_.FullName }
+          node --test @tests
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend regression failed.' }
+          go -C app/mygo test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'MyGo regression failed.' }
+      - name: Build and validate the mounted macOS DMG
+        if: matrix.platform == 'macos-arm64'
+        shell: bash
+        run: |
+          app/.desktop-venv/bin/python scripts/build_mygo.py --version "$RELEASE_VERSION"
+          app/.desktop-venv/bin/python scripts/package_mygo.py --version "$RELEASE_VERSION" --commit "$SOURCE_COMMIT"
+      - name: Build and validate Windows portable, installed and uninstalled applications
+        if: matrix.platform == 'windows-x64'
+        shell: pwsh
+        run: |
+          python scripts/build_mygo.py --version $env:RELEASE_VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'MyGo build failed.' }
+          python scripts/package_mygo.py --version $env:RELEASE_VERSION --commit $env:SOURCE_COMMIT --test-installer
+          if ($LASTEXITCODE -ne 0) { throw 'MyGo package validation failed.' }
+      - name: Preserve packages and native diagnostics, including failure reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-preview-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
+          path: |
+            app/dist/mygo-release/*.dmg
+            app/dist/mygo-release/*.exe
+            app/dist/mygo-release/*.zip
+            app/dist/mygo-release/*.json
+            app/dist/mygo-release/SHA256SUMS.txt
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 14
+
+  upload:
+    needs: [validate, build]
+    name: Verify and upload ${{ matrix.platform }} to the draft
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-arm64, windows-x64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only this job can change release assets. No source code is checked out or
+    # executed with this token, and no step publishes or overwrites a release.
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Prepare artifact folder
+        shell: bash
+        run: echo "PREVIEW_ASSETS=$RUNNER_TEMP/preview-assets" >> "$GITHUB_ENV"
+      - name: Select this run's most recent native build artifact
+        id: select-artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_PLATFORM: ${{ matrix.platform }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          # Rerunning only a failed upload reuses the completed build attempt.
+          # Every build keeps its own immutable artifact, including failures.
+          run_id, attempt = os.environ['GITHUB_RUN_ID'], int(os.environ['GITHUB_RUN_ATTEMPT'])
+          pattern = re.compile(r'desktop-preview-' + re.escape(run_id) + r'-(\d+)-' + re.escape(os.environ['PREVIEW_PLATFORM']))
+          candidates = []
+          for page in range(1, 11):
+              route = f'repos/Gaoyuan-0423/biomedical-paper-reader/actions/runs/{run_id}/artifacts?per_page=100&page={page}'
+              result = json.loads(subprocess.check_output(['gh', 'api', route]))
+              for item in result['artifacts']:
+                  match = pattern.fullmatch(item['name'])
+                  if match and int(match[1]) <= attempt:
+                      candidates.append((int(match[1]), item))
+              if len(result['artifacts']) < 100:
+                  break
+          else:
+              raise RuntimeError('Too many artifacts to select a build unambiguously.')
+          if not candidates:
+              raise RuntimeError('No native package artifact exists for this run and platform.')
+          candidates.sort(key=lambda value: value[0], reverse=True)
+          selected_attempt, artifact = candidates[0]
+          if len(candidates) > 1 and candidates[1][0] == selected_attempt:
+              raise RuntimeError('More than one artifact claims the same build attempt.')
+          if (artifact['expired'] or artifact['workflow_run']['id'] != int(run_id)
+                  or artifact['workflow_run']['head_sha'] != os.environ['GITHUB_SHA']
+                  or not re.fullmatch(r'sha256:[a-f0-9]{64}', artifact.get('digest', ''))):
+              raise RuntimeError('Artifact does not match this workflow run or has expired.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"artifact_id={artifact['id']}\n")
+          Path(os.environ['RUNNER_TEMP'], 'build-artifact.json').write_text(json.dumps({
+              'id': artifact['id'], 'name': artifact['name'], 'run_id': int(run_id),
+              'build_attempt': selected_attempt, 'workflow_commit': os.environ['GITHUB_SHA'],
+              'digest': artifact['digest'], 'bytes': artifact['size_in_bytes'],
+          }, indent=2) + '\n', encoding='utf-8')
+          print('Selected immutable build artifact:', artifact['id'], artifact['name'])
+          PY
+      - name: Download the selected native package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ steps.select-artifact.outputs.artifact_id }}
+          merge-multiple: true
+          path: ${{ env.PREVIEW_ASSETS }}
+      - name: Verify source provenance, native tests, checksums and draft before uploading
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_PLATFORM: ${{ matrix.platform }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, re, subprocess
+          from pathlib import Path
+
+          REPO = 'Gaoyuan-0423/biomedical-paper-reader'
+          folder = Path(os.environ['PREVIEW_ASSETS'])
+          version, commit, release_id = (os.environ[key] for key in ('RELEASE_VERSION', 'SOURCE_COMMIT', 'RELEASE_ID'))
+          windows = os.environ['PREVIEW_PLATFORM'] == 'windows-x64'
+          platform, architecture = ('windows', 'amd64') if windows else ('darwin', 'arm64')
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{REPO}/{path}']))
+
+          def draft():
+              require(re.fullmatch(r'v\d+\.\d+\.\d+', version) and re.fullmatch(r'[a-f0-9]{40}', commit)
+                      and re.fullmatch(r'[1-9]\d*', release_id), 'Invalid release inputs.')
+              value = api(f'releases/{release_id}')
+              require(value['id'] == int(release_id) and value['tag_name'] == version and value['draft'] is True,
+                      'Target is no longer the expected existing draft; refusing changes.')
+              require(api(f'commits/{version}')['sha'] == commit, 'Release tag references different source.')
+              return value
+
+          draft()
+          tree_sha = api(f'git/commits/{commit}')['tree']['sha']
+          tree = api(f'git/trees/{tree_sha}?recursive=1')
+          require(tree.get('truncated') is False, 'Cannot verify a truncated source tree.')
+          frontend_count = sum(item['type'] == 'blob' and item['path'].startswith('app/frontend/') for item in tree['tree'])
+          require(frontend_count > 0, 'The release source has no frontend files.')
+          module = api(f'contents/app/mygo/go.mod?ref={commit}')
+          require(module.get('encoding') == 'base64', 'Cannot verify the MyGo dependency version.')
+          dependency = re.search(r'github\.com/egoist/mygo\s+(v\d+\.\d+\.\d+)\b', base64.b64decode(module['content']).decode('utf-8'))
+          require(dependency is not None, 'Missing pinned MyGo dependency.')
+          mygo_version = dependency.group(1)
+
+          def read_json(name):
+              path = folder / name
+              require(path.is_file() and not path.is_symlink() and path.stat().st_size <= 65536, f'Invalid metadata: {name}')
+              return json.loads(path.read_text('utf-8'))
+
+          def diagnostic(value):
+              require(value.get('status') == 'passed' and value.get('source_commit') == commit
+                      and value.get('build_dirty') is False and value.get('backend_frozen') is True
+                      and value.get('gui_tested') is True and value.get('locale_tested') is True and value.get('brand_icon_tested') is True
+                      and value.get('app_version') == version[1:]
+                      and value.get('desktop') == 'egoist/mygo' and value.get('mygo_version') == mygo_version
+                      and value.get('platform') == platform and value.get('architecture') == architecture,
+                      'Native runtime diagnostic or source provenance is invalid.')
+
+          info = read_json('build-info.json')
+          require(info.get('version') == version and info.get('commit') == commit
+                  and info.get('desktop') == 'egoist/mygo' and info.get('mygo_version') == mygo_version
+                  and info.get('frontend_files') == frontend_count and info.get('platform') == f'{platform}-{architecture}',
+                  'Build manifest differs from the requested source or native platform.')
+          diagnostic(info['self_test'])
+          require(read_json('self-test.json') == info['self_test'], 'Native diagnostic and manifest disagree.')
+          names = {f'BioReader-{version}-windows-x64.zip', f'BioReader-{version}-windows-x64-setup.exe'} if windows else {f'BioReader-{version}-macos-arm64.dmg'}
+          require(isinstance(info.get('artifacts'), list) and len(info['artifacts']) == len(names)
+                  and {item['name'] for item in info['artifacts']} == names, 'Unexpected release asset filenames.')
+          metadata = {'build-info.json', 'self-test.json', 'SHA256SUMS.txt'}
+          if windows:
+              require(info.get('installer_tested') is True and info.get('uninstaller_tested') is True,
+                      'Windows installation and uninstallation must both have passed.')
+              diagnostic(read_json('installer-self-test.json'))
+              metadata.add('installer-self-test.json')
+          require({path.name for path in folder.iterdir()} == names | metadata, 'Unexpected files in the downloaded artifact.')
+          sums = (folder / 'SHA256SUMS.txt').read_text('utf-8').splitlines()
+          require(len(sums) == len(names), 'Checksum file lists unexpected assets.')
+          for item in info['artifacts']:
+              path = folder / item['name']
+              require(path.is_file() and not path.is_symlink(), f'Invalid asset file: {path.name}')
+              with path.open('rb') as stream:
+                  sha = hashlib.file_digest(stream, 'sha256').hexdigest()
+              require(item['bytes'] > 0 and path.stat().st_size == item['bytes'] and sha == item['sha256']
+                      and f'{sha}  {path.name}' in sums, f'Artifact checksum mismatch: {path.name}')
+
+          # Save the independently verified build metadata before uploading, so
+          # a network or release-state failure leaves a useful audit artifact.
+          verified = {'release_id': int(release_id), 'tag': version, 'commit': commit, 'source_tree': tree_sha,
+                      'frontend_files': frontend_count, 'platform': info['platform'], 'assets': info['artifacts']}
+          (folder / 'asset-verification.json').write_text(json.dumps(verified, indent=2) + '\n', encoding='utf-8')
+          uploaded = []
+          for item in info['artifacts']:
+              value = draft()
+              existing = [asset for asset in value['assets'] if asset['name'] == item['name']]
+              if existing:
+                  require(len(existing) == 1 and existing[0]['state'] == 'uploaded' and existing[0]['size'] == item['bytes']
+                          and existing[0].get('digest') == 'sha256:' + item['sha256'],
+                          f'Existing asset differs or is incomplete; refusing overwrite: {item["name"]}')
+              else:
+                  subprocess.run(['gh', 'release', 'upload', version, str(folder / item['name']), '--repo', REPO], check=True)
+              value = draft()
+              matching = [asset for asset in value['assets'] if asset['name'] == item['name']]
+              require(len(matching) == 1 and matching[0]['state'] == 'uploaded' and matching[0]['size'] == item['bytes']
+                      and matching[0].get('digest') == 'sha256:' + item['sha256'],
+                      f'Uploaded asset failed server-side verification: {item["name"]}')
+              uploaded.append({'id': matching[0]['id'], **item})
+              (folder / 'draft-upload-verification.json').write_text(json.dumps({
+                  **verified, 'draft': True, 'assets': uploaded,
+              }, indent=2) + '\n', encoding='utf-8')
+              print('Verified draft asset:', item['name'], item['sha256'])
+          require(draft()['draft'] is True, 'Release unexpectedly left draft state.')
+          PY
+      - name: Preserve independent source and server verification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-preview-verification-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
+          path: |
+            ${{ env.PREVIEW_ASSETS }}/*.json
+            ${{ env.PREVIEW_ASSETS }}/SHA256SUMS.txt
+            ${{ runner.temp }}/build-artifact.json
+          if-no-files-found: warn
+          retention-days: 14

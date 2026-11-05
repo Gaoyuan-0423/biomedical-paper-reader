@@ -11,9 +11,25 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('package_mygo', ROOT / 'scripts/package_mygo.py')
 packaging = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(packaging)
+BUILD_SPEC = importlib.util.spec_from_file_location('build_mygo', ROOT / 'scripts/build_mygo.py')
+building = importlib.util.module_from_spec(BUILD_SPEC)
+BUILD_SPEC.loader.exec_module(building)
 
 
 class MyGoPackagingTests(unittest.TestCase):
+    def test_shared_png_configures_windows_icons_and_mac_keeps_native_icns(self):
+        with tempfile.TemporaryDirectory(prefix='bioreader-icon-config-') as directory:
+            app = Path(directory)
+            (app / 'BioReader.png').write_bytes(b'synthetic png')
+            (app / 'BioReader.icns').write_bytes(b'synthetic icns')
+            config = building.desktop_config(app, 'v0.11.0')
+            self.assertEqual(config['version'], '0.11.0')
+            self.assertEqual(config['icon'], '../BioReader.png')
+            self.assertEqual(config['macos']['icon'], '../BioReader.icns')
+            self.assertNotIn('icon', config['windows'])  # MyGo has no windows.icon option.
+            (app / 'BioReader.png').unlink()
+            self.assertNotIn('icon', building.desktop_config(app, 'v0.11.0'))
+
     def test_uninstaller_must_exist_and_remove_both_executables(self):
         with tempfile.TemporaryDirectory(prefix='bioreader-uninstall-check-') as directory:
             installed = Path(directory)

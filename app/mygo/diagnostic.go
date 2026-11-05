@@ -149,7 +149,12 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		if err = runWindow(service, true); err != nil {
 			return err
 		}
+		if readNativeLocale(service.dataDirectory) != "en" {
+			return errors.New("native dialogs did not read the saved interface language")
+		}
 		report["gui_tested"] = true
+		report["locale_tested"] = true
+		report["brand_icon_tested"] = true
 	}
 	if _, err = requestBytes(client, "DELETE", address, "", nil, 200); err != nil {
 		return err
@@ -163,13 +168,13 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	}
 	report["checks"] = []string{"Real bundled sidecar on a random loopback socket", "Private owner handshake, required session, foreign-origin rejection", "Bundled frontend and native PDF import/retrieval/search", "Unicode note persistence and deletion", "Child service exits when its owner pipe closes"}
 	if gui {
-		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render")
+		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render", "Chinese/English interface switching preserves the chat composer and Unicode draft, synchronizes both controls and persists the native dialog language", "Brand SVG loads and decodes in the native WebView")
 	}
 	return nil
 }
 
 func runDiagnostic(executable, reportPath string, gui bool) (resultErr error) {
-	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false,
+	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false,
 		"source_commit": buildCommit, "build_dirty": buildDirty != "false", "app_version": mygo.App.Version()}
 	defer func() {
 		if resultErr == nil {

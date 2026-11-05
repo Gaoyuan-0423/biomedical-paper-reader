@@ -11,7 +11,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.10.0 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.10.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.11.0 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.11.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 
@@ -21,6 +21,17 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 Python 依赖见 `backend/requirements.txt`（fastapi、uvicorn、pypdf、httpx、python-multipart、
 pdfplumber、pypdfium2、Pillow）。
+
+## 界面语言与品牌
+
+v0.11.0 在顶部和设置中提供「界面语言」选择，可在「简体中文」与「English」之间即时切换。文献库、阅读工具栏、问答、搜索、数据与复现、证据记录、Zotero、弹窗和操作提示同步更新；不需要刷新页面或重新打开论文。
+
+- 语言保存在本机，重启应用或桌面服务更换端口后继续使用。保存失败时会显示重试提示；语言偏好独立于模型设置和论文数据。
+- 切换时保留未保存笔记、问答草稿、标签输入、研究表单、设置字段、焦点和选区，不停止生成或重新提交请求。
+- 论文标题、作者、标签、图注、PDF 原文、笔记、模型回答和导出内容保持原语言。界面语言不修改模型提示词或生成语言；需要英文阅读报告时仍按原有方式明确提出。
+- 顶部品牌、浏览器图标和桌面应用图标统一为书页与叶片图案。Go + MyGo 原生下载、退出及错误提示提供中英文本；系统文件选择器中的系统按钮由操作系统本身决定。
+
+本版继续作为 Pre-release，稳定版及 Latest 保留 v0.3.4。当前验证范围和跨平台原生验收状态见 [App 验证记录](tests/README.md)。
 
 ## 阅读工作台
 
@@ -212,6 +223,7 @@ PDF 导入只支持配置目录中已经存在的 Zotero 存储附件（`importe
 ```
 app/data/
 ├── settings.json          # 模型 API 配置
+├── ui-preferences.json    # 独立界面语言偏好（zh-CN / en）
 ├── zotero.json            # 独立 MCP 地址、可选 Token 与本机附件目录
 └── papers/<id>/           # 每篇一个目录
     ├── paper.pdf / text.txt / meta.json
@@ -233,6 +245,7 @@ app/data/
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| GET/PUT | `/api/ui-preferences` | 读取／保存本机界面语言，独立于模型设置与论文数据 |
 | GET/POST | `/api/papers` | 列表 / 上传 PDF |
 | POST | `/api/import/doi` | CrossRef 元数据入库（重复 DOI 409） |
 | POST | `/api/papers/{id}/file` | 附加/替换 PDF（保留已有元数据与手动图） |
