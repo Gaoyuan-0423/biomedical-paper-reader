@@ -5,11 +5,13 @@
 
 PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔记 → 图库插图 → Markdown / Word / 公众号导出。
 
-零构建步骤：后端 FastAPI + 前端原生 JS（pdf.js / marked / highlight.js / docx 随应用提供），`./app/run.sh` 即用。
+源码网页版零构建步骤：后端 FastAPI + 前端原生 JS（pdf.js / marked / highlight.js / docx 随应用提供），`./app/run.sh` 即用。
+
+桌面版使用 Go + [MyGo](https://github.com/egoist/mygo) 承载同一界面，Python 阅读服务和 PDF 依赖随包提供，无需用户安装 Python。DMG／Windows EXE 安装与构建见[桌面说明](DESKTOP.md)。
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.9.0 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)：Apple 芯片 Mac 打开 `BioReader.app`；Windows 10 / 11 x64 完整解压文件夹后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.10.0 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.10.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 
@@ -30,6 +32,22 @@ pdfplumber、pypdfium2、Pillow）。
 - 论文标题下的期刊与年份可展开完整作者、DOI 等信息；导出操作统一收在「导出」菜单。
 - 读图追问与图注编辑使用弹窗；留空追问表示整体观察，取消或 Esc 不发起读图。
 - 设置中的模型连接与研究方向常显；生成上限和相关文献 API Key 收在「高级设置」。
+
+## 原文引用与章节导航
+
+原文工具栏下方的“阅读导航”默认收起，展开后可查看“章节／图表／笔记”：
+
+- 章节采用当前 PDF 自带书签并解析实际页码；没有书签或目标不可解析时明确显示，外部动作不会执行。
+- 图表只显示当前正文或补充文件中已提取的图片；点击后定位 PDF 页面，并滚动笔记中的对应图片。没有可确定的笔记位置时只定位原图并提示，不猜测补图对应章节。
+- 笔记目录采用当前 Markdown 标题，重复标题各自保留独立位置。切换论文或材料时，旧目录请求不能覆盖新视图。
+
+新生成的完整精读可包含“原文 · 页码”按钮。每条来源保存实际原文摘录、文件、页码、文件哈希和可用的几何坐标；点击时先保存当前笔记，再校验来源。人工编辑可保留已有链接，删除链接后不可继续解析该引用；正文或补充文件被替换／移除时，旧摘录保留，跳转禁用。
+
+旧笔记、普通参考文献编号、代码示例和未匹配来源保持原样。速读继续使用原有简洁输出。长文概览只是线索，系统会在预算内重新附上实际原文块，只有这些片段可生成来源按钮；不会把有出处等同于科学结论已获验证。部分生成结果保留快照，保存成功后仍可回跳；生成期间的人工修改不会被旧输出覆盖。
+
+Markdown、Word 和公众号导出使用可读的文件名、PDF 页码与摘录，不要求接收者安装 BioReader。原文来源快照保存在每篇论文的 `note-sources/` 中。
+
+笔记预览和公众号使用安全 Markdown 排版，支持标题、列表、表格、代码与本地图像。原始 HTML 显示为文字，内部注释隐藏，不加载远程图片或执行危险链接。
 
 ## 搜索正文与笔记
 

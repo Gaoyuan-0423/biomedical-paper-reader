@@ -46,3 +46,4 @@ app/build/
 app/dist/
 app/*.spec
 !app/BioReader-windows.spec
+!app/BioReader-service.spec

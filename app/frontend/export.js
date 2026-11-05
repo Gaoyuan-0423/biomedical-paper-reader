@@ -94,8 +94,8 @@ ${headingCss(t)}`;
   }
 
   function markdownToHtml(md) {
-    if (global.marked && typeof global.marked.parse === 'function') {
-      return global.marked.parse(md || '', { gfm: true, breaks: false });
+    if (global.BioMarkdown && typeof global.BioMarkdown.parse === 'function') {
+      return global.BioMarkdown.parse(md || '');
     }
     return '<pre>' + escapeHtml(md || '') + '</pre>';
   }

@@ -12,11 +12,13 @@ try {
         $Python = Join-Path $PSScriptRoot '.desktop-venv/Scripts/python.exe'
         & $Python -m pip install --upgrade pip
         if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed.' }
-        & $Python -m pip install -r backend/requirements.txt 'pywebview>=6.2.1,<7' 'pyinstaller>=6,<7'
+        & $Python -m pip install -r backend/requirements.txt 'pyinstaller>=6,<7'
         if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
     }
-    & $Python -m PyInstaller --noconfirm --clean BioReader-windows.spec
-    if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
-    Write-Host "Built: $PSScriptRoot/dist/BioReader/BioReader.exe"
-    Write-Host 'Keep the complete BioReader folder, including _internal.'
+    $match = [regex]::Match((Get-Content ../SKILL.md -Raw), '版本 (v\d+\.\d+\.\d+)')
+    if (-not $match.Success) { throw 'Missing release version.' }
+    & $Python ../scripts/build_mygo.py --version $match.Groups[1].Value
+    if ($LASTEXITCODE -ne 0) { throw 'Windows MyGo build failed.' }
+    Write-Host "Built: $PSScriptRoot/mygo/build/windows-amd64"
+    Write-Host 'Use the setup executable, or keep BioReader.exe and the complete BioReaderService folder together.'
 } finally { Pop-Location }

@@ -8,15 +8,51 @@
 
 `main` 上的 README、SKILL 和 CHANGELOG 描述当前源码版本；GitHub Releases 记录单独发布的标签快照。修改版本文字、合并 PR 或通过 CI 都不会自动创建 Release。2026-10-26 补发前核查时，文档已到 v0.3.3，但最新正式发布及标签仍为 v0.2.0；此前仅有检查工作流，没有发布工作流。v0.3.3 现已正式发布。
 
-### 当前桌面预览版 v0.9.0
+### 当前桌面预览版 v0.10.0
 
-v0.9.0 继续使用 Pre-release 流程，下载附件为 `BioReader-v0.9.0-macos-arm64.zip`、`BioReader-v0.9.0-windows-x64.zip` 与合并的 `SHA256SUMS.txt`。使用 [v0.9.0 双语说明](releases/v0.9.0.md)，运行 `prepare_release.py v0.9.0`，将标签绑定到通过检查的源码提交，上传并核对附件后发布。保留 v0.3.4 稳定版，不运行稳定版工作流。
+v0.10.0 使用 **Pre-release** 流程，保留 **v0.3.4** 为稳定版及 Latest，不运行会设置正式 Latest 的稳定版工作流。使用 [v0.10.0 双语说明](releases/v0.10.0.md)，运行 `python3 scripts/prepare_release.py v0.10.0`，将新标签绑定到已检查的源码提交。本次公开附件为以下三份程序包和一份合并清单：
 
-macOS 与 Windows 必须从同一个已检查的源码提交构建；两平台 ZIP 与校验清单齐备并核对后，才公开本次预览 Release。记录每个平台实际执行的检查，不能把 macOS 或浏览器检查替代 Windows 打包与启动检查。用户通过下载新版程序更新，文献数据独立保存；同步发布不表示提供应用内更新器或云端文库同步。
+- `BioReader-v0.10.0-macos-arm64.dmg`
+- `BioReader-v0.10.0-windows-x64-setup.exe`
+- `BioReader-v0.10.0-windows-x64.zip`
+- `SHA256SUMS.txt`
 
-Windows 构建入口为 [`app/build-windows.ps1`](app/build-windows.ps1) 和 [Windows 构建工作流](.github/workflows/windows-build.yml)。工作流只生成工件，不发布 Release。下载工件前核对 Actions 运行的源提交；核对 ZIP 中有 `BioReader/BioReader.exe` 及 `_internal`，保留整包。将 Windows ZIP 的 SHA-256 与 macOS ZIP 的值写入同一个 `SHA256SUMS.txt`，不要把仅含一个平台的清单作为最终附件。打包后的 `--self-test` 结果是隔离后端自检，不是 WebView2 窗口或 Windows 10 / 11 GUI 验收。
+两平台桌面外壳使用 Go + MyGo v0.7.4，现有 Python 阅读服务和 PDF 依赖作为 `BioReaderService` 随包分发。用户不需安装 Python。默认资料目录保持不变：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`。同步发布不表示应用内自动更新或云端文库同步。
 
-本版发布范围为三种阅读布局、安全 Markdown 问答排版、当前阅读上下文的快捷问题，以及复制／追加已完成回答与来源到笔记。确认快捷问题仍需手动发送，限定材料范围，不宣传为全文通读或自主工具任务；同时验证原文定位、补充文件页码、窄窗口切换和已有笔记保留。将实际回归、浏览器与构建结果记录到 App 验证文件。
+#### 构建与产物核对
+
+在同一个已检查、已提交的干净源码版本上构建 macOS 与 Windows。原生构建入口为 [`app/build-macos.sh`](app/build-macos.sh) 和 [`app/build-windows.ps1`](app/build-windows.ps1)，读取 `SKILL.md` 的版本。构建工具需要 Go 1.27.3+、目标平台的 64 位 Python 3.10+ 和依赖下载网络；脚本创建独立 Python 构建环境。详细参数见 [MyGo 开发说明](app/mygo/README.md)及[桌面构建说明](app/DESKTOP.md)。
+
+已有依赖时可直接运行 `python scripts/build_mygo.py --version v0.10.0 --python /path/to/build-python`。`--skip-backend` 只用于开发，会标记 dirty，不能通过最终发布验收；`--skip-installer` 不会产生本次要求的 Windows 安装 EXE。
+
+Mac 构建结果在 `app/mygo/build/darwin-arm64/`。在仓库根目录执行：
+
+```bash
+app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.10.0 --commit "$(git rev-parse HEAD)"
+```
+
+Windows x64 构建结果在 `app/mygo/build/windows-amd64/`。在一次性的 Windows 测试环境或 CI runner 中执行安装／卸载验收：
+
+```powershell
+$sourceCommit = git rev-parse HEAD
+.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.10.0 --commit $sourceCommit --test-installer
+```
+
+[`scripts/package_mygo.py`](scripts/package_mygo.py) 检查实际解压 ZIP 或挂载 DMG 内的前端字节、运行时报告中的源码提交／版本／dirty 标记，并运行随包原生诊断。Mac 还检查 DMG 和 App 签名完整性；这不等于 Apple 开发者签名或公证。Windows 的 `--test-installer` 额外运行静默安装、已安装程序诊断及卸载。正常便携包必须包含 `BioReader/BioReader.exe`、同级 `BioReaderService/` 及全部随附文件；不要沿用旧版只核对顶层 `_internal` 的方式。
+
+输出保存在 `app/dist/mygo-release/`，含该平台程序附件、`SHA256SUMS.txt`、`build-info.json` 和诊断 JSON。打包命令负责验收与生成文件，不创建 GitHub Release。[Windows 工作流](.github/workflows/windows-build.yml) 也只生成工件；下载前核对运行提交及实际检查结果。
+
+#### 诊断与公开发布
+
+`BioReader --self-test /absolute/path/report.json --gui-test` 使用隔离临时资料，启动实际随包服务，检查会话限制、PDF／笔记持久化与子进程关闭，并在隐藏的 WKWebView／WebView2 中用 PDF.js 渲染合成 PDF。它覆盖这段原生自动化路径；系统保存对话框、外部浏览器、剪贴板和各 Windows 用户环境仍须按实际交互验证记录描述。没有 `--gui-test` 的检查只覆盖服务路径，不能写成原生窗口验收。不可在最终原生 CI 完成前预填“全部通过”，也不将合成材料和模拟模型测试称为科学阅读质量评测。
+
+合并两平台生成的 SHA-256 清单，逐项核对上述三个程序附件的文件名、字节数和摘要。`build-info.json`、诊断报告及 Actions 结果留作构建证据；它们不替代最终合并的 `SHA256SUMS.txt`。公开 Release 前保持草稿，等三份程序附件、合并清单和对应平台验证齐备，再以 **Pre-release** 发布并明确不设置 Latest。发布后核对标签提交、三份程序附件和清单、预发布标记及 v0.3.4 的稳定 Latest 状态；不覆盖旧标签。
+
+本版阅读改动为精读笔记的可核验原文引用，以及章节／图表／笔记联动导航。验证原文与笔记版本失效、正文／补充文件隔离、无原生章节时的空态、已有笔记保留和窄窗口交互；保留上一版阅读布局、问答摘录、样品资源与 Zotero MCP。回归、浏览器、原生自动化和人工交互结果分别记录在 [App 验证文件](app/tests/README.md)。
+
+### 桌面预览版 v0.9.0（历史）
+
+v0.9.0 的 Python 桌面外壳以 macOS arm64 ZIP 和 Windows x64 ZIP 发布，说明与附件保留在 [v0.9.0 发布说明](releases/v0.9.0.md)。其程序目录结构和后端自检范围不能代替 v0.10.0 的 MyGo、DMG、安装 EXE 与原生窗口诊断要求。
 
 ### 桌面预览版 v0.4.0（历史）
 
@@ -72,15 +108,51 @@ ZIP 应保留 `BioReader.app` 的目录、权限和符号链接，解压后复�
 
 README, SKILL, and CHANGELOG on `main` describe the current source version; GitHub Releases are separately published tag snapshots. Editing version text, merging a PR, or passing CI does not create a Release. Before the catch-up release on 2026-10-26, the documentation was at v0.3.3 while the latest release and tag were still v0.2.0. The repository previously had a checking workflow but no publishing workflow. v0.3.3 has since been published.
 
-### Current desktop preview v0.9.0
+### Current desktop preview v0.10.0
 
-v0.9.0 remains a Pre-release. Use the [v0.9.0 notes](releases/v0.9.0.md), validate the version, bind the new tag to the checked source commit, and upload `BioReader-v0.9.0-macos-arm64.zip`, `BioReader-v0.9.0-windows-x64.zip` and a combined `SHA256SUMS.txt` before publishing. Keep the stable v0.3.4 and do not run the stable-release workflow.
+v0.10.0 uses the **Pre-release** process. Keep **v0.3.4** as the stable Latest release and do not run the stable-release workflow that sets a new Latest. Use the [v0.10.0 bilingual notes](releases/v0.10.0.md), run `python3 scripts/prepare_release.py v0.10.0`, and bind the new tag to the checked source commit. Publish these three application packages and one combined checksum list:
 
-Build macOS and Windows from the same checked source commit. Keep this preview Release in draft until both platform ZIPs and the combined hash list are present and verified. Record the checks actually run on each platform; macOS/browser checks do not substitute for Windows packaging and launch checks. Users update by downloading a new package, while user data stays separate. Synchronized releases do not provide an in-app updater or cloud library sync.
+- `BioReader-v0.10.0-macos-arm64.dmg`
+- `BioReader-v0.10.0-windows-x64-setup.exe`
+- `BioReader-v0.10.0-windows-x64.zip`
+- `SHA256SUMS.txt`
 
-Windows builds use [`app/build-windows.ps1`](app/build-windows.ps1) and the [Windows build workflow](.github/workflows/windows-build.yml). The workflow produces artifacts without publishing a Release. Check the Actions run's source commit before downloading its artifacts; verify that the ZIP contains `BioReader/BioReader.exe` and `_internal`, retaining the entire bundle. Combine the Windows and macOS ZIP SHA-256 values into one `SHA256SUMS.txt`; a platform-only hash file is not the final release asset. The packaged executable's `--self-test` is an isolated backend check, not WebView2 window or Windows 10 / 11 GUI acceptance.
+Both desktop shells use Go + MyGo v0.7.4. The existing Python reading backend and PDF dependencies ship inside `BioReaderService`; users do not install Python. Default library locations remain `~/Library/Application Support/BioReader/` on macOS and `%LOCALAPPDATA%\BioReader` on Windows. Synchronized publication does not provide an in-app updater or cloud library synchronization.
 
-This release covers three reading layouts, safe Markdown answers, contextual question starters, and copying/appending completed answers with sources to notes. Starters require manual sending and use bounded source material; do not describe them as full-paper reading or autonomous tool tasks. Check source navigation, supplement page identity, narrow-window switching and preservation of existing notes. Record actual regressions, browser checks and build results in the App validation log.
+#### Build and verify the artifacts
+
+Build macOS and Windows from the same checked, clean, committed source revision. Native build entry points are [`app/build-macos.sh`](app/build-macos.sh) and [`app/build-windows.ps1`](app/build-windows.ps1); both read the version from `SKILL.md`. Build tools require Go 1.27.3+, native 64-bit Python 3.10+, and network access for dependencies. The scripts create an isolated Python build environment. See the [MyGo developer guide](app/mygo/README.md) and [desktop build guide](app/DESKTOP.md).
+
+With dependencies already installed, run `python scripts/build_mygo.py --version v0.10.0 --python /path/to/build-python`. The development-only `--skip-backend` option marks the build dirty and cannot pass final release validation. `--skip-installer` omits the Windows setup executable required for this release.
+
+The Mac build is written to `app/mygo/build/darwin-arm64/`. From the repository root, run:
+
+```bash
+app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.10.0 --commit "$(git rev-parse HEAD)"
+```
+
+The Windows x64 build is written to `app/mygo/build/windows-amd64/`. Test installation and removal only on a disposable Windows environment or CI runner:
+
+```powershell
+$sourceCommit = git rev-parse HEAD
+.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.10.0 --commit $sourceCommit --test-installer
+```
+
+[`scripts/package_mygo.py`](scripts/package_mygo.py) checks frontend bytes inside the actual extracted ZIP or mounted DMG, verifies the runtime's commit/version/dirty metadata, and runs the packaged native diagnostic. Mac validation also checks DMG and application-signature integrity; these checks do not provide Apple Developer ID signing or notarization. On Windows, `--test-installer` also performs a silent install, checks the installed executable, and runs its uninstaller. The portable ZIP must contain `BioReader/BioReader.exe`, the sibling `BioReaderService/` directory, and every accompanying file. The old layout's top-level `_internal` check is no longer sufficient.
+
+Outputs go to `app/dist/mygo-release/`: platform application assets, `SHA256SUMS.txt`, `build-info.json`, and diagnostic JSON. Packaging generates and checks files without creating a GitHub Release. The [Windows workflow](.github/workflows/windows-build.yml) also produces artifacts only; verify the run's source commit and actual check results before downloading them.
+
+#### Diagnostics and publication
+
+`BioReader --self-test /absolute/path/report.json --gui-test` uses temporary isolated storage, starts the actual bundled service, checks its session boundary, PDF/note persistence, and child shutdown, and renders a synthetic PDF through PDF.js inside a hidden native WKWebView/WebView2. This covers that automated native path. System save dialogs, external browsers, clipboard behavior, and users' Windows environments need separate acceptance records. Without `--gui-test`, the diagnostic covers only the service path. Do not predeclare success before final native CI completes, and do not describe synthetic fixtures or simulated models as scientific reading-quality evaluation.
+
+Combine both platforms' SHA-256 lists and verify each of the three application assets by filename, byte size, and digest. Retain `build-info.json`, diagnostic reports, and Actions results as build evidence; they do not replace the final combined `SHA256SUMS.txt`. Keep the Release in draft until all three application assets, the merged hash list, and platform validation are ready. Publish as a **Pre-release** without setting Latest, then verify the tag commit, assets, pre-release flag, and v0.3.4's stable Latest status. Do not overwrite an existing tag.
+
+Reading changes in this version are verifiable source links in close-reading notes and linked PDF outline/figure/note navigation. Check stale paper/note revisions, main-versus-supplement identity, honest empty states for PDFs without native outlines, preservation of existing notes, and narrow-window interaction. Earlier layouts, answer excerpts, sample resources, and Zotero MCP remain available. Record regression, browser, native automated, and manual acceptance results separately in the [App validation log](app/tests/README.md).
+
+### Desktop preview v0.9.0 (historical)
+
+v0.9.0 shipped the Python desktop shell as macOS arm64 and Windows x64 ZIPs. Its notes and assets remain documented in the [v0.9.0 release notes](releases/v0.9.0.md). Its directory layout and backend diagnostic scope do not replace the MyGo, DMG, setup executable, and native-window validation requirements of v0.10.0.
 
 ### Desktop preview v0.4.0 (historical)
 

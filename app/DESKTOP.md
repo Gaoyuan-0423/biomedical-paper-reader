@@ -1,6 +1,6 @@
 # BioReader macOS / Windows 桌面版
 
-桌面版在独立窗口运行，关闭窗口会停止本地后台服务。PDF、笔记和设置保存在用户数据目录，与程序文件分开：
+v0.10.0 桌面版使用 Go + [MyGo v0.7.4](mygo/README.md) 承载阅读界面：macOS 使用系统 WKWebView，Windows 使用 WebView2。现有 Python 阅读服务、解释器和 PDF 依赖随包提供，用户无需安装 Python。关闭窗口前会等待笔记和阅读位置保存；关闭应用后停止随附服务。PDF、笔记和设置保存在用户数据目录，与程序文件分开：
 
 | 系统 | 默认数据目录 |
 |---|---|
@@ -11,38 +11,48 @@
 
 ## 下载与安装预览包
 
-下载入口：[v0.9.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)，附件以发布页实际提供为准。提供 Apple 芯片 Mac（arm64）与 Windows 10 / 11（x64）预览包；没有 Intel Mac、Windows ARM64 原生包或 Linux 安装包。桌面包不需要另装 Python 或手动启动浏览器／终端。
+下载入口：[v0.10.0 桌面预览版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.10.0)，附件以发布页实际提供为准。v0.10.0 使用 **Pre-release**，稳定版及 Latest 仍保留 **v0.3.4**。本次发布三种程序附件及一份合并校验清单：
+
+| 平台与用途 | 文件 |
+|---|---|
+| Apple 芯片 Mac（arm64） | `BioReader-v0.10.0-macos-arm64.dmg` |
+| Windows 10 / 11（x64）安装向导 | `BioReader-v0.10.0-windows-x64-setup.exe` |
+| Windows 10 / 11（x64）便携程序 | `BioReader-v0.10.0-windows-x64.zip` |
+| 三份程序附件的 SHA-256 | `SHA256SUMS.txt` |
+
+没有 Intel Mac、Windows ARM64 原生包或 Linux 安装包。桌面包不需要手动启动浏览器／终端。
 
 ### macOS
 
-1. 下载 [BioReader-v0.9.0-macos-arm64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-macos-arm64.zip)。
-2. 解压 ZIP，将 `BioReader.app` 拖入“应用程序”，或从解压目录直接打开。更新旧版前先退出正在运行的 BioReader。
-3. 双击打开 App。AI 笔记需要在设置中配置模型接口和 API Key。
+1. 下载 [BioReader-v0.10.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-macos-arm64.dmg)。
+2. 打开 DMG，将 `BioReader.app` 拖入“应用程序”。更新旧版前先退出正在运行的 BioReader，再替换 App；复制完成后可推出磁盘映像。
+3. 从“应用程序”双击打开 BioReader。AI 笔记需要在设置中配置模型接口和 API Key。
 
 macOS 包未进行 Apple 开发者签名和公证。macOS 可能阻止首次打开；包完整性检查不代表 Apple 公证或所有 Mac 的安装验收。
 
 ### Windows
 
-1. 下载 [BioReader-v0.9.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.9.0/BioReader-v0.9.0-windows-x64.zip)，选择“全部解压缩”。将解压后的完整文件夹保存在你选择的位置。
-2. Windows 版使用 Microsoft Edge WebView2 Runtime。若电脑缺少它，从[微软官方页面](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)安装 **Evergreen Runtime**；可用 Evergreen Bootstrapper，离线安装选 x64 的 Evergreen Standalone Installer。该运行时是独立组件，安装 Edge 浏览器不等于已满足运行时要求，见[微软分发说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。
-3. 打开文件夹中的 `BioReader.exe`。保留 `_internal` 等全部随附文件，不要从 ZIP 内运行，也不要只复制 exe。需要桌面入口时为 exe 创建快捷方式。
-4. 更新时先关闭旧版，完整解压新版并从新文件夹启动；确认可用后可移除旧程序文件夹。`%LOCALAPPDATA%\BioReader` 中的数据保留，不要删除该数据目录。
+1. 安装版下载 [BioReader-v0.10.0-windows-x64-setup.exe](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-windows-x64-setup.exe)，退出旧版后运行安装向导。
+2. 如需便携程序，下载 [BioReader-v0.10.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.10.0/BioReader-v0.10.0-windows-x64.zip)，选择“全部解压缩”，再打开 `BioReader` 文件夹中的 `BioReader.exe`。保留同目录的 **`BioReaderService` 文件夹及所有随附文件**；不要从 ZIP 内运行，也不要只复制 exe。服务目录内的 `_internal` 包含 Python 运行时和阅读依赖。
+3. Windows 版使用 Microsoft Edge WebView2 Runtime。若电脑缺少它，从[微软官方页面](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)安装 **Evergreen Runtime**；可用 Evergreen Bootstrapper，离线安装选 x64 的 Evergreen Standalone Installer。该运行时是独立组件，安装 Edge 浏览器不等于已满足运行时要求，见[微软分发说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。
+4. 更新便携版时先关闭旧版，完整解压新版并从新文件夹启动；确认可用后可移除旧程序文件夹。`%LOCALAPPDATA%\BioReader` 中的数据保留，不要删除该数据目录。
 
-Windows ZIP 是便携程序包，不是安装向导；“便携”指程序文件可整体移动，文献库仍默认保存在用户数据目录。实际 Windows 构建与交互验证范围见 [App 验证记录](tests/README.md)。
+“便携”指程序文件可整体移动，文献库仍默认保存在用户数据目录。安装版和便携版使用同一默认数据位置。实际 Windows 构建、安装与交互验证范围见 [App 验证记录](tests/README.md)。
 
 ### 校验与同步发布
 
-发布页的 `SHA256SUMS.txt` 列出各平台 ZIP 的 SHA-256。macOS 可在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt`；若只下载了一个平台包，另一项会提示文件缺失，核对已下载包那一项即可。Windows 可用 PowerShell 计算并与清单中的同名文件比较：
+发布页的 `SHA256SUMS.txt` 列出 Mac DMG、Windows 安装 EXE 和 Windows ZIP 的 SHA-256。macOS 可在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt`；如果只下载一个附件，其他项目会提示文件缺失，核对已下载包那一项即可。Windows 可用 PowerShell 计算并与清单中的同名文件比较：
 
 ```powershell
-Get-FileHash .\BioReader-v0.9.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\BioReader-v0.10.0-windows-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\BioReader-v0.10.0-windows-x64.zip -Algorithm SHA256
 ```
 
-macOS 和 Windows 以同一个版本、同一个检查过的源码提交发布，更新功能保持一致。用户下载对应平台的新包即可更新；本版没有应用内自动更新器，也没有跨电脑同步论文库。每台电脑的模型和 Zotero 设置独立保存。
+两平台从同一个已检查的源码提交构建，同版三份程序附件和合并校验清单核对完成后一起发布。用户下载对应平台的新包即可更新；本版没有应用内自动更新器，也没有跨电脑同步论文库。每台电脑的模型和 Zotero 设置独立保存。
 
 ## 在 Mac 上构建
 
-需要 Python 3.10 或更新版本以及网络连接，以便首次安装构建依赖。在项目根目录运行：
+需要 Go 1.27.3 或更新版本、原生 64 位 Python 3.10 或更新版本，以及首次安装依赖所需的网络连接。在项目根目录运行：
 
 ```bash
 ./app/build-macos.sh
@@ -54,29 +64,62 @@ macOS 和 Windows 以同一个版本、同一个检查过的源码提交发布�
 BIOREADER_PYTHON=/path/to/python3 ./app/build-macos.sh
 ```
 
-构建完成后双击 `app/dist/BioReader.app`。该脚本创建独立虚拟环境，打包当前机器的架构，构建结果不会自动上传或发布。
+脚本在 `app/.desktop-venv` 安装构建依赖，读取 `SKILL.md` 中的版本，并通过 [`scripts/build_mygo.py`](../scripts/build_mygo.py) 构建 Python 服务和 MyGo 外壳。Apple 芯片 Mac 的结果位于 `app/mygo/build/darwin-arm64/`，包含 `BioReader.app` 和 DMG；当前 v0.10.0 的内部 DMG 文件名为 `bioreader-0.10.0-arm64.dmg`。构建不会自动上传或发布。
 
 这个构建默认没有 Apple 开发者签名和公证。若要提供正式签名的安装包，需要另外完成相应签名、公证与安装测试。
 
-界面依赖已随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。AI 笔记需要在设置中配置可用的模型接口及 API Key；Key 以明文保存在本机设置文件中。导出文件时使用现有的下载／保存流程。
-
 ## 在 Windows 上构建
 
-在 Windows x64 环境安装 64 位 Python 3.10 或更新版本，并准备网络连接以安装构建依赖。在项目根目录的 PowerShell 中运行：
+在 Windows x64 环境准备 Go 1.27.3 或更新版本、64 位 Python 3.10 或更新版本和网络连接。在项目根目录的 PowerShell 中运行：
 
 ```powershell
 .\app\build-windows.ps1
 ```
 
-脚本使用 `app/BioReader-windows.spec` 打包独立目录，完成后从 `app/dist/BioReader/BioReader.exe` 启动。分发时保留整个 `BioReader` 文件夹，包括 `_internal`。运行界面还需本机安装 WebView2 Runtime；在 macOS 上执行 Python 测试不能代替 Windows 构建。构建脚本不会自动公开 Release。
+脚本创建 `app/.desktop-venv`、安装依赖、读取版本，再构建 Go 外壳、`BioReaderService` 和 NSIS 安装 EXE。结果位于 `app/mygo/build/windows-amd64/`，便携程序入口为其中的 `BioReader.exe`，服务位于同级 `BioReaderService/`。运行界面还需本机安装 WebView2 Runtime。构建脚本不会自动公开 Release。
 
-仓库另有 [Windows 构建工作流](../.github/workflows/windows-build.yml)，在 Windows runner 上构建并保存下载工件。维护者发布时需核对运行的源码提交，与 macOS 包保持一致，再将同版两个平台包和合并的校验清单上传到 Release。实际构建、自检和 GUI 验收结果分别记录，不将未执行的步骤称为通过。
+仓库另有 [Windows 构建工作流](../.github/workflows/windows-build.yml)，在 Windows runner 上构建并保存工件。对应平台的构建、原生窗口诊断和安装检查须在该平台实际运行；浏览器或 macOS 测试不能代替 Windows 安装验证。
+
+## 打包验收与原生诊断
+
+已安装构建依赖时，也可在目标系统直接指定版本及 Python：
+
+```bash
+python scripts/build_mygo.py --version v0.10.0 --python /path/to/python-with-build-dependencies
+```
+
+`--skip-backend` 仅供开发时复用已有服务，会将构建标为 dirty，不能用于最终发布；`--skip-installer` 只构建 Windows 便携目录，不满足本次三附件发布要求。
+
+提交源码并从干净的同一提交完成两平台构建后，在各自系统验收产物。Mac 示例：
+
+```bash
+app/.desktop-venv/bin/python scripts/package_mygo.py --version v0.10.0 --commit "$(git rev-parse HEAD)"
+```
+
+Windows 的安装检查会静默安装并卸载应用，只应在一次性的测试环境或 CI runner 上运行：
+
+```powershell
+$sourceCommit = git rev-parse HEAD
+.\app\.desktop-venv\Scripts\python.exe scripts/package_mygo.py --version v0.10.0 --commit $sourceCommit --test-installer
+```
+
+[`scripts/package_mygo.py`](../scripts/package_mygo.py) 验证实际解压的 Windows ZIP 或挂载的 Mac DMG，比对随包前端与 Git 提交、版本和构建标记，并执行原生诊断。输出位于 `app/dist/mygo-release/`：对应平台的程序附件、`SHA256SUMS.txt`、`build-info.json` 和诊断报告。维护者需合并两平台清单，详见[发布维护](../RELEASING.md#当前桌面预览版-v0100)。
+
+独立调用随包程序的诊断入口为 `BioReader --self-test /absolute/path/report.json --gui-test`（Windows 使用 `BioReader.exe`）。它使用隔离临时文献库，启动实际随包服务，检查会话边界、PDF／笔记持久化和子进程退出；`--gui-test` 还打开隐藏的系统 WebView，用 PDF.js 渲染合成 PDF。这是原生自动化诊断范围，系统保存对话框、外部浏览器和剪贴板仍需分别做交互验收。这里只描述流程；实际成功结果以 [App 验证记录](tests/README.md) 为准。
+
+界面资源随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。模型 Key 以明文保存在本机设置文件中。MyGo 外壳通过私有管道启动绑定随机回环端口的服务，初次握手建立会话后跳转到不含 token 的地址；不需要用户配置或开放固定服务端口。
 
 ## 对照阅读与问答摘录
 
 顶部「专注原文」展开 PDF，「笔记对照」和「边读边问」分别打开笔记或问答。宽窗口可并排阅读，窄窗口仍按单面板切换；正文与补充 PDF 保留连续滚动、缩放和阅读位置。
 
 快捷问题按当前页或选区填入，修改后手动发送。回答可显示 Markdown 表格、列表与代码，点击来源先校验文件再定位。已完成回答可复制，或连同文件名、页码和原文摘录追加到已有笔记；原内容保留，重复点击不会重复追加，保存失败保留草稿。问答使用有界原文片段，不代替完整精读，也不自动执行工具任务。详见 [原文选字与问答](README.md#原文选字与问答)。
+
+## 笔记原文引用与阅读导航
+
+新生成的精读笔记可带有原文来源按钮，点击后重新核对文件与笔记版本，再跳到相应正文或补充 PDF 页面；缺失、删除或已变化的来源不会被当作可定位原文。已有笔记保留，旧笔记不会被自动补造来源。
+
+原文区的「阅读导航」可展开 PDF 自带章节、当前文件已提取图表和笔记标题。没有原生书签时明确显示空态；图表按正文／补充文件区分，点击可联动原文页和已有笔记中的对应图表位置。
 
 ## 本机搜索与资源表
 
@@ -95,7 +138,11 @@ Zotero MCP 是独立运行的服务，不包含在 BioReader 安装包中。尚�
 
 ## 验证与限制
 
-v0.9.0 改进阅读布局、问答排版、上下文快捷问题和回答摘录，保留样品资源、全库搜索与 Zotero MCP 导入。验证范围及实际回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)；合成材料与模拟回答不等于真实模型或精读科学质量评测。问答仍限于所取原文片段，不包含整库 AI 问答或自主工具执行。原生 WebKit、Windows WebView2 与各系统保存对话框应以该验证记录列明的实际结果为准，不能把 Chrome 浏览器测试当作两平台原生窗口验收。
+v0.10.0 增加笔记原文引用、章节／图表／笔记联动导航，并将桌面外壳迁移到 Go + MyGo；保留阅读布局、问答摘录、样品资源、全库搜索与 Zotero MCP 导入。验证范围及实际回归、浏览器交互和打包结果见 [App 验证记录](tests/README.md)；合成材料与模拟回答不等于真实模型或精读科学质量评测。问答仍限于所取原文片段，不包含整库 AI 问答或自主工具执行。原生 WebKit、Windows WebView2 与各系统保存对话框应以该验证记录列明的实际结果为准，不能把 Chrome 浏览器测试当作两平台原生窗口验收。
+
+### v0.9.0 包格式（历史）
+
+v0.9.0 使用原 Python 桌面外壳，macOS 和 Windows 均提供 ZIP 预览包；它的附件和验证记录保留在 [v0.9.0 发布页](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.9.0)。v0.10.0 改用上述 MyGo 构建与 DMG／安装 EXE／便携 ZIP 流程，旧版数据目录保持兼容。
 
 ### v0.4.0 历史发布快照
 
@@ -105,12 +152,13 @@ v0.4.0 的桌面包用于预览试用。应用内部使用系统 WebKit 和本�
 
 当前开发分支补充了保存／切换／AI 中断回归和桌面窗口验收，具体范围见 [App 验证记录](tests/README.md)。上述 v0.4.0 发布快照不因分支修复而改变；更新构建仍未进行 Apple 开发者签名或公证。
 
-运行测试：
+当前源码回归命令（`pywebview` 用于保留的旧桌面兼容测试，不是 MyGo 运行依赖）：
 
 ```bash
 python -m pip install -r app/backend/requirements.txt 'pywebview>=6.2.1,<7'
 python -m unittest discover -s app/tests -v
-node --test app/tests/test_frontend.cjs app/tests/test_evidence.cjs app/tests/test_resources.cjs app/tests/test_chat.cjs app/tests/test_zotero.cjs app/tests/test_library_search.cjs
+node --test app/tests/test_*.cjs
+go -C app/mygo test ./...
 ```
 
 macOS 包在 macOS 上构建，Windows 包在 Windows x64 环境中构建；跨系统编译结果不能替代对应平台验证。应用包作为 Release 附件提供，虚拟环境、个人论文库和编译产物不提交到源码仓库。
