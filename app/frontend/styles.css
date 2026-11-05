@@ -358,9 +358,7 @@ html[lang='en'] .notes-toolbar { flex-wrap: wrap; }
 .fig-actions .btn { font-size: 11px; min-height: 29px; padding: 5px 7px; gap: 4px; }
 .fig-actions .icon { width: 13px; height: 13px; }
 .fig-actions .btn-read { color: var(--primary); background: var(--primary-soft); border-color: var(--primary-border); }
-.fig-lightbox { position: fixed; inset: 0; background: var(--lightbox-overlay); display: flex; align-items: center; justify-content: center; z-index: 80; cursor: zoom-out; padding: 35px; }
-.fig-lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; background: var(--panel); border-radius: 5px; }
-.lightbox-close { position: absolute; right: 18px; top: 16px; color: var(--panel); background: var(--inverse); border-color: var(--inverse-border); }
+.fig-actions .btn-figure-notes { color: var(--primary-ink); background: var(--primary-soft); border-color: var(--primary-border); }
 .pdf-scroll.cropping .pdf-page { cursor: crosshair; }
 .crop-rect { position: absolute; border: 1px solid var(--primary); background: var(--selection-overlay); pointer-events: none; }
 .crop-hint { position: sticky; z-index: 5; bottom: 16px; margin: 0 auto; width: max-content; max-width: 95%; padding: 8px 14px; border-radius: 7px; font-size: 11px; background: var(--primary-ink); color: var(--panel); box-shadow: 0 3px 12px var(--shadow-popover); }

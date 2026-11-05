@@ -90,9 +90,23 @@ func configureWindow(win *mygo.Window, origin, dataDirectory string) {
 	})
 }
 
+func completedWindowResult(result <-chan error, smoke bool) error {
+	select {
+	case err := <-result:
+		return err
+	default:
+		if smoke {
+			return errors.New("native WebView closed before its diagnostic completed")
+		}
+		return nil
+	}
+}
+
 func runWindow(service *serviceProcess, smoke bool) error {
 	text := func(chinese, english string) string { return nativeText(service.dataDirectory, chinese, english) }
-	var smokeErr error
+	// Completion is explicit and synchronized: an early normal App.Run return
+	// must not turn an unfinished native diagnostic into a successful result.
+	result := make(chan error, 1)
 	var once sync.Once
 	var mainWindow *mygo.Window
 	if !smoke {
@@ -104,7 +118,7 @@ func runWindow(service *serviceProcess, smoke bool) error {
 			}
 		})
 	}
-	finish := func(err error) { once.Do(func() { smokeErr = err; mygo.App.Quit() }) }
+	finish := func(err error) { once.Do(func() { result <- err; mygo.App.Quit() }) }
 	mygo.App.WhenReady(func() {
 		defer func() {
 			if failure := recover(); failure != nil {
@@ -136,7 +150,7 @@ func runWindow(service *serviceProcess, smoke bool) error {
 					return
 				}
 				go func() {
-					ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					defer cancel()
 					value, err := win.Page().EvalContext(ctx, `(async () => {
 const response = await fetch('/api/papers');
@@ -180,6 +194,7 @@ const icon = document.querySelector('.brand-mark img');
 verify(icon && icon.getAttribute('src') === 'brand-mark.svg', 'Brand icon is missing');
 if (icon.decode) await icon.decode();
 verify(icon.complete && icon.naturalWidth > 0 && icon.naturalHeight > 0, 'Brand icon did not load in the native WebView');
+`+nativeFigureReaderSmoke+`
 window.__bioreaderSmokeStage = 'complete';
 return text.items.some(item => item.str.includes('BioReader synthetic'));
 })()`)
@@ -195,7 +210,7 @@ return text.items.some(item => item.str.includes('BioReader synthetic'));
 					finish(err)
 				}()
 			})
-			go func() { time.Sleep(35 * time.Second); finish(errors.New("WebView frontend smoke test timed out")) }()
+			go func() { time.Sleep(45 * time.Second); finish(errors.New("WebView frontend smoke test timed out")) }()
 		}
 		if err := win.Page().LoadURL(service.bootstrapURL()); err != nil {
 			if smoke {
@@ -209,7 +224,7 @@ return text.items.some(item => item.str.includes('BioReader synthetic'));
 	if err := mygo.App.Run(); err != nil {
 		return err
 	}
-	return smokeErr
+	return completedWindowResult(result, smoke)
 }
 
 func main() {

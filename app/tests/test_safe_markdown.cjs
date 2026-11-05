@@ -142,3 +142,27 @@ test('WeChat export inserts only safe Markdown output and also fails closed with
     if (available) assert.match(result, /<h1>Heading<\/h1>/);
   }
 });
+
+test('observation profile keeps Markdown but never resolves model-authored images or internal citations', () => {
+  const h = harness();
+  const html = h.window.BioMarkdown.parseObservation('## Full observation\n\n- **Panel A**\n\n|Group|Value|\n|---|---|\n|A|2|\n\n' +
+    '![forged local](figure:f001)\n![remote](https://tracker.invalid/pixel)\n![data](data:image/png;base64,AA)\n' +
+    '[N1](' + reference + ') [figure](figure:f001) [unsafe](javascript:alert(1)) ' +
+    '[PubMed](https://pubmed.ncbi.nlm.nih.gov/123/)\n<script>alert(1)</script>');
+  assert.match(html, /<h2>Full observation<\/h2>/); assert.match(html, /<strong>Panel A<\/strong>/); assert.match(html, /<table>/);
+  assert.doesNotMatch(html, /<img\b|<script\b|data-bio-note-source|href="(?:figure:|note-source:|javascript:)/);
+  assert.match(html, /forged local/); assert.match(html, /href="https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/123\/"/);
+  assert.equal(html, h.window.BioMarkdown.parse('## Full observation\n\n- **Panel A**\n\n|Group|Value|\n|---|---|\n|A|2|\n\n' +
+    '![forged local](figure:f001)\n![remote](https://tracker.invalid/pixel)\n![data](data:image/png;base64,AA)\n' +
+    '[N1](' + reference + ') [figure](figure:f001) [unsafe](javascript:alert(1)) ' +
+    '[PubMed](https://pubmed.ncbi.nlm.nih.gov/123/)\n<script>alert(1)</script>', {profile: 'observation'}));
+});
+
+test('observation rendering does not change default note and export figure/citation behavior', () => {
+  const h = harness(), md = '![Actual figure](figure:f001)\n\n[N1](' + reference + ')';
+  const before = h.parse(md);
+  assert.match(before, /<img /); assert.match(before, /data-bio-note-source/);
+  h.window.BioMarkdown.parseObservation(md);
+  assert.equal(h.parse(md), before);
+  assert.match(harness(null).window.BioMarkdown.parseObservation('<img src=x onerror=bad()>'), /&lt;img/);
+});

@@ -830,6 +830,7 @@
 
   // ---------- current paper ----------
   function renderHead() {
+    syncFigureReader();
     updateReadingMode();
     renderWorkflow();
     $('btn-capture-evidence').disabled = !state.current;
@@ -989,6 +990,7 @@
   }
 
   function clearWorkspace() {
+    window.BioFigureReader?.close(false);
     window.BioNoteSources?.clear();
     window.BioReadingNav?.setPaper(null);
     if (window.BioEvidence) window.BioEvidence.clear();
@@ -1927,18 +1929,30 @@
   }
 
   // ---------- figures ----------
+  function syncFigureReader() {
+    window.BioFigureReader?.sync({ paperId: state.current?.id, materialRevision: state.current?.material_revision, figures: state.figures });
+  }
+
+  let figuresFetchSequence = 0;
   async function fetchFigures() {
     const paper = state.current;
     if (!paper) return [];
+    const fetchSequence = ++figuresFetchSequence, revision = paper.material_revision;
+    const previous = state.figures;
+    const snapshot = previous.map(figure => [figure, figure.caption, figure.observation]);
+    const isCurrent = () => state.current === paper && paper.material_revision === revision &&
+      figuresFetchSequence === fetchSequence && state.figures === previous && state.figures.length === snapshot.length &&
+      snapshot.every(([figure, caption, observation], index) => state.figures[index] === figure && figure.caption === caption && figure.observation === observation);
     try {
       const figures = await api.figures(paper.id);
-      if (state.current !== paper) return [];
+      if (!isCurrent()) return [];
       state.figures = figures;
     } catch (e) {
-      if (state.current !== paper) return [];
-      state.figures = [];
+      if (!isCurrent()) return [];
+      return state.figures;
     }
     if (state.tab === 'figures') renderFigures();
+    else syncFigureReader();
     updateReadingNavigation();
     if (state.tab === 'preview' && !state.generating) renderPreview();
     return state.figures;
@@ -1947,21 +1961,23 @@
   function renderFigures() {
     const grid = $('fig-grid');
     updateReadingNavigation();
-    if (!state.current) { grid.innerHTML = emptyState('image', () => tr('让证据回到图表'), () => tr('打开一篇文献，查看提取的图表与读图观察。')); return; }
+    if (!state.current) { grid.innerHTML = emptyState('image', () => tr('让证据回到图表'), () => tr('打开一篇文献，查看提取的图表与读图观察。')); syncFigureReader(); return; }
     const figures = state.figures;
     if (!figures.length) {
       grid.innerHTML = emptyState('image', () => tr('还没有提取的图表'), () => tr('附加 PDF 后会自动提取图表，也可以在原文中使用「取图」手动框选。'));
+      syncFigureReader();
       return;
     }
     grid.innerHTML = figures.map((f) => {
       const child = f.parent ? ' child' : '';
       const obs = f.observation ? '<div class="fig-observation"' + uiAttr('title', '读图模型观察（供笔记生成参考）') + '>' + escapeHtml(f.observation) + '</div>' : '';
       return '<div class="fig-card' + child + '" data-fid="' + f.id + '">' +
-        '<button class="fig-thumb" data-zoom="' + f.id + '"' + uiAttr('aria-label', '放大 {label}', { label: f.label }) + '><img loading="lazy" src="' + api.figUrl(state.current.id, f.id) + '" alt="' + escapeHtml(f.label) + '"></button>' +
+        '<button class="fig-thumb" data-zoom="' + f.id + '"' + uiAttr('aria-label', '查看 {label} 与读图笔记', { label: f.label }) + '><img loading="lazy" src="' + api.figUrl(state.current.id, f.id) + '" alt="' + escapeHtml(f.label) + '"></button>' +
         '<div class="fig-body">' +
         '<div class="fig-label">' + escapeHtml(f.label) + '<span class="badge">' + (f.document_name ? escapeHtml(f.document_name) : uiHtml(() => tr('正文'))) + '</span><span class="badge">' + uiHtml(() => tr(f.source === 'manual' ? '手动' : '自动')) + '</span><span class="badge">p.' + f.page + '</span></div>' +
         '<div class="fig-caption" data-caption="' + f.id + '"' + uiAttr('title', '点击展开 / 收起') + ' role="button" tabindex="0" aria-expanded="false">' + (f.caption ? escapeHtml(f.caption) : uiHtml(() => tr('（无图注）'))) + '</div>' + obs +
         '<div class="fig-actions">' +
+        '<button class="btn btn-figure-notes" data-view-figure-notes="' + f.id + '">' + icon('book') + uiHtml(() => tr('查看笔记')) + '</button>' +
         '<button class="btn" data-source-fig="' + f.id + '"' + uiAttr('title', '打开这张图所在的 PDF 页面') + '>' + icon('file') + uiHtml(() => tr('查看原文')) + '</button>' +
         '<button class="btn btn-read" data-read-fig="' + f.id + '"' + uiAttr('title', '让读图模型观察这张图，可带追问') + '>' + icon('eye') + uiHtml(() => tr('读图')) + '</button>' +
         '<button class="btn" data-insert="' + f.id + '">' + icon('plus') + uiHtml(() => tr('插入笔记')) + '</button>' +
@@ -1969,6 +1985,7 @@
         '<button class="btn btn-icon btn-ghost" data-del-fig="' + f.id + '"' + uiAttr('title', '删除图片') + uiAttr('aria-label', '删除 {label}', { label: f.label }) + '>' + icon('trash') + '</button>' +
         '</div></div></div>';
     }).join('');
+    syncFigureReader();
     updateFigCount(figures.length);
     if (state.current) { state.current.figures_count = figures.length; }
   }
@@ -1981,44 +1998,45 @@
     state.pendingFigure = '';
     const fig = state.figures.find((f) => f.id === fid);
     if (!fig) return;
-    const paperId = state.current.id;
+    const paper = state.current, paperId = paper.id;
+    const observation = fig.observation;
+    const isSameFigure = () => state.figures.includes(fig) && fig.observation === observation;
+    const revision = paper.material_revision;
+    const isCurrent = () => state.current === paper && paper.material_revision === revision;
     const question = await requestText(() => tr('读图 · {label}', { label: fig.label }), () => tr('想重点核查什么？例如：F 面板两组的差别和显著性。留空则进行整体观察。'), '', () => tr('开始读图'));
-    if (question === null || !state.current || state.current.id !== paperId) return;
+    if (question === null || !isCurrent() || !isSameFigure()) return;
     state.figReading = true;
     const btn = document.querySelector('[data-read-fig="' + fid + '"]');
     if (btn) { btn.disabled = true; btn.innerHTML = icon('eye') + uiHtml(() => tr('观察中…')); }
     try {
-      const updated = await api.readFigure(state.current.id, fid, { question });
-      Object.assign(fig, updated);
+      const updated = await api.readFigure(paperId, fid, { question });
+      if (!isCurrent()) return;
+      if (!isSameFigure()) {
+        // The backend may have retained this result across a same-source re-extraction.
+        // Reload its current record; never merge the old response into a replacement.
+        await fetchFigures();
+        return;
+      }
+      if (updated?.id !== fid || typeof updated.observation !== 'string') throw new Error(tr('读图结果格式无效，请重试。'));
+      // A read request owns only its observation; caption/geometry are edited elsewhere.
+      fig.observation = updated.observation;
       renderFigures();
       toast(() => tr('观察已更新到卡片（生成笔记时会一并使用）'), 'ok');
     } catch (e) {
+      if (!isCurrent()) return;
       if (btn) { btn.disabled = false; btn.innerHTML = icon('eye') + uiHtml(() => tr('读图')); }
       toast(() => tr('读图失败：{error}', { error: tr(e.message) }), 'error');
     } finally {
       state.figReading = false;
+      if (isCurrent() && btn?.isConnected) { btn.disabled = false; btn.innerHTML = icon('eye') + uiHtml(() => tr('读图')); }
     }
   }
 
-  function openLightbox(fid) {
+  function openLightbox(fid, trigger) {
     const fig = state.figures.find((f) => f.id === fid);
     if (!fig || !state.current) return;
-    const box = document.createElement('div');
-    box.className = 'fig-lightbox';
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-modal', 'true');
-    box.setAttribute('aria-label', fig.label);
-    box.tabIndex = -1;
-    const previous = document.activeElement;
-    const close = () => { box.remove(); if (previous && previous.isConnected) previous.focus(); };
-    box.innerHTML = '<button class="btn btn-icon lightbox-close"' + uiAttr('aria-label', '关闭图片') + '>' + icon('close') + '</button><img src="' + api.figUrl(state.current.id, fid) + '" alt="' + escapeHtml(fig.label) + '">';
-    box.addEventListener('click', close);
-    box.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
-      if (e.key === 'Tab') { e.preventDefault(); box.querySelector('button').focus(); }
-    });
-    document.body.appendChild(box);
-    box.querySelector('button').focus();
+    if (!window.BioFigureReader) { toast(() => tr('图文阅读组件未能加载，请重新打开应用'), 'error'); return; }
+    window.BioFigureReader.open({ paperId: state.current.id, materialRevision: state.current.material_revision, figure: fig }, trigger);
   }
 
   function insertFigureRef(fid) {
@@ -2039,15 +2057,21 @@
   async function editFigureCaption(fid) {
     const fig = state.figures.find((f) => f.id === fid);
     if (!fig) return;
-    const paperId = state.current.id;
+    const paper = state.current, revision = paper.material_revision;
+    const isCurrent = () => state.current === paper && paper.material_revision === revision;
     const caption = await requestText(() => tr('编辑图注 · {label}', { label: fig.label }), () => tr('补充实验条件、分组与统计信息，帮助后续读图和笔记生成。'), fig.caption || '', () => tr('保存图注'));
-    if (caption === null || !state.current || state.current.id !== paperId) return;
+    if (caption === null || !isCurrent() || !state.figures.includes(fig)) return;
     try {
-      const updated = await api.patchFigure(state.current.id, fid, { caption });
-      Object.assign(fig, updated);
+      const updated = await api.patchFigure(paper.id, fid, { caption });
+      if (!isCurrent()) return;
+      if (!state.figures.includes(fig)) { await fetchFigures(); return; }
+      if (updated?.id !== fid || typeof updated.caption !== 'string') throw new Error(tr('图注保存响应无效，请重试。'));
+      // A caption save cannot roll back a concurrently completed observation.
+      fig.caption = updated.caption;
+      if (typeof updated.caption_edited === 'boolean') fig.caption_edited = updated.caption_edited;
       renderFigures();
     } catch (e) {
-      toast(() => tr('保存失败：{error}', { error: tr(e.message) }), 'error');
+      if (isCurrent()) toast(() => tr('保存失败：{error}', { error: tr(e.message) }), 'error');
     }
   }
 
@@ -2067,18 +2091,23 @@
   async function reextractFigures() {
     const paper = state.current;
     if (!paper || state.materialBusy || state.generating) return;
+    const revision = paper.material_revision;
+    const isCurrent = () => state.current === paper && paper.material_revision === revision;
     toast(() => tr('正在重新提取图片 …'));
     try {
       const res = await api.reextract(paper.id, state.documentId);
-      if (!state.current || state.current.id !== paper.id) return;
-      state.figures = res.figures;
+      if (!isCurrent()) return;
       state.figDataUrls = {};
+      // A read may have completed after extraction produced its response.
+      // Load the current saved records instead of rolling observations back.
+      await fetchFigures();
+      if (!isCurrent()) return;
       renderFigures();
-      updateListItem(Object.assign({}, state.current, { figures_count: res.figures.length }));
+      updateListItem(Object.assign({}, paper, { figures_count: state.figures.length }));
       if (res.warnings && res.warnings.length) toast(() => res.warnings[0]);
-      else toast(() => tr('提取到 {count} 张图', { count: res.figures.length }), 'ok');
+      else toast(() => tr('提取到 {count} 张图', { count: state.figures.length }), 'ok');
     } catch (e) {
-      toast(() => tr('提取失败：{error}', { error: tr(e.message) }), 'error');
+      if (isCurrent()) toast(() => tr('提取失败：{error}', { error: tr(e.message) }), 'error');
     }
   }
 
@@ -2086,12 +2115,15 @@
     if (!state.current || state.figReading) return;
     if (!state.settings || !state.settings.has_api_key) { toast(() => tr('请先设置 API Key'), 'error'); openSettings(); return; }
     if (!state.settings.vision_model) { toast(() => tr('请先在设置里填写「读图模型」'), 'error'); openSettings(); return; }
+    const paper = state.current, paperId = paper.id, revision = paper.material_revision;
+    const isCurrent = () => state.current === paper && paper.material_revision === revision;
     state.figReading = true;
     const btn = $('btn-fig-read');
     btn.disabled = true;
     setGenerating(true, () => tr('读图模型正在观察图片 …'));
+    let completed = false;
     try {
-      const resp = await fetch(paperPath(state.current.id, '/figures/read') + (force ? '?force=1' : ''), { method: 'POST' });
+      const resp = await fetch(paperPath(paperId, '/figures/read') + (force ? '?force=1' : ''), { method: 'POST' });
       if (!resp.ok) {
         let msg = resp.statusText;
         try { msg = (await resp.json()).detail || msg; } catch (e) { /* ignore */ }
@@ -2112,21 +2144,26 @@
             if (!line.startsWith('data:')) continue;
             let event;
             try { event = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+            if (!isCurrent()) continue;
             if (event.type === 'stage') setStage(() => tr('读图 {done}/{total}', { done: event.done, total: event.total }), { done: event.done, total: event.total });
             else if (event.type === 'done') {
-              state.figures = event.figures;
-              renderFigures();
-              toast(() => tr('读图完成，观察已写入图片卡片'), 'ok');
+              if (!Array.isArray(event.figures)) throw new Error(tr('读图结果格式无效，请重试。'));
+              completed = true;
             } else if (event.type === 'error') throw new Error(event.message);
           }
         }
       }
     } catch (e) {
-      toast(() => tr('读图失败：{error}', { error: tr(e.message) }), 'error', 6000);
+      completed = false;
+      if (isCurrent()) toast(() => tr('读图失败：{error}', { error: tr(e.message) }), 'error', 6000);
     } finally {
+      // A failed batch may still have saved earlier figures. Refresh only the
+      // original live paper, without presenting a failed run as a success.
+      if (isCurrent()) await fetchFigures();
+      if (isCurrent() && completed) toast(() => tr('读图完成，观察已写入图片卡片'), 'ok');
       state.figReading = false;
       btn.disabled = false;
-      setGenerating(false);
+      if (!state.generating) setGenerating(false);
     }
   }
 
@@ -2726,6 +2763,7 @@
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); finishInput($('input-value').value); }
     });
     document.addEventListener('keydown', (e) => {
+      if (window.BioFigureReader?.isOpen()) return;
       const modal = document.querySelector('.modal-backdrop:not([hidden])');
       if (!modal && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -2865,7 +2903,9 @@
     $('btn-fig-read').addEventListener('click', () => readFigures(false));
     $('fig-grid').addEventListener('click', (e) => {
       const zoom = e.target.closest('[data-zoom]');
-      if (zoom) { openLightbox(zoom.dataset.zoom); return; }
+      if (zoom) { openLightbox(zoom.dataset.zoom, zoom); return; }
+      const savedNotes = e.target.closest('[data-view-figure-notes]');
+      if (savedNotes) { openLightbox(savedNotes.dataset.viewFigureNotes, savedNotes); return; }
       const source = e.target.closest('[data-source-fig]');
       if (source) { showFigureSource(source.dataset.sourceFig); return; }
       const cap = e.target.closest('[data-caption]');
@@ -2938,6 +2978,10 @@
   }
 
   async function init() {
+    window.BioFigureReader?.init({ returnFocus: ({ paperId, figureId }) => {
+      if (state.current?.id !== paperId) return;
+      (document.querySelector('[data-view-figure-notes="' + figureId + '"]') || $('btn-fig-extract'))?.focus();
+    } });
     if (window.BioReadingNav) window.BioReadingNav.init($('reading-navigation'), {
       onPage: jumpReadingPage, onFigure: jumpReadingFigure, onHeading: jumpReadingHeading,
       onToggle: () => {
