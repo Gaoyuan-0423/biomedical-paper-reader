@@ -11,7 +11,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.11.0 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.11.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.11.1 macOS / Windows 预览包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.11.1)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 
@@ -22,9 +22,17 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 Python 依赖见 `backend/requirements.txt`（fastapi、uvicorn、pypdf、httpx、python-multipart、
 pdfplumber、pypdfium2、Pillow）。
 
+## v0.11.1：更新补充图图注
+
+修复补充图标题与图注正文字号不同时，自动图注只保留标题或前几行的问题；符合版面连续性条件的跨页图注可保守续接，遇到新图标题或章节边界停止。图注仍来自 PDF 文本，不通过模型猜写；扫描件或无法可靠关联的续页需要人工对照。
+
+已有记录不会随应用更新自动重提。先在左侧 PDF 文件下拉框选择对应补充材料，再打开「图库」点击「重新提取」，即可更新未人工编辑的自动图注。同一文件重提保留人工编辑过的图注（包括主动清空）、读图观察、手动裁图、其他 PDF 的图，以及原有图片 ID 和已插入笔记的图片引用。本次修复不改变图号标签、原图页码或裁剪区域。
+
+更新图注本身无需重新导入 PDF 或重新生成笔记；已经生成的笔记与读图观察原样保留。之后主动发起新的读图或笔记生成时才会使用更新后的图注。实际回归范围与构建状态见 [App 验证记录](tests/README.md)。
+
 ## 界面语言与品牌
 
-v0.11.0 在顶部和设置中提供「界面语言」选择，可在「简体中文」与「English」之间即时切换。文献库、阅读工具栏、问答、搜索、数据与复现、证据记录、Zotero、弹窗和操作提示同步更新；不需要刷新页面或重新打开论文。
+自 v0.11.0 起，顶部和设置中提供「界面语言」选择，可在「简体中文」与「English」之间即时切换。文献库、阅读工具栏、问答、搜索、数据与复现、证据记录、Zotero、弹窗和操作提示同步更新；不需要刷新页面或重新打开论文。
 
 - 语言保存在本机，重启应用或桌面服务更换端口后继续使用。保存失败时会显示重试提示；语言偏好独立于模型设置和论文数据。
 - 切换时保留未保存笔记、问答草稿、标签输入、研究表单、设置字段、焦点和选区，不停止生成或重新提交请求。
