@@ -34,6 +34,10 @@ jobs:
     name: Validate the existing draft and exact source
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # GitHub requires push access even to read an unpublished draft release.
+    # This trusted workflow job only performs GET checks; it checks out no source.
+    permissions:
+      contents: write
     steps:
       - name: Require a versioned draft whose tag matches the requested commit
         env:
@@ -190,8 +194,9 @@ jobs:
         platform: [macos-arm64, windows-x64]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only this job can change release assets. No source code is checked out or
-    # executed with this token, and no step publishes or overwrites a release.
+    # Only this job uploads release assets. The preflight also needs write
+    # access to read the draft; source build jobs retain read-only permissions.
+    # No source code is checked out or executed here, and nothing is published.
     permissions:
       actions: read
       contents: write
