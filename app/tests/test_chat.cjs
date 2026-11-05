@@ -10,13 +10,13 @@ const user={id:U,role:'user',content:'Question',status:'completed',sources:[]};
 const answer=(extra={})=>({id:M,role:'assistant',content:'Response [S1]',status:'completed',sources:[source],...extra});
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return{promise,resolve,reject};}
 function response(events){const bytes=new TextEncoder().encode(events.map(e=>'data: '+JSON.stringify(e)+'\r\n\r\n').join(''));let sent=false;return{ok:true,body:{getReader:()=>({read:async()=>sent?{done:true}:(sent=true,{done:false,value:bytes})})}};}
-function harness(savedStorage){
+function harness(savedStorage, i18n){
  const handlers={},els={},calls=[],posts=[],jumps=[],toasts=[],storage=savedStorage || new Map();
  const element=()=>({innerHTML:'',value:'',disabled:false,scrollTop:0,scrollHeight:100,clientHeight:80,focus(){this.focused=true;}});
  const panel={_html:'',get innerHTML(){return this._html;},set innerHTML(v){this._html=v;const m=v.match(/<textarea[^>]*>([\s\S]*?)<\/textarea>/);if(m)el('chat-input').value=m[1];},querySelector:s=>el(s.slice(1)),addEventListener:(n,fn)=>handlers[n]=fn};
  const el=id=>els[id]||(els[id]=element());
  const hooks={panel,request:async(method,url)=>{calls.push({method,url});return{messages:[],has_more:false};},toast:(...a)=>toasts.push(a),jump:async s=>{jumps.push(s);return true;},fetch:async(url,opts)=>{posts.push({url,body:JSON.parse(opts.body),signal:opts.signal});return response([{type:'start',message:user,assistant:answer({content:'',status:'pending'})},{type:'chunk',message_id:M,text:'Response [S1]'},{type:'done',message:answer()}]);}};
- const context=vm.createContext({window:{marked,sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}},document:{getElementById:()=>panel},AbortController,TextDecoder,URL,console,fetch:()=>{throw Error('unexpected fetch');}});
+ const context=vm.createContext({window:{BioI18n:i18n,marked,sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}},document:{getElementById:()=>panel},AbortController,TextDecoder,URL,console,fetch:()=>{throw Error('unexpected fetch');}});
  vm.runInContext(code,context);const ui=context.window.BioChat;ui.init(hooks);
  return{ui,hooks,panel,calls,posts,jumps,toasts,storage,el,context,
  input(value){el('chat-input').value=value;handlers.input({target:{id:'chat-input',value}});},
@@ -111,7 +111,7 @@ test('a restored pending response without a local stream gives recovery guidance
 
 test('restored selection questions retain their exact selected text and source page safely',async()=>{
  const h=harness();h.hooks.request=async()=>({messages:[{...user,content:'请解释这段选中的原文。',document_id:S,document_name:'Supplement.pdf',page:3,selection:'<script>Original selected passage</script>'}]});await h.ui.open(paper(A));
- assert.match(h.el('chat-history').innerHTML,/当时选中的原文 · Supplement.pdf · 第 3 页/);assert.match(h.el('chat-history').innerHTML,/&lt;script&gt;Original selected passage/);assert.doesNotMatch(h.el('chat-history').innerHTML,/<script>/);
+ assert.match(h.el('chat-history').innerHTML.replace(/<[^>]*>/g,''),/当时选中的原文 · Supplement.pdf · 第 3 页/);assert.match(h.el('chat-history').innerHTML,/&lt;script&gt;Original selected passage/);assert.doesNotMatch(h.el('chat-history').innerHTML,/<script>/);
 });
 
 test('completed answers render structured Markdown with prose citations but code stays literal',async()=>{
@@ -199,4 +199,31 @@ test('a failed request restores a page starter and its original source for direc
  const h=harness(),pending=deferred();await h.ui.open({...paper(A),material_revision:'same'});h.ui.setContext({document_id:'main',page:2});await h.click('quick-page');h.hooks.fetch=()=>pending.promise;const sending=h.submit();h.ui.setContext({document_id:'main',page:7});pending.resolve({ok:false,statusText:'offline',json:async()=>({detail:'offline'})});await sending;
  assert.match(h.el('chat-input').value,/第 2 页/);assert.match(h.el('chat-context').innerHTML,/第 2 页/);
  const restored=harness(h.storage);await restored.ui.open({...paper(A),material_revision:'same'});restored.ui.setContext({document_id:'main',page:7});await restored.submit();assert.equal(restored.posts[0].body.page,2);
+});
+
+test('English chat UI preserves original questions, answers, citations and copied text',async()=>{
+ const i18n=require('./i18n_reading_harness.cjs')('en'),h=harness(undefined,i18n),copies=[];
+ h.hooks.copyText=async text=>copies.push(text);
+ h.hooks.request=async()=>({messages:[answer({content:'原文回答 [S1]'})]});
+ await h.ui.open(paper(A));
+ assert.match(h.panel.innerHTML,/>Paper chat</);assert.match(h.panel.innerHTML,/placeholder="For example:/);
+ assert.match(h.el('chat-history').innerHTML,/>Reading assistant</);assert.match(h.el('chat-history').innerHTML,/原文回答/);
+ assert.match(h.el('chat-history').innerHTML,/Original sample statement/);assert.match(h.el('chat-history').innerHTML,/>Page 2</);
+ await h.click('copy',{chatMessage:M});const english=copies[0];
+ i18n.setLocale('zh-CN');await h.click('copy',{chatMessage:M});assert.equal(copies[1],english);
+ assert.match(english,/原文来源/);assert.match(english,/原文回答/);
+ await h.click('quick-methods');assert.match(h.el('chat-input').value,/请梳理正文第 1 页/);
+ i18n.setLocale('en');assert.match(h.el('chat-input').value,/请梳理正文第 1 页/);
+});
+
+test('changing language preserves the chat composer, history scroll and an active stream',async()=>{
+ const i18n=require('./i18n_reading_harness.cjs')(),h=harness(undefined,i18n),pending=deferred();
+ await h.ui.open(paper(A));h.input('草稿 remains unchanged');
+ const input=h.el('chat-input'),panelHTML=h.panel.innerHTML,history=h.el('chat-history');history.scrollTop=13;
+ i18n.setLocale('en');assert.equal(h.el('chat-input'),input);assert.equal(input.value,'草稿 remains unchanged');assert.equal(h.panel.innerHTML,panelHTML);assert.equal(history.scrollTop,13);
+ let signal;h.hooks.fetch=async(_,options)=>{signal=options.signal;return pending.promise;};
+ const sending=h.submit();const during=history.innerHTML;i18n.setLocale('zh-CN');
+ assert.equal(signal.aborted,false);assert.equal(history.innerHTML,during);assert.equal(h.el('chat-input'),input);
+ pending.resolve(response([{type:'start',message:user,assistant:answer({content:'',status:'pending'})},{type:'done',message:answer({content:'Untranslated 模型回答'})}]));
+ await sending;assert.match(history.innerHTML,/Untranslated 模型回答/);
 });

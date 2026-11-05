@@ -11,17 +11,22 @@ function deferred() {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-function harness() {
+function harness(options = {}) {
   const elements = new Map();
   function element() {
+    const attributes = new Map();
     return { value: '', textContent: '', dataset: {}, style: { setProperty(name, value) { this[name] = value; } }, children: [],
+      isConnected: true,
       get innerHTML() { return this.html || ''; }, set innerHTML(value) { this.html = value; this.children = []; },
       get offsetTop() { return this.parent ? 20 + this.parent.children.slice(0, this.parent.children.indexOf(this)).reduce((n, el) => n + parseFloat(el.style.height || 0) + 18, 0) : 0; },
       classList: { toggle() {}, add() {}, remove() {} }, hidden: false,
-      setAttribute() {}, focus() {}, querySelector: () => element(), querySelectorAll: () => [],
+      setAttribute(name, value) { attributes.set(name, String(value)); },
+      getAttribute(name) { return attributes.get(name) ?? null; }, removeAttribute(name) { attributes.delete(name); },
+      focus() { context.document.activeElement = this; }, querySelector: () => element(), querySelectorAll: () => [],
       addEventListener(name, fn) { this['on' + name] = fn; }, before() {}, appendChild(child) { child.parent = this; this.children.push(child); },
+      replaceChildren(...children) { for (const child of this.children) child.isConnected = false; this.children = []; for (const child of children) this.appendChild(child); },
       getContext: () => ({}), scrollTo({ top }) { this.scrollTop = Math.max(0, top); }, click() { this.onclick?.(); },
-      remove() { if (this.parent) this.parent.children = this.parent.children.filter(el => el !== this); } };
+      remove() { this.isConnected = false; if (this.parent) this.parent.children = this.parent.children.filter(el => el !== this); } };
   }
   const $ = (id) => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const context = vm.createContext({
@@ -33,8 +38,12 @@ function harness() {
     performance, AbortController, TextDecoder, Blob, URL, console,
     fetch: async () => { throw new Error('Unexpected fetch'); },
   });
+  if (options.i18n) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/i18n.js'), 'utf8'), context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/i18n-app.js'), 'utf8'), context);
+  }
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { jumpNoteReference, prepareDesktopClose, appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { refreshUI, renderStatusPill, renderHead, requestText, finishInput, renderFigures, chatContext, toast, jumpNoteReference, prepareDesktopClose, appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -1392,4 +1401,104 @@ test('failed research appendix preparation does not export a partial Word docume
   assert.equal(h.exported, undefined);
   assert.equal(h.$('editor').value, 'Keep note');
   assert.match(h.$('toast').textContent, /records unavailable/);
+});
+
+test('interface language changes keep dirty drafts, focus, selection and active work intact', async () => {
+  const h = harness({ i18n: true }), i18n = h.context.window.BioI18n;
+  const paper = h.state.current;
+  paper.title = '中文论文标题'; paper.authors = '研究者'; paper.tags = ['肿瘤']; paper.pages = 2;
+  h.state.papers = [paper];
+  edit(h, '# 中文笔记\n\nMy unsaved draft');
+  h.$('tag-input').value = '尚未提交标签'; h.$('set-direction').value = '研究方向草稿';
+  h.$('set-api-key').value = 'private-unsaved-key';
+  h.renderHead(); h.renderList(); h.renderStatusPill();
+  const editor = h.$('editor'), pending = h.state.pendingSave;
+  editor.selectionStart = 3; editor.selectionEnd = 7; editor.focus();
+  const selected = { paper_id: A, document_id: 'main', page: 2, selection: '未经修改的选区' };
+  h.state.pdfSelection = selected;
+  h.state.generating = new AbortController();
+  const generating = h.state.generating, tagsMarkup = h.$('head-tags').innerHTML;
+  await i18n.setLocale('en', { persist: false });
+  assert.equal(h.$('save-status').textContent, 'Unsaved');
+  assert.match(h.$('head-meta').textContent, /2 pages/);
+  assert.equal(h.$('head-star').getAttribute('title'), 'Add to favorites');
+  assert.equal(h.$('head-title').textContent, '中文论文标题');
+  assert.equal(editor.value, '# 中文笔记\n\nMy unsaved draft');
+  assert.equal(editor.selectionStart, 3); assert.equal(editor.selectionEnd, 7);
+  assert.equal(h.context.document.activeElement, editor);
+  assert.equal(h.state.pendingSave, pending); assert.equal(h.state.generating, generating);
+  assert.equal(generating.signal.aborted, false); assert.equal(h.state.pdfSelection, selected);
+  assert.equal(h.$('tag-input').value, '尚未提交标签'); assert.equal(h.$('head-tags').innerHTML, tagsMarkup);
+  assert.equal(h.$('set-direction').value, '研究方向草稿'); assert.equal(h.$('set-api-key').value, 'private-unsaved-key');
+  assert.deepEqual(Array.from(paper.tags), ['肿瘤']);
+  await i18n.setLocale('zh-CN', { persist: false });
+  assert.equal(h.$('save-status').textContent, '待保存');
+  assert.match(h.$('head-meta').textContent, /2 页/);
+});
+
+test('active caption modal changes language without replacing its draft or focus', async () => {
+  const h = harness({ i18n: true }), i18n = h.context.window.BioI18n;
+  const done = h.requestText(() => i18n.t('编辑图注 · {label}', { label: '图 1 中文标题' }),
+    () => i18n.t('补充实验条件、分组与统计信息，帮助后续读图和笔记生成。'), 'Original caption', () => i18n.t('保存图注'));
+  const input = h.$('input-value'); input.value = '仍在输入的中文图注'; input.selectionStart = 4; input.selectionEnd = 6;
+  await i18n.setLocale('en', { persist: false });
+  assert.equal(h.$('input-title').textContent, 'Edit caption · 图 1 中文标题');
+  assert.equal(h.$('input-submit').textContent, 'Save caption');
+  assert.equal(input.value, '仍在输入的中文图注'); assert.equal(h.context.document.activeElement, input);
+  assert.equal(input.selectionStart, 4); assert.equal(input.selectionEnd, 6);
+  h.finishInput(input.value); assert.equal(await done, '仍在输入的中文图注');
+});
+
+test('English interface translates confirmations and figures while preserving research content and chat sources', async () => {
+  const h = harness({ i18n: true }), i18n = h.context.window.BioI18n;
+  await i18n.setLocale('en', { persist: false });
+  h.state.current.has_file = true; h.state.current.notes = '已生成的原始笔记'; h.$('editor').value = '已生成的原始笔记';
+  let confirmation; h.context.confirm = message => { confirmation = message; return false; };
+  await h.generateNotes();
+  assert.match(confirmation, /^This paper already has notes/);
+  assert.equal(h.$('editor').value, '已生成的原始笔记');
+  h.state.figures = [{id: 'f001', label: '中文标题 <img onerror=1>', caption: '中文实验图注', observation: '模型原始中文回答', source: 'manual', page: 2}];
+  h.renderFigures();
+  const html = h.$('fig-grid').innerHTML;
+  assert.match(html, /View source/); assert.match(html, /Analyze figure/); assert.match(html, /Manual/);
+  assert.match(html, /中文实验图注/); assert.match(html, /模型原始中文回答/);
+  assert.match(html, /中文标题 &lt;img onerror=1&gt;/); assert.doesNotMatch(html, /<img onerror=1>/);
+  assert.equal(h.chatContext().document_name, '正文');
+  let saved;
+  h.api.patch = async (id, body) => { saved = body.notes; return {id, ...body}; };
+  const message = answer(); message.content = '模型中文结论 [S1]'; message.sources[0].document_name = ''; message.sources[0].document_id = 'main';
+  await h.appendChatNote({paperId: A, message});
+  assert.match(saved, /### 阅读问答摘录/); assert.match(saved, /正文 · PDF 第 2 页/); assert.match(saved, /模型中文结论/);
+});
+
+test('native close waits for preference persistence but a preference failure does not trap the user', async () => {
+  const h = harness({ i18n: true }), i18n = h.context.window.BioI18n, pending = deferred();
+  await i18n.setLocale('en', { persist: false });
+  i18n.flush = () => pending.promise;
+  let finished = false;
+  const closing = h.prepareDesktopClose().then(value => { finished = true; return value; });
+  await new Promise(setImmediate); assert.equal(finished, false);
+  pending.resolve(false);
+  assert.equal(await closing, true);
+  i18n.flush = async () => true; assert.equal(await h.prepareDesktopClose(), true);
+});
+
+test('changing interface language during generation keeps the reading mode and model output unchanged', async () => {
+  const h = harness({ i18n: true }), i18n = h.context.window.BioI18n;
+  const notes = '## 模型原始中文笔记\n\n研究样品与结论不会被界面翻译。';
+  stream(h, [{type: 'start', model: 'test', mode_name: '精读'}, {type: 'chunk', text: notes}, {type: 'done', notes}]);
+  const originalFetch = h.context.fetch; let request;
+  h.context.fetch = async (url, options) => {
+    request = { url, options };
+    await i18n.setLocale('en', { persist: false });
+    return originalFetch(url, options);
+  };
+  await h.generateNotes();
+  assert.equal(request.url, '/api/papers/' + A + '/read?mode=deep');
+  assert.equal(request.options.signal.aborted, false);
+  assert.equal(h.$('editor').value, notes); assert.equal(h.state.current.notes, notes);
+  assert.equal(h.state.current.notes_mode, 'deep');
+  assert.equal(h.$('save-status').textContent, 'Saved');
+  await i18n.setLocale('zh-CN', { persist: false });
+  assert.equal(h.$('editor').value, notes); assert.equal(h.$('save-status').textContent, '已保存');
 });

@@ -55,6 +55,7 @@ import zotero_import as zi
 from zotero_mcp import ZoteroMCPClient, MCPError
 from library_search import search_library
 import note_sources as ns
+import ui_preferences as ui
 from llm import (
     UnsafeURLError,
     UpstreamError,
@@ -761,6 +762,15 @@ async def supplement_geo_metadata(paper_id: str, accession: str, refresh: bool =
 
 
 # ---------- settings ----------
+
+@app.get('/api/ui-preferences')
+def get_ui_preferences():
+    return ui.read_preferences(DATA_DIR)
+
+
+@app.put('/api/ui-preferences')
+def put_ui_preferences(body: ui.PreferencesIn):
+    return ui.write_preferences(DATA_DIR, body)
 
 @app.get("/api/settings")
 def get_settings():

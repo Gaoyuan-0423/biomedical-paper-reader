@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="blue" x1="9" y1="5" x2="54" y2="63" gradientUnits="userSpaceOnUse"><stop stop-color="#438BFF"/><stop offset=".52" stop-color="#2865EE"/><stop offset="1" stop-color="#1745C8"/></linearGradient>
+    <linearGradient id="leaf" x1="38" y1="18" x2="48" y2="32" gradientUnits="userSpaceOnUse"><stop stop-color="#E6FFFF"/><stop offset="1" stop-color="#8CDED9"/></linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="18" fill="url(#blue)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="17.5" stroke="white" stroke-opacity=".2"/>
+  <path d="M13.5 20.5c7.3-2.4 12.8-.7 18.5 3.5v23c-6.2-4-11.7-5.6-18.5-3.6V20.5Z" fill="white"/>
+  <path d="M32 24c5.7-4.2 11.2-5.9 18.5-3.5v22.9c-6.8-2-12.3-.4-18.5 3.6V24Z" fill="#E4EEFF"/>
+  <path d="M32 24.5V46" stroke="#2865EE" stroke-width="2" stroke-linecap="round"/>
+  <path d="m18.5 27.5 8 1.9m-8 5 8 2" stroke="#A0BDF9" stroke-width="1.9" stroke-linecap="round"/>
+  <path d="M35.5 31.5C34 20.1 42 14.7 52 13c-.5 11.7-5.8 19.9-16.5 18.5Z" fill="url(#leaf)"/>
+  <path d="M36 32c2.3-4.2 6-8.3 10.2-11.5" stroke="#1C72BD" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

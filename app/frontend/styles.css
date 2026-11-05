@@ -79,14 +79,26 @@ select { cursor: pointer; }
 /* App chrome. */
 .topbar { height: var(--topbar-height); padding: 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .brand { display: flex; align-items: center; gap: 11px; flex-shrink: 0; }
-.brand-mark { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px; background: var(--primary); color: var(--panel); }
-.brand-mark .icon { width: 22px; height: 22px; stroke-width: 1.4; }
+.brand-mark { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 11px; filter: drop-shadow(0 2px 3px #1f54cb20); }
+.brand-mark img { width: 100%; height: 100%; display: block; }
 .brand-name { font-family: Georgia, 'Times New Roman', serif; font-size: 23px; letter-spacing: -.7px; font-weight: 600; line-height: 1; }
 .brand-sub { display: block; margin-top: 4px; font: 10px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; letter-spacing: 1.4px; color: var(--muted); }
 .topbar-context { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; letter-spacing: .3px; }
 .local-dot { width: 5px; height: 5px; background: var(--primary); border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 .context-divider { margin: 0 8px; height: 12px; width: 1px; background: var(--border); }
 .topbar-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.language-control { position: relative; flex: 0 0 auto; }
+.language-select { display: flex; align-items: center; gap: 5px; color: var(--muted); padding-left: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.language-select select { border: 0; border-radius: 7px; box-shadow: none; padding: 6px 4px; font-size: 11px; background: transparent; color: var(--text); max-width: 93px; }
+.language-select:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.locale-retry { position: absolute; right: 0; top: calc(100% + 4px); z-index: 40; min-width: max-content; padding: 5px 8px; border: 1px solid var(--danger-border); border-radius: 6px; color: var(--danger-hover); background: var(--panel); font-size: 11px; cursor: pointer; }
+.interface-language-field { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.interface-language-field select { max-width: 200px; }
+html[lang='en'] .brand-sub { letter-spacing: .5px; }
+html[lang='en'] .sidebar-tools { grid-template-columns: minmax(0, 1fr) auto; }
+html[lang='en'] .sidebar-tools .btn { font-size: 11px; padding-inline: 8px; }
+html[lang='en'] .reading-modes button { padding-inline: 9px; }
+html[lang='en'] .notes-toolbar { flex-wrap: wrap; }
 .pill { border: 1px solid transparent; border-radius: 20px; padding: 5px 10px; font-size: 11px; line-height: 1.5; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .pill::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; vertical-align: 2px; margin-right: 6px; }
 .pill-warn { background: var(--warn-bg); color: var(--warn-text); }
@@ -371,7 +383,7 @@ select { cursor: pointer; }
 .settings-section-label { color: var(--primary); font-size: 11px; font-weight: 600; margin-top: 3px; }
 .advanced-settings { border: 1px solid var(--border); border-radius: 7px; padding: 12px; background: var(--surface-subtle); }
 .advanced-settings summary { cursor: pointer; color: var(--primary); font-size: 11px; }
-.advanced-settings summary > span { float: right; color: var(--muted); font-size: 11px; }
+.advanced-settings summary > span:not([data-i18n]) { float: right; color: var(--muted); font-size: 11px; }
 .advanced-settings[open] > summary { margin-bottom: 20px; }
 #input-value { resize: vertical; min-height: 120px; font-size: 13px; line-height: 1.7; }
 .related-group h4 { margin: 5px 0 10px; font-size: 12px; color: var(--primary); }
@@ -461,7 +473,9 @@ select { cursor: pointer; }
   .topbar { padding-inline: 15px; }
   .topbar-actions .btn span { display: none; }
   .topbar-actions .btn { padding: 7px; }
-  .topbar-actions .pill { max-width: 142px; }
+  .topbar-actions .pill { display: none; }
+  .language-select { padding-left: 6px; gap: 2px; }
+  .language-select select { max-width: 79px; padding-inline: 2px; }
   .brand { gap: 8px; }
   .brand-sub { letter-spacing: 1px; }
   .brand-name { font-size: 20px; }

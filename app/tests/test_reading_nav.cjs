@@ -4,11 +4,11 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const code = fs.readFileSync(path.join(__dirname, '../frontend/reading-nav.js'), 'utf8');
 const A = 'a'.repeat(32), B = 'b'.repeat(32), S = 'c'.repeat(32);
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return {promise, resolve, reject}; };
-function harness() {
+function harness(i18n) {
   const nodes = [];
   function match(node, selector) {
-    const m = /^\[data-([a-z-]+)(?:="([^"]*)")?\]$/.exec(selector);
-    if (!m) return false;
+    const m = /^\[data-([a-z0-9-]+)(?:="([^"]*)")?\]$/.exec(selector);
+    if (!m) return selector.startsWith('.') && String(node.className || '').split(/\s+/).includes(selector.slice(1));
     const key = m[1].replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     return Object.hasOwn(node.dataset, key) && (m[2] === undefined || node.dataset[key] === m[2]);
   }
@@ -27,7 +27,7 @@ function harness() {
   }
   const container = element('div'), calls = [], toggles = [];
   const hooks = {onPage:async(target,guard)=>{calls.push({kind:'page',target,guard});return true;},onFigure:async(target,guard)=>{calls.push({kind:'figure',target,guard});return true;},onHeading:async(target,guard)=>{calls.push({kind:'heading',target,guard});return true;},onToggle:value=>toggles.push(value)};
-  const context = vm.createContext({window:{},document:{createElement:element},console});vm.runInContext(code,context);
+  const context = vm.createContext({window:{BioI18n:i18n},document:{createElement:element},console});vm.runInContext(code,context);
   const ui = context.window.BioReadingNav;ui.init(container,hooks);
   const find = (action,index) => container.querySelectorAll('[data-reading-nav-action="'+action+'"]').find(n=>index===undefined || n.dataset.readingNavIndex===String(index));
   return {ui,container,hooks,calls,toggles,nodes,find,text:()=>container.textContent,
@@ -108,4 +108,15 @@ test('keyboard tabs work without opening external destinations or losing the sel
 test('cyclic and excessive native outlines are bounded without invented destinations',async()=>{
  const h=harness();h.setPaper();const cyclic={title:'Cycle',dest:[0,{name:'Fit'}]};cyclic.items=[cyclic];await h.document(h.pdf([cyclic]));assert.equal((h.text().match(/Cycle/g)||[]).length,1);
  await h.document(h.pdf(Array.from({length:510},(_,i)=>({title:'Chapter '+i,dest:[0,{name:'Fit'}]}))));assert.equal(h.container.querySelectorAll('[data-reading-nav-action="page"]').length,500);assert.match(h.text(),/仅显示前 500 项/);
+});
+
+test('locale changes keep bookmark nodes, native titles, scroll and active navigation intact',async()=>{
+ const i18n=require('./i18n_reading_harness.cjs')(),h=harness(i18n);h.setPaper();
+ let loads=0;await h.document(h.pdf([{title:'章节',dest:[1,{name:'Fit'}]}],{getOutline:async()=>{loads++;return[{title:'章节',dest:[1,{name:'Fit'}]}];}}));
+ const node=h.find('page',0),list=h.container.querySelector('[role="tabpanel"]') || node.parent;list.scrollTop=42;
+ i18n.setLocale('en');i18n.applyDom(h.container);
+ assert.equal(h.find('page',0),node);assert.equal(list.scrollTop,42);assert.equal(node.children[0].textContent,'章节');assert.match(h.text(),/Page 2/);assert.match(h.text(),/Main text · PDF bookmarks/);assert.equal(loads,1);
+ const pending=deferred();let guard;h.hooks.onPage=async(_,g)=>{guard=g;return pending.promise;};const opening=h.click('page',0);
+ i18n.setLocale('zh-CN');i18n.applyDom(h.container);assert.equal(guard.isCurrent(),true);assert.equal(h.find('page',0).disabled,true);assert.equal(loads,1);
+ pending.resolve(true);await opening;assert.equal(h.find('page',0).disabled,false);
 });

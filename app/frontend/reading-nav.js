@@ -1,5 +1,9 @@
 (function () {
   'use strict';
+  const t = (key, params = {}) => window.BioI18n?.t(key, params) ?? key.replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? '{' + name + '}'));
+  function ui(node, key, params = {}) { node.dataset.i18n = key; node.dataset.i18nParams = JSON.stringify(params); node.textContent = t(key, params); return node; }
+  function uiElement(tag, className, key, params) { return ui(element(tag, className), key, params); }
+  const documentLabel = () => state.documentId === 'main' && ['正文', 'Main text', ''].includes(state.documentName) ? t('正文') : state.documentName || t('补充材料');
   const PAPER_ID = /^[0-9a-f]{32}$/, FIGURE_ID = /^[a-z]\d+$/;
   const documentId = value => value === 'main' || PAPER_ID.test(value || '');
   const tabs = [['outline', '章节'], ['figures', '图表'], ['notes', '笔记']];
@@ -18,13 +22,13 @@
     if (index !== undefined) node.dataset.readingNavIndex = String(index);
     return node;
   }
-  function empty(text) { list.appendChild(element('p', 'reading-nav-empty', text)); }
+  function empty(key) { list.appendChild(uiElement('p', 'reading-nav-empty', key)); }
   function currentFigures() { return state.figures.filter(figure => figure.document_id === state.documentId); }
   function render() {
     if (!container) return;
     container.hidden = !state.paper;
     toggleButton.setAttribute('aria-expanded', String(state.open));
-    toggleButton.textContent = state.open ? '收起阅读导航' : '阅读导航 · 章节 / 图表 / 笔记';
+    ui(toggleButton, state.open ? '收起阅读导航' : '阅读导航 · 章节 / 图表 / 笔记');
     content.hidden = !state.open;
     tabbar.querySelectorAll('[data-reading-nav-action="tab"]').forEach(node => {
       const selected = node.dataset.readingNavTab === state.tab;
@@ -33,40 +37,40 @@
     list.setAttribute('aria-labelledby', 'reading-nav-tab-' + state.tab);
     list.setAttribute('aria-busy', String(state.loading && state.tab === 'outline'));
     list.replaceChildren();
-    feedback.textContent = state.actionError;
+    feedback.textContent = state.actionError.startsWith('无法跳转：') ? t('无法跳转：{error}', { error: t(state.actionError.slice(5)) }) : t(state.actionError);
     feedback.hidden = !state.actionError;
     if (!state.paper || !state.open) return;
     if (state.tab === 'outline') {
-      list.appendChild(element('p', 'reading-nav-caption', state.documentName + ' · PDF 自带书签'));
+      list.appendChild(uiElement('p', 'reading-nav-caption', '{document} · PDF 自带书签', { document: documentLabel() }));
       if (state.loading) { empty('正在读取 PDF 章节…'); return; }
       if (state.outlineError) {
-        empty(state.outlineError); list.appendChild(button('retry', '重新读取章节')); return;
+        empty(state.outlineError); list.appendChild(ui(button('retry'), '重新读取章节')); return;
       }
       if (!state.pdf) { empty('打开 PDF 后可查看它自带的章节。'); return; }
       if (!state.outline.length) { empty('这个 PDF 没有内置章节书签，可按页码阅读或切换到图表导航。'); return; }
       state.outline.forEach((entry, index) => {
         const node = button('page', '', index); node.style.setProperty('--reading-nav-depth', Math.min(entry.depth, 6));
-        node.appendChild(element('span', 'reading-nav-title', entry.title));
-        node.appendChild(element('span', 'reading-nav-meta', entry.page ? '第 ' + entry.page + ' 页' : '无可用页码'));
+        node.appendChild(entry.untitled ? uiElement('span', 'reading-nav-title', '未命名书签') : element('span', 'reading-nav-title', entry.title));
+        node.appendChild(uiElement('span', 'reading-nav-meta', entry.page ? '第 {page} 页' : '无可用页码', { page: entry.page }));
         node.disabled = !entry.page || state.busy;
-        if (!entry.page) node.title = '此书签没有可解析的 PDF 内部页码';
+        if (!entry.page) { node.dataset.i18nTitle = '此书签没有可解析的 PDF 内部页码'; node.title = t(node.dataset.i18nTitle); }
         list.appendChild(node);
       });
       if (state.truncated) empty('章节较多，仅显示前 500 项。');
     } else if (state.tab === 'figures') {
       const figures = currentFigures();
-      list.appendChild(element('p', 'reading-nav-caption', state.documentName + ' · 已提取图表'));
+      list.appendChild(uiElement('p', 'reading-nav-caption', '{document} · 已提取图表', { document: documentLabel() }));
       if (!figures.length) { empty('当前文件还没有已提取图表。可在原文中使用“取图”，或切换阅读文件查看补充图。'); return; }
       figures.forEach((figure, index) => {
         const node = button('figure', '', index);
         node.appendChild(element('span', 'reading-nav-title', figure.label || figure.id));
-        node.appendChild(element('span', 'reading-nav-meta', '第 ' + figure.page + ' 页'));
+        node.appendChild(uiElement('span', 'reading-nav-meta', '第 {page} 页', { page: figure.page }));
         if (figure.caption) { node.title = figure.caption; node.appendChild(element('span', 'reading-nav-figure-caption', figure.caption)); }
         node.disabled = state.busy || !!state.pdf && figure.page > state.pdf.numPages;
         list.appendChild(node);
       });
     } else {
-      list.appendChild(element('p', 'reading-nav-caption', '当前论文 · 笔记标题'));
+      list.appendChild(uiElement('p', 'reading-nav-caption', '当前论文 · 笔记标题'));
       if (!state.headings.length) { empty('笔记还没有标题。生成精读笔记，或用 Markdown 标题整理后可在这里跳转。'); return; }
       state.headings.forEach((heading, index) => {
         const node = button('heading', heading.title, index);
@@ -101,7 +105,7 @@
         if (result.length >= 500) { truncated = true; return; }
         if (!item || typeof item !== 'object' || seen.has(item)) continue;
         seen.add(item);
-        result.push({ title: label(item.title, '未命名书签'), depth, dest: item.url || item.action ? null : item.dest, page: null, destination: null });
+        result.push({ title: label(item.title, '未命名书签'), untitled: !label(item.title), depth, dest: item.url || item.action ? null : item.dest, page: null, destination: null });
         visit(item.items, depth + 1);
       }
     }
@@ -204,11 +208,11 @@
     container = next; container.classList.add('reading-nav');
     container.replaceChildren();
     shell = element('section', 'reading-nav-shell');
-    toggleButton = button('toggle', '阅读导航'); toggleButton.className = 'reading-nav-toggle'; toggleButton.setAttribute('aria-controls', 'reading-nav-content');
+    toggleButton = ui(button('toggle'), '阅读导航'); toggleButton.className = 'reading-nav-toggle'; toggleButton.setAttribute('aria-controls', 'reading-nav-content');
     content = element('div', 'reading-nav-content'); content.id = 'reading-nav-content';
-    tabbar = element('div', 'reading-nav-tabs'); tabbar.setAttribute('role', 'tablist'); tabbar.setAttribute('aria-label', '阅读导航范围');
+    tabbar = element('div', 'reading-nav-tabs'); tabbar.setAttribute('role', 'tablist'); tabbar.dataset.i18nAriaLabel = '阅读导航范围'; tabbar.setAttribute('aria-label', t('阅读导航范围'));
     tabs.forEach(([id, title]) => {
-      const tab = button('tab', title); tab.className = 'reading-nav-tab'; tab.id = 'reading-nav-tab-' + id; tab.dataset.readingNavTab = id;
+      const tab = ui(button('tab'), title); tab.className = 'reading-nav-tab'; tab.id = 'reading-nav-tab-' + id; tab.dataset.readingNavTab = id;
       tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', 'reading-nav-list'); tabbar.appendChild(tab);
     });
     list = element('div', 'reading-nav-list'); list.id = 'reading-nav-list'; list.setAttribute('role', 'tabpanel'); list.tabIndex = 0;
@@ -234,5 +238,11 @@
     });
     render();
   }
+  window.BioI18n?.onChange(() => {
+    // Only labels change: keep the outline nodes, focus, scroll and active navigation task.
+    const caption = list?.querySelector('.reading-nav-caption');
+    if (caption && state.tab !== 'notes') ui(caption, state.tab === 'outline' ? '{document} · PDF 自带书签' : '{document} · 已提取图表', { document: documentLabel() });
+    if (feedback) feedback.textContent = state.actionError.startsWith('无法跳转：') ? t('无法跳转：{error}', { error: t(state.actionError.slice(5)) }) : t(state.actionError);
+  });
   window.BioReadingNav = { init, setPaper, setDocument, setFigures, setNoteHeadings, setOpen, toggle: () => setOpen(!state.open), isOpen: () => state.open };
 })();

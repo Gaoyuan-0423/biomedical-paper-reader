@@ -4,221 +4,229 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f8fafc">
-  <title>BioReader · 文献阅读工作台</title>
+  <link rel="icon" type="image/svg+xml" href="brand-mark.svg">
+  <title data-i18n="BioReader · 文献阅读工作台">BioReader · 文献阅读工作台</title>
   <link rel="stylesheet" href="vendor/github.min.css">
-  <link rel="stylesheet" href="styles.css?v=20261105-v0100">
-  <link rel="stylesheet" href="evidence.css?v=20261105-v0100">
-  <link rel="stylesheet" href="resources.css?v=20261105-v0100">
-  <link rel="stylesheet" href="chat.css?v=20261105-v0100">
-  <link rel="stylesheet" href="zotero.css?v=20261105-v0100">
-  <link rel="stylesheet" href="library-search.css?v=20261105-v0100">
-  <link rel="stylesheet" href="reading-nav.css?v=20261105-v0100">
+  <link rel="stylesheet" href="styles.css?v=20261105-v0110">
+  <link rel="stylesheet" href="evidence.css?v=20261105-v0110">
+  <link rel="stylesheet" href="resources.css?v=20261105-v0110">
+  <link rel="stylesheet" href="chat.css?v=20261105-v0110">
+  <link rel="stylesheet" href="zotero.css?v=20261105-v0110">
+  <link rel="stylesheet" href="library-search.css?v=20261105-v0110">
+  <link rel="stylesheet" href="reading-nav.css?v=20261105-v0110">
 </head>
 <body data-view="library">
 <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Z"/><path d="M12 6v15"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol><symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4M8 15l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 9l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.9 1)"/></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></symbol><symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol><symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol><symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 3v13a2 2 0 0 0 2 2h13M3 6h13a2 2 0 0 1 2 2v13"/></symbol><symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4ZM20 2v4m-2-2h4"/></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol><symbol id="i-network" viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="18" r="3"/><circle cx="19" cy="18" r="3"/><path d="m10.5 8-4 7m7-7 4 7M8 18h8"/></symbol><symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5.3 7a8 8 0 0 1 13-2L20 7M4 17l1.7 2a8 8 0 0 0 13-2"/></symbol><symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14ZM12 20h9"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol><symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20ZM12 9v5m0 3v.5"/></symbol></defs></svg>
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg></span>
-      <span class="brand-name">BioReader<span class="brand-sub">文献阅读工作台</span></span>
+      <span class="brand-mark"><img src="brand-mark.svg" width="38" height="38" alt="" aria-hidden="true"></span>
+      <span class="brand-name">BioReader<span class="brand-sub"><span data-i18n="文献阅读工作台">文献阅读工作台</span></span></span>
     </div>
-    <nav class="reading-modes" aria-label="阅读布局">
-      <button type="button" data-reading-mode-button="focus" aria-pressed="false" disabled>专注原文</button>
-      <button type="button" data-reading-mode-button="notes" aria-pressed="true" disabled>笔记对照</button>
-      <button type="button" data-reading-mode-button="chat" aria-pressed="false" disabled>边读边问</button>
+    <nav class="reading-modes" aria-label="阅读布局" data-i18n-aria-label="阅读布局">
+      <button type="button" data-reading-mode-button="focus" aria-pressed="false" disabled><span data-i18n="专注原文">专注原文</span></button>
+      <button type="button" data-reading-mode-button="notes" aria-pressed="true" disabled><span data-i18n="笔记对照">笔记对照</span></button>
+      <button type="button" data-reading-mode-button="chat" aria-pressed="false" disabled><span data-i18n="边读边问">边读边问</span></button>
     </nav>
     <div class="topbar-actions">
-      <button id="status-pill" class="pill pill-warn" title="配置 AI 阅读助手">配置阅读助手</button>
-      <button id="btn-settings" class="btn btn-ghost" title="设置"><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg><span>设置</span></button>
+      <div class="language-control">
+        <label class="language-select"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></svg><select id="ui-locale" data-ui-locale aria-label="界面语言" data-i18n-aria-label="界面语言"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
+        <button id="locale-retry" type="button" class="locale-retry" hidden></button>
+      </div>
+      <button id="status-pill" class="pill pill-warn" title="配置 AI 阅读助手" data-i18n-title="配置 AI 阅读助手"><span data-i18n="配置阅读助手">配置阅读助手</span></button>
+      <button id="btn-settings" class="btn btn-ghost" title="设置" data-i18n-title="设置"><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg><span><span data-i18n="设置">设置</span></span></button>
     </div>
   </header>
 
-  <nav class="workspace-views" id="workspace-views" aria-label="工作区视图">
-    <button class="view-tab active" data-view="library" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg>文献库</button>
-    <button class="view-tab" data-view="pdf" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg>论文原文</button>
-    <button class="view-tab" data-view="notes" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg>阅读笔记</button>
+  <nav class="workspace-views" id="workspace-views" aria-label="工作区视图" data-i18n-aria-label="工作区视图">
+    <button class="view-tab active" data-view="library" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg><span data-i18n="文献库">文献库</span></button>
+    <button class="view-tab" data-view="pdf" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span data-i18n="论文原文">论文原文</span></button>
+    <button class="view-tab" data-view="notes" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg><span data-i18n="阅读笔记">阅读笔记</span></button>
   </nav>
 
   <div class="layout">
-    <aside class="sidebar" id="sidebar" aria-label="文献库">
+    <aside class="sidebar" id="sidebar" aria-label="文献库" data-i18n-aria-label="文献库">
       <div class="sidebar-head">
-        <div class="section-heading"><h1>我的文献库</h1><span class="library-total" id="library-total">0</span></div>
+        <div class="section-heading"><h1><span data-i18n="我的文献库">我的文献库</span></h1><span class="library-total" id="library-total">0</span></div>
         <div class="import-row">
-          <label class="btn btn-primary upload-btn" for="file-input" tabindex="0" role="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>导入 PDF</label>
-          <button id="btn-doi-import" class="btn" title="通过 DOI 导入文献信息"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg>DOI</button>
+          <label class="btn btn-primary upload-btn" for="file-input" tabindex="0" role="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></label>
+          <button id="btn-doi-import" class="btn" title="通过 DOI 导入文献信息" data-i18n-title="通过 DOI 导入文献信息"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg>DOI</button>
         </div>
         <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
         <input type="file" id="attach-input" accept="application/pdf,.pdf" hidden>
         <input type="file" id="supplement-input" accept="application/pdf,.pdf" multiple hidden>
-        <div class="search-row"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="search" type="search" aria-label="搜索文献" placeholder="搜索标题、作者、标签…"><kbd title="快捷键">⌘ K</kbd></div>
-        <button class="btn btn-ghost library-content-search" id="btn-library-search"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>搜索正文与笔记</button>
-        <div class="library-filters" aria-label="文献筛选">
-          <button id="btn-all-filter" class="filter-btn active" aria-pressed="true">全部文献</button>
-          <button id="btn-fav-filter" class="filter-btn" aria-pressed="false" title="只看收藏"><svg class="icon" aria-hidden="true"><use href="#i-star"></use></svg>我的收藏 <span id="favorite-total">0</span></button>
+        <div class="search-row"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="search" type="search" aria-label="搜索文献" placeholder="搜索标题、作者、标签…" data-i18n-aria-label="搜索文献" data-i18n-placeholder="搜索标题、作者、标签…"><kbd title="快捷键" data-i18n-title="快捷键">⌘ K</kbd></div>
+        <button class="btn btn-ghost library-content-search" id="btn-library-search"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><span data-i18n="搜索正文与笔记">搜索正文与笔记</span></button>
+        <div class="library-filters" aria-label="文献筛选" data-i18n-aria-label="文献筛选">
+          <button id="btn-all-filter" class="filter-btn active" aria-pressed="true"><span data-i18n="全部文献">全部文献</span></button>
+          <button id="btn-fav-filter" class="filter-btn" aria-pressed="false" title="只看收藏" data-i18n-title="只看收藏"><svg class="icon" aria-hidden="true"><use href="#i-star"></use></svg><span data-i18n="我的收藏">我的收藏</span> <span id="favorite-total">0</span></button>
         </div>
         <div id="tag-chips" class="tag-chips" hidden></div>
-        <button class="btn btn-ghost clear-library-filters" id="clear-library-filters" hidden>清除筛选</button>
+        <button class="btn btn-ghost clear-library-filters" id="clear-library-filters" hidden><span data-i18n="清除筛选">清除筛选</span></button>
       </div>
-      <div class="list-caption">文献列表<span>最近添加</span></div>
+      <div class="list-caption"><span data-i18n="文献列表">文献列表</span><span><span data-i18n="最近添加">最近添加</span></span></div>
       <ul id="paper-list" class="paper-list"></ul>
-      <div class="drop-hint" id="drop-hint"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span>也可以把 PDF 拖到这里</span></div>
-      <div class="sidebar-tools" aria-label="文献库工具">
-        <button class="btn" id="btn-library-resources">数据与复现</button>
+      <div class="drop-hint" id="drop-hint"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span><span data-i18n="也可以把 PDF 拖到这里">也可以把 PDF 拖到这里</span></span></div>
+      <div class="sidebar-tools" aria-label="文献库工具" data-i18n-aria-label="文献库工具">
+        <button class="btn" id="btn-library-resources"><span data-i18n="数据与复现">数据与复现</span></button>
         <button class="btn" id="btn-zotero-import">Zotero</button>
       </div>
       <div class="sidebar-foot"><span class="local-dot"></span><span id="library-count" role="status"></span></div>
     </aside>
 
     <main class="main" id="main">
-      <section class="pane pdf-pane" id="pdf-pane" aria-label="论文原文">
+      <section class="pane pdf-pane" id="pdf-pane" aria-label="论文原文" data-i18n-aria-label="论文原文">
         <div class="pane-heading">
-          <div class="heading-label"><button id="btn-toggle-library" class="btn btn-icon btn-ghost" title="展开或收起文献库" aria-label="展开或收起文献库" aria-expanded="true"><svg class="icon" aria-hidden="true"><use href="#i-panel"></use></svg></button><span>论文原文</span></div>
+          <div class="heading-label"><button id="btn-toggle-library" class="btn btn-icon btn-ghost" title="展开或收起文献库" aria-label="展开或收起文献库" aria-expanded="true" data-i18n-title="展开或收起文献库" data-i18n-aria-label="展开或收起文献库"><svg class="icon" aria-hidden="true"><use href="#i-panel"></use></svg></button><span><span data-i18n="论文原文">论文原文</span></span></div>
           <span class="section-kicker">PDF READER</span>
         </div>
         <div class="pane-toolbar pdf-toolbar">
           <div class="toolbar-group pagination">
-            <button id="pdf-prev" class="btn btn-icon btn-ghost" title="上一页" aria-label="上一页"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg></button>
-            <span class="page-indicator"><input id="pdf-page" type="number" min="1" value="1" aria-label="PDF 页码"><span>/</span><span id="pdf-total">0</span></span>
-            <button id="pdf-next" class="btn btn-icon btn-ghost" title="下一页" aria-label="下一页"><svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg></button>
+            <button id="pdf-prev" class="btn btn-icon btn-ghost" title="上一页" aria-label="上一页" data-i18n-title="上一页" data-i18n-aria-label="上一页"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg></button>
+            <span class="page-indicator"><input id="pdf-page" type="number" min="1" value="1" aria-label="PDF 页码" data-i18n-aria-label="PDF 页码"><span>/</span><span id="pdf-total">0</span></span>
+            <button id="pdf-next" class="btn btn-icon btn-ghost" title="下一页" aria-label="下一页" data-i18n-title="下一页" data-i18n-aria-label="下一页"><svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg></button>
           </div>
           <div class="toolbar-group zoom-tools">
-            <button id="pdf-zoom-out" class="btn btn-icon btn-ghost" title="缩小" aria-label="缩小"><svg class="icon" aria-hidden="true"><use href="#i-minus"></use></svg></button><span id="pdf-zoom" class="zoom-label">100%</span>
-            <button id="pdf-zoom-in" class="btn btn-icon btn-ghost" title="放大" aria-label="放大"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg></button>
-            <button id="pdf-fit" class="btn btn-icon btn-ghost" title="适应宽度" aria-label="适应宽度"><svg class="icon" aria-hidden="true"><use href="#i-expand"></use></svg></button>
+            <button id="pdf-zoom-out" class="btn btn-icon btn-ghost" title="缩小" aria-label="缩小" data-i18n-title="缩小" data-i18n-aria-label="缩小"><svg class="icon" aria-hidden="true"><use href="#i-minus"></use></svg></button><span id="pdf-zoom" class="zoom-label">100%</span>
+            <button id="pdf-zoom-in" class="btn btn-icon btn-ghost" title="放大" aria-label="放大" data-i18n-title="放大" data-i18n-aria-label="放大"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+            <button id="pdf-fit" class="btn btn-icon btn-ghost" title="适应宽度" aria-label="适应宽度" data-i18n-title="适应宽度" data-i18n-aria-label="适应宽度"><svg class="icon" aria-hidden="true"><use href="#i-expand"></use></svg></button>
           </div>
-          <button id="pdf-crop" class="btn btn-ghost" title="框选页面中的图表并保存到图库" disabled><svg class="icon" aria-hidden="true"><use href="#i-crop"></use></svg>取图</button>
+          <button id="pdf-crop" class="btn btn-ghost" title="框选页面中的图表并保存到图库" disabled data-i18n-title="框选页面中的图表并保存到图库"><svg class="icon" aria-hidden="true"><use href="#i-crop"></use></svg><span data-i18n="取图">取图</span></button>
         </div>
         <div class="document-toolbar" id="document-toolbar" hidden>
-          <select id="document-select" aria-label="阅读文件"></select>
-          <button id="btn-supplement" class="btn btn-ghost">添加补充 PDF</button>
-          <button id="btn-remove-supplement" class="btn btn-ghost" hidden>移除补充</button>
+          <select id="document-select" aria-label="阅读文件" data-i18n-aria-label="阅读文件"></select>
+          <button id="btn-supplement" class="btn btn-ghost"><span data-i18n="添加补充 PDF">添加补充 PDF</span></button>
+          <button id="btn-remove-supplement" class="btn btn-ghost" hidden><span data-i18n="移除补充">移除补充</span></button>
         </div>
         <div id="reading-navigation" hidden></div>
         <div class="pdf-scroll" id="pdf-scroll">
           <div id="pdf-pages" class="pdf-pages"></div>
           <div class="empty pdf-welcome" id="pdf-empty">
             <div class="paper-illustration" aria-hidden="true"><div class="illustration-back"></div><div class="illustration-page"><span class="illustration-label">RESEARCH PAPER</span><i></i><i></i><div class="illustration-chart"><span></span><span></span><span></span><span></span></div><div class="illustration-lines"><i></i><i></i><i></i></div></div><span class="illustration-seal"><svg class="icon" aria-hidden="true"><use href="#i-book"></use></svg></span></div>
-            <span class="empty-eyebrow">你的下一次发现，从这里开始</span>
-            <h2 class="empty-title">留一点时间，读懂一篇好论文</h2>
-            <p class="empty-copy" id="pdf-empty-text">从文献库选择一篇论文，或导入新的 PDF。<br>原文、图表与思考，在这里并排展开。</p>
-            <div class="empty-actions"><button id="btn-empty-import" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>导入 PDF</button><button id="btn-empty-doi" class="btn btn-ghost">通过 DOI 导入 <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button></div>
-            <button id="btn-attach-pdf" class="btn btn-primary" hidden><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>附加 PDF 文件</button>
-            <div class="welcome-footnote">原文对照<span>·</span>图表精读<span>·</span>笔记沉淀</div>
+            <span class="empty-eyebrow"><span data-i18n="你的下一次发现，从这里开始">你的下一次发现，从这里开始</span></span>
+            <h2 class="empty-title"><span data-i18n="留一点时间，读懂一篇好论文">留一点时间，读懂一篇好论文</span></h2>
+            <p class="empty-copy" id="pdf-empty-text"><span data-i18n="从文献库选择一篇论文，或导入新的 PDF。">从文献库选择一篇论文，或导入新的 PDF。</span><br><span data-i18n="原文、图表与思考，在这里并排展开。">原文、图表与思考，在这里并排展开。</span></p>
+            <div class="empty-actions"><button id="btn-empty-import" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></button><button id="btn-empty-doi" class="btn btn-ghost"><span data-i18n="通过 DOI 导入">通过 DOI 导入</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button></div>
+            <button id="btn-attach-pdf" class="btn btn-primary" hidden><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="附加 PDF 文件">附加 PDF 文件</span></button>
+            <div class="welcome-footnote"><span data-i18n="原文对照">原文对照</span><span>·</span><span data-i18n="图表精读">图表精读</span><span>·</span><span data-i18n="笔记沉淀">笔记沉淀</span></div>
           </div>
-          <div id="crop-hint" class="crop-hint" hidden>拖动框选图表，按 Esc 退出取图</div>
+          <div id="crop-hint" class="crop-hint" hidden><span data-i18n="拖动框选图表，按 Esc 退出取图">拖动框选图表，按 Esc 退出取图</span></div>
         </div>
       </section>
-      <div class="splitter" id="splitter" title="拖动调整原文与笔记宽度" role="separator" aria-label="调整原文与笔记宽度" aria-orientation="vertical" tabindex="0"></div>
-      <section class="pane notes-pane" aria-label="阅读笔记">
-        <div class="pane-heading notes-heading"><div class="heading-label"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg><span>阅读笔记</span></div><span class="save-status" id="save-status" role="status">自动保存到本地</span></div>
+      <div class="splitter" id="splitter" title="拖动调整原文与笔记宽度" role="separator" aria-label="调整原文与笔记宽度" aria-orientation="vertical" tabindex="0" data-i18n-title="拖动调整原文与笔记宽度" data-i18n-aria-label="调整原文与笔记宽度"></div>
+      <section class="pane notes-pane" aria-label="阅读笔记" data-i18n-aria-label="阅读笔记">
+        <div class="pane-heading notes-heading"><div class="heading-label"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg><span><span data-i18n="阅读笔记">阅读笔记</span></span></div><span class="save-status" id="save-status" role="status"><span data-i18n="自动保存到本地">自动保存到本地</span></span></div>
         <div class="pane-toolbar notes-toolbar">
-          <div class="tabs" id="tabs" role="tablist" aria-label="笔记视图">
-            <button class="tab active" data-tab="preview" role="tab" id="view-preview" aria-controls="tab-preview" aria-selected="true">笔记</button>
-            <button class="tab" data-tab="chat" role="tab" id="view-chat" aria-controls="tab-chat" aria-selected="false">问答</button>
-            <button class="tab" data-tab="edit" role="tab" id="view-edit" aria-controls="tab-edit" aria-selected="false">编辑</button>
-            <button class="tab" data-tab="figures" role="tab" id="view-figures" aria-controls="tab-figures" aria-selected="false">图库 <span id="fig-count" class="tab-count" hidden></span></button>
-            <button class="tab" data-tab="resources" role="tab" id="view-resources" aria-controls="tab-resources" aria-selected="false">数据与复现</button>
-            <button class="tab" data-tab="evidence" role="tab" id="view-evidence" aria-controls="tab-evidence" aria-selected="false">证据</button>
+          <div class="tabs" id="tabs" role="tablist" aria-label="笔记视图" data-i18n-aria-label="笔记视图">
+            <button class="tab active" data-tab="preview" role="tab" id="view-preview" aria-controls="tab-preview" aria-selected="true"><span data-i18n="笔记">笔记</span></button>
+            <button class="tab" data-tab="chat" role="tab" id="view-chat" aria-controls="tab-chat" aria-selected="false"><span data-i18n="问答">问答</span></button>
+            <button class="tab" data-tab="edit" role="tab" id="view-edit" aria-controls="tab-edit" aria-selected="false"><span data-i18n="编辑">编辑</span></button>
+            <button class="tab" data-tab="figures" role="tab" id="view-figures" aria-controls="tab-figures" aria-selected="false"><span data-i18n="图库">图库</span> <span id="fig-count" class="tab-count" hidden></span></button>
+            <button class="tab" data-tab="resources" role="tab" id="view-resources" aria-controls="tab-resources" aria-selected="false"><span data-i18n="数据与复现">数据与复现</span></button>
+            <button class="tab" data-tab="evidence" role="tab" id="view-evidence" aria-controls="tab-evidence" aria-selected="false"><span data-i18n="证据">证据</span></button>
           </div>
-          <button id="btn-capture-evidence" class="btn btn-ghost" title="把选中的笔记文字作为待核查结论，补充原文和来源">记证据</button>
-          <details id="export-menu" class="export-menu"><summary class="btn btn-ghost"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>导出</summary><div class="export-popover">
-            <div class="popover-label">导出笔记与已保存的证据、资源</div>
-            <button id="btn-illustrate" class="btn menu-action" disabled>为已有笔记自动配图</button>
-            <button id="btn-export-md" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span>Markdown + 图片</span><small>.zip</small></button>
-            <button id="btn-export-word" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span>Word 文档</span><small>.docx</small></button>
-            <div class="popover-divider"></div><label class="popover-label" for="wechat-theme">公众号排版</label><select id="wechat-theme" aria-label="公众号主题"></select>
-            <button id="btn-copy-wechat" class="btn btn-wechat" disabled><svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>复制到公众号</button>
+          <button id="btn-capture-evidence" class="btn btn-ghost" title="把选中的笔记文字作为待核查结论，补充原文和来源" data-i18n-title="把选中的笔记文字作为待核查结论，补充原文和来源"><span data-i18n="记证据">记证据</span></button>
+          <details id="export-menu" class="export-menu"><summary class="btn btn-ghost"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span data-i18n="导出">导出</span></summary><div class="export-popover">
+            <div class="popover-label"><span data-i18n="导出笔记与已保存的证据、资源">导出笔记与已保存的证据、资源</span></div>
+            <button id="btn-illustrate" class="btn menu-action" disabled><span data-i18n="为已有笔记自动配图">为已有笔记自动配图</span></button>
+            <button id="btn-export-md" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span><span data-i18n="Markdown + 图片">Markdown + 图片</span></span><small>.zip</small></button>
+            <button id="btn-export-word" class="btn menu-action" disabled><svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg><span><span data-i18n="Word 文档">Word 文档</span></span><small>.docx</small></button>
+            <div class="popover-divider"></div><label class="popover-label" for="wechat-theme"><span data-i18n="公众号排版">公众号排版</span></label><select id="wechat-theme" aria-label="公众号主题" data-i18n-aria-label="公众号主题"></select>
+            <button id="btn-copy-wechat" class="btn btn-wechat" disabled><svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg><span data-i18n="复制到公众号">复制到公众号</span></button>
           </div></details>
         </div>
-        <div class="reading-actions"><div class="reading-mode"><span class="action-label">阅读方式</span><select id="read-mode" aria-label="阅读模式"><option value="deep">完整精读</option><option value="quick">速读筛选</option></select></div><button id="btn-generate" class="btn btn-primary" disabled><svg class="icon" aria-hidden="true"><use href="#i-sparkles"></use></svg>生成笔记</button><button id="btn-stop" class="btn btn-danger" hidden>停止生成</button></div>
+        <div class="reading-actions"><div class="reading-mode"><span class="action-label"><span data-i18n="阅读方式">阅读方式</span></span><select id="read-mode" aria-label="阅读模式" data-i18n-aria-label="阅读模式"><option value="deep" data-i18n="完整精读">完整精读</option><option value="quick" data-i18n="速读筛选">速读筛选</option></select></div><button id="btn-generate" class="btn btn-primary" disabled><svg class="icon" aria-hidden="true"><use href="#i-sparkles"></use></svg><span data-i18n="生成笔记">生成笔记</span></button><button id="btn-stop" class="btn btn-danger" hidden><span data-i18n="停止生成">停止生成</span></button></div>
         <div class="paper-head" id="paper-head" hidden>
-          <div class="paper-head-text"><div class="paper-title" id="head-title"></div><details class="paper-details"><summary id="head-summary">文献信息</summary><div class="paper-meta" id="head-meta"></div></details><div class="paper-tags" id="head-tags"></div></div>
-          <div class="head-actions"><button class="star" id="head-star" title="收藏" aria-label="收藏"><svg class="icon" aria-hidden="true"><use href="#i-star"></use></svg></button><button class="btn btn-icon btn-ghost" id="btn-related" title="查看参考文献与被引文献" aria-label="相关文献"><svg class="icon" aria-hidden="true"><use href="#i-network"></use></svg></button><button class="btn btn-icon btn-ghost" id="btn-enrich" title="补全文献信息" aria-label="补全文献信息"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg></button><button class="btn btn-icon btn-ghost danger-ghost" id="btn-delete" title="删除文献" aria-label="删除文献"><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg></button></div>
+          <div class="paper-head-text"><div class="paper-title" id="head-title"></div><details class="paper-details"><summary id="head-summary"><span data-i18n="文献信息">文献信息</span></summary><div class="paper-meta" id="head-meta"></div></details><div class="paper-tags" id="head-tags"></div></div>
+          <div class="head-actions"><button class="star" id="head-star" title="收藏" aria-label="收藏" data-i18n-title="收藏" data-i18n-aria-label="收藏"><svg class="icon" aria-hidden="true"><use href="#i-star"></use></svg></button><button class="btn btn-icon btn-ghost" id="btn-related" title="查看参考文献与被引文献" aria-label="相关文献" data-i18n-title="查看参考文献与被引文献" data-i18n-aria-label="相关文献"><svg class="icon" aria-hidden="true"><use href="#i-network"></use></svg></button><button class="btn btn-icon btn-ghost" id="btn-enrich" title="补全文献信息" aria-label="补全文献信息" data-i18n-title="补全文献信息" data-i18n-aria-label="补全文献信息"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg></button><button class="btn btn-icon btn-ghost danger-ghost" id="btn-delete" title="删除文献" aria-label="删除文献" data-i18n-title="删除文献" data-i18n-aria-label="删除文献"><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg></button></div>
         </div>
         <div class="gen-status" id="gen-status" role="status" hidden></div>
         <div class="paper-workflow" id="paper-workflow" hidden>
           <div id="storage-warning" class="storage-warning" role="alert" hidden></div>
-          <div id="paper-tasks" class="paper-tasks" aria-label="当前文献需要处理的问题"></div>
-          <div class="note-review-actions"><button id="notes-complete" class="btn btn-ghost" hidden>已手动补完笔记</button><button id="notes-reviewed" class="btn btn-ghost" hidden>已核对新材料</button></div>
+          <div id="paper-tasks" class="paper-tasks" aria-label="当前文献需要处理的问题" data-i18n-aria-label="当前文献需要处理的问题"></div>
+          <div class="note-review-actions"><button id="notes-complete" class="btn btn-ghost" hidden><span data-i18n="已手动补完笔记">已手动补完笔记</span></button><button id="notes-reviewed" class="btn btn-ghost" hidden><span data-i18n="已核对新材料">已核对新材料</span></button></div>
         </div>
-        <div class="tab-body" id="tab-preview" role="tabpanel" aria-labelledby="view-preview"><article class="markdown-body" id="preview"><div class="empty notes-empty"><div class="empty-symbol"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg></div><h2 class="empty-title">把阅读，变成自己的思考</h2><p class="empty-copy">选择文献后生成结构化阅读笔记，<br>也可以在「编辑」中记录你的想法。</p><div class="empty-steps"><span><b>01</b>理解研究问题</span><span><b>02</b>核对图表证据</span><span><b>03</b>留下你的判断</span></div></div></article></div>
+        <div class="tab-body" id="tab-preview" role="tabpanel" aria-labelledby="view-preview"><article class="markdown-body" id="preview"><div class="empty notes-empty"><div class="empty-symbol"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg></div><h2 class="empty-title"><span data-i18n="把阅读，变成自己的思考">把阅读，变成自己的思考</span></h2><p class="empty-copy"><span data-i18n="选择文献后生成结构化阅读笔记，">选择文献后生成结构化阅读笔记，</span><br><span data-i18n="也可以在「编辑」中记录你的想法。">也可以在「编辑」中记录你的想法。</span></p><div class="empty-steps"><span><b>01</b><span data-i18n="理解研究问题">理解研究问题</span></span><span><b>02</b><span data-i18n="核对图表证据">核对图表证据</span></span><span><b>03</b><span data-i18n="留下你的判断">留下你的判断</span></span></div></div></article></div>
         <div class="tab-body" id="tab-chat" role="tabpanel" aria-labelledby="view-chat" hidden><div id="chat-panel"></div></div>
-        <div class="tab-body" id="tab-edit" role="tabpanel" aria-labelledby="view-edit" hidden><textarea id="editor" aria-label="Markdown 笔记" spellcheck="false" placeholder="记下研究问题、关键证据，以及你的思考…&#10;&#10;支持 Markdown，编辑后自动保存。"></textarea></div>
+        <div class="tab-body" id="tab-edit" role="tabpanel" aria-labelledby="view-edit" hidden><textarea id="editor" aria-label="Markdown 笔记" spellcheck="false" placeholder="记下研究问题、关键证据，以及你的思考…&#10;&#10;支持 Markdown，编辑后自动保存。" data-i18n-aria-label="Markdown 笔记" data-i18n-placeholder="记下研究问题、关键证据，以及你的思考…
+
+支持 Markdown，编辑后自动保存。"></textarea></div>
         <div class="tab-body" id="tab-resources" role="tabpanel" aria-labelledby="view-resources" hidden><div id="resources-panel"></div></div>
         <div class="tab-body" id="tab-evidence" role="tabpanel" aria-labelledby="view-evidence" hidden><div id="evidence-panel"></div></div>
-        <div class="tab-body figures-body" id="tab-figures" role="tabpanel" aria-labelledby="view-figures" hidden><div class="fig-toolbar"><span class="hint" id="fig-hint">自动提取论文图表，也可在原文中框选取图。</span><div class="fig-toolbar-actions"><button id="btn-fig-read" class="btn" title="逐张观察主图，将结果用于笔记"><svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>全部读图</button><button id="btn-fig-extract" class="btn" title="重新自动提取"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg>重新提取</button></div></div><div class="fig-grid" id="fig-grid"></div></div>
+        <div class="tab-body figures-body" id="tab-figures" role="tabpanel" aria-labelledby="view-figures" hidden><div class="fig-toolbar"><span class="hint" id="fig-hint"><span data-i18n="自动提取论文图表，也可在原文中框选取图。">自动提取论文图表，也可在原文中框选取图。</span></span><div class="fig-toolbar-actions"><button id="btn-fig-read" class="btn" title="逐张观察主图，将结果用于笔记" data-i18n-title="逐张观察主图，将结果用于笔记"><svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg><span data-i18n="全部读图">全部读图</span></button><button id="btn-fig-extract" class="btn" title="重新自动提取" data-i18n-title="重新自动提取"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg><span data-i18n="重新提取">重新提取</span></button></div></div><div class="fig-grid" id="fig-grid"></div></div>
       </section>
     </main>
   </div>
-  <div id="pdf-selection-tools" class="pdf-selection-tools" role="toolbar" aria-label="选中原文的操作" hidden><button type="button" class="btn btn-ghost" data-selection-action="explain">解释</button><button type="button" class="btn btn-ghost" data-selection-action="translate">翻译</button><button type="button" class="btn btn-ghost" data-selection-action="ask">追问</button></div>
+  <div id="pdf-selection-tools" class="pdf-selection-tools" role="toolbar" aria-label="选中原文的操作" hidden data-i18n-aria-label="选中原文的操作"><button type="button" class="btn btn-ghost" data-selection-action="explain"><span data-i18n="解释">解释</span></button><button type="button" class="btn btn-ghost" data-selection-action="translate"><span data-i18n="翻译">翻译</span></button><button type="button" class="btn btn-ghost" data-selection-action="ask"><span data-i18n="追问">追问</span></button></div>
   <div class="modal-backdrop" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="modal modal-wide">
       <div class="modal-head">
-        <div><span class="modal-eyebrow">个人工作台</span><h3 id="settings-title">阅读偏好与连接设置</h3></div>
-        <button class="btn btn-icon btn-ghost" id="settings-close" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
+        <div><span class="modal-eyebrow"><span data-i18n="个人工作台">个人工作台</span></span><h3 id="settings-title"><span data-i18n="阅读偏好与连接设置">阅读偏好与连接设置</span></h3></div>
+        <button class="btn btn-icon btn-ghost" id="settings-close" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
       </div>
       <div class="modal-body">
-        <p class="settings-intro">连接你常用的模型，让笔记更贴近你的研究。API Key 仅保存在本机；生成时，文献内容将发送至配置的模型服务。</p><div class="settings-section-label">模型连接</div><div class="field-grid">
+        <label class="field interface-language-field"><span data-i18n="界面语言">界面语言</span><select id="settings-ui-locale" data-ui-locale aria-label="界面语言" data-i18n-aria-label="界面语言"><option value="zh-CN">简体中文</option><option value="en">English</option></select><small data-i18n="只切换界面语言，论文、笔记和生成内容保持原语言。">只切换界面语言，论文、笔记和生成内容保持原语言。</small></label>
+        <p class="settings-intro"><span data-i18n="连接你常用的模型，让笔记更贴近你的研究。API Key 仅保存在本机；生成时，文献内容将发送至配置的模型服务。">连接你常用的模型，让笔记更贴近你的研究。API Key 仅保存在本机；生成时，文献内容将发送至配置的模型服务。</span></p><div class="settings-section-label"><span data-i18n="模型连接">模型连接</span></div><div class="field-grid">
           <label class="field">
             <span>API Base URL</span>
             <input id="set-base-url" type="url" placeholder="https://open.bigmodel.cn/api/paas/v4">
-            <small>任何 OpenAI 兼容接口（智谱 BigModel、DeepSeek、OpenAI……）。不允许 localhost / 内网地址。</small>
+            <small><span data-i18n="任何 OpenAI 兼容接口（智谱 BigModel、DeepSeek、OpenAI……）。不允许 localhost / 内网地址。">任何 OpenAI 兼容接口（智谱 BigModel、DeepSeek、OpenAI……）。不允许 localhost / 内网地址。</span></small>
           </label>
           <label class="field">
             <span>API Key</span>
-            <input id="set-api-key" type="password" placeholder="留空则保持不变" autocomplete="off">
+            <input id="set-api-key" type="password" placeholder="留空则保持不变" autocomplete="off" data-i18n-placeholder="留空则保持不变">
             <small id="set-key-hint"></small>
           </label>
           <label class="field">
-            <span>文本模型</span>
+            <span><span data-i18n="文本模型">文本模型</span></span>
             <input id="set-model" type="text" placeholder="glm-4.6">
-            <small>写笔记、分段整理长文用。</small>
+            <small><span data-i18n="写笔记、分段整理长文用。">写笔记、分段整理长文用。</span></small>
           </label>
           <label class="field">
-            <span>读图模型（可选）</span>
+            <span><span data-i18n="读图模型（可选）">读图模型（可选）</span></span>
             <input id="set-vision-model" type="text" placeholder="glm-4.6v / gpt-4o / qwen-vl-max">
-            <small>填写后生成精读时会先让它观察每张主图并把观察写入材料；留空则只用图注。</small>
+            <small><span data-i18n="填写后生成精读时会先让它观察每张主图并把观察写入材料；留空则只用图注。">填写后生成精读时会先让它观察每张主图并把观察写入材料；留空则只用图注。</span></small>
           </label>
-        </div><details class="advanced-settings"><summary>生成参数与文献检索 <span>高级设置</span></summary><div class="field-grid">
+        </div><details class="advanced-settings"><summary><span data-i18n="生成参数与文献检索">生成参数与文献检索</span> <span><span data-i18n="高级设置">高级设置</span></span></summary><div class="field-grid">
           <label class="field">
-            <span>送入模型的最大字符数</span>
+            <span><span data-i18n="送入模型的最大字符数">送入模型的最大字符数</span></span>
             <input id="set-max-chars" type="number" min="5000" max="2000000" step="1000">
-            <small>超过时自动按页分段整理成要点（保留页码）再写报告，不再粗暴截断。128k 上下文建议 90000–150000。</small>
+            <small><span data-i18n="超过时自动按页分段整理成要点（保留页码）再写报告，不再粗暴截断。128k 上下文建议 90000–150000。">超过时自动按页分段整理成要点（保留页码）再写报告，不再粗暴截断。128k 上下文建议 90000–150000。</span></small>
           </label>
           <label class="field">
-            <span>单次输出上限（tokens，0 = 接口默认）</span>
+            <span><span data-i18n="单次输出上限（tokens，0 = 接口默认）">单次输出上限（tokens，0 = 接口默认）</span></span>
             <input id="set-max-tokens" type="number" min="0" max="1048576" step="1024">
-            <small>精读报告较长，接口默认输出不够时填 16384 或更大；被接口拒绝时会提示。</small>
+            <small><span data-i18n="精读报告较长，接口默认输出不够时填 16384 或更大；被接口拒绝时会提示。">精读报告较长，接口默认输出不够时填 16384 或更大；被接口拒绝时会提示。</span></small>
           </label>
           <label class="field">
-            <span>最多读图张数</span>
+            <span><span data-i18n="最多读图张数">最多读图张数</span></span>
             <input id="set-max-figures" type="number" min="0" max="40">
-            <small>按页码顺序取前 N 张主图送读图模型，0 关闭。</small>
+            <small><span data-i18n="按页码顺序取前 N 张主图送读图模型，0 关闭。">按页码顺序取前 N 张主图送读图模型，0 关闭。</span></small>
           </label>
           <label class="field">
-            <span>Semantic Scholar API Key（可选）</span>
-            <input id="set-s2-key" type="password" placeholder="留空用匿名额度（较慢）" autocomplete="off">
-            <small id="set-s2-hint">相关文献检索用；免费申请 semanticscholar.org/product/api。</small>
+            <span><span data-i18n="Semantic Scholar API Key（可选）">Semantic Scholar API Key（可选）</span></span>
+            <input id="set-s2-key" type="password" placeholder="留空用匿名额度（较慢）" autocomplete="off" data-i18n-placeholder="留空用匿名额度（较慢）">
+            <small id="set-s2-hint"><span data-i18n="相关文献检索用；免费申请 semanticscholar.org/product/api。">相关文献检索用；免费申请 semanticscholar.org/product/api。</span></small>
           </label>
         </div>
         </details><label class="field">
-          <span>我的研究方向（可选）</span>
-          <input id="set-direction" type="text" placeholder="如：胃癌腹膜转移微环境、CAF–巨噬细胞互作、免疫治疗应答预测">
-          <small>写入提示词，让「过滤结论 / 决策卡」按你的方向判断相关度。</small>
+          <span><span data-i18n="我的研究方向（可选）">我的研究方向（可选）</span></span>
+          <input id="set-direction" type="text" placeholder="如：胃癌腹膜转移微环境、CAF–巨噬细胞互作、免疫治疗应答预测" data-i18n-placeholder="如：胃癌腹膜转移微环境、CAF–巨噬细胞互作、免疫治疗应答预测">
+          <small><span data-i18n="写入阅读提示词，结合你的研究方向分析相关性。">写入阅读提示词，结合你的研究方向分析相关性。</span></small>
         </label>
-        <details class="zotero-settings-section" id="zotero-settings-details"><summary>Zotero MCP 连接</summary><div id="zotero-settings"></div></details>
+        <details class="zotero-settings-section" id="zotero-settings-details"><summary><span data-i18n="Zotero MCP 连接">Zotero MCP 连接</span></summary><div id="zotero-settings"></div></details>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-ghost" id="settings-clear-key">清除 Key</button>
+        <button class="btn btn-ghost" id="settings-clear-key"><span data-i18n="清除 Key">清除 Key</span></button>
         <div class="spacer"></div>
-        <button class="btn" id="settings-cancel">取消</button>
-        <button class="btn btn-primary" id="settings-save">保存阅读设置</button>
+        <button class="btn" id="settings-cancel"><span data-i18n="取消">取消</span></button>
+        <button class="btn btn-primary" id="settings-save"><span data-i18n="保存阅读设置">保存阅读设置</span></button>
       </div>
     </div>
   </div>
 
   <div class="modal-backdrop" id="library-search-modal" role="dialog" aria-modal="true" aria-labelledby="library-search-title" hidden>
     <div class="modal library-search-modal">
-      <div class="modal-head"><div><span class="modal-eyebrow">本地文献库</span><h3 id="library-search-title">搜索正文与笔记</h3></div><button type="button" class="btn btn-icon btn-ghost" data-library-search-action="close" aria-label="关闭全文搜索"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
+      <div class="modal-head"><div><span class="modal-eyebrow"><span data-i18n="本地文献库">本地文献库</span></span><h3 id="library-search-title"><span data-i18n="搜索正文与笔记">搜索正文与笔记</span></h3></div><button type="button" class="btn btn-icon btn-ghost" data-library-search-action="close" aria-label="关闭全文搜索" data-i18n-aria-label="关闭全文搜索"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
       <div class="modal-body" id="library-search-body"></div>
       <div class="modal-foot" id="library-search-footer"></div>
     </div>
@@ -226,7 +234,7 @@
 
   <div class="modal-backdrop" id="zotero-modal" role="dialog" aria-modal="true" aria-labelledby="zotero-title" hidden>
     <div class="modal zotero-modal">
-      <div class="modal-head"><div><span class="modal-eyebrow">添加到 BioReader</span><h3 id="zotero-title">从 Zotero 导入</h3></div><button type="button" class="btn btn-icon btn-ghost" id="zotero-close" data-zotero-action="close" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
+      <div class="modal-head"><div><span class="modal-eyebrow"><span data-i18n="添加到 BioReader">添加到 BioReader</span></span><h3 id="zotero-title"><span data-i18n="从 Zotero 导入">从 Zotero 导入</span></h3></div><button type="button" class="btn btn-icon btn-ghost" id="zotero-close" data-zotero-action="close" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
       <div class="modal-body" id="zotero-panel"></div>
       <div class="modal-foot" id="zotero-footer"></div>
     </div>
@@ -235,20 +243,20 @@
   <div class="modal-backdrop" id="doi-modal" role="dialog" aria-modal="true" aria-labelledby="doi-title" hidden>
     <div class="modal">
       <div class="modal-head">
-        <div><span class="modal-eyebrow">添加到文献库</span><h3 id="doi-title">通过 DOI 导入文献</h3></div>
-        <button class="btn btn-icon btn-ghost" id="doi-close" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
+        <div><span class="modal-eyebrow"><span data-i18n="添加到文献库">添加到文献库</span></span><h3 id="doi-title"><span data-i18n="通过 DOI 导入文献">通过 DOI 导入文献</span></h3></div>
+        <button class="btn btn-icon btn-ghost" id="doi-close" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
       </div>
       <div class="modal-body">
         <label class="field">
-          <span>DOI 或 doi.org 链接</span>
+          <span><span data-i18n="DOI 或 doi.org 链接">DOI 或 doi.org 链接</span></span>
           <input id="doi-input" type="text" placeholder="10.1136/gutjnl-2024-333617" autocomplete="off">
-          <small>从 CrossRef 拉取标题、作者、期刊、年份、摘要建立条目；随后可在中间面板「附加 PDF」。</small>
+          <small><span data-i18n="从 CrossRef 拉取标题、作者、期刊、年份、摘要建立条目；随后可在中间面板「附加 PDF」。">从 CrossRef 拉取标题、作者、期刊、年份、摘要建立条目；随后可在中间面板「附加 PDF」。</span></small>
         </label>
       </div>
       <div class="modal-foot">
         <div class="spacer"></div>
-        <button class="btn" id="doi-cancel">取消</button>
-        <button class="btn btn-primary" id="doi-submit">导入</button>
+        <button class="btn" id="doi-cancel"><span data-i18n="取消">取消</span></button>
+        <button class="btn btn-primary" id="doi-submit"><span data-i18n="导入">导入</span></button>
       </div>
     </div>
   </div>
@@ -256,10 +264,10 @@
   <div class="modal-backdrop" id="related-modal" role="dialog" aria-modal="true" aria-labelledby="related-title" hidden>
     <div class="modal modal-wide">
       <div class="modal-head">
-        <h3 id="related-title">相关文献 <span class="hint" id="related-sub"></span></h3>
+        <h3 id="related-title"><span data-i18n="相关文献">相关文献</span> <span class="hint" id="related-sub"></span></h3>
         <div class="toolbar-group">
-          <button class="btn" id="related-refresh" title="忽略缓存重新检索" aria-label="刷新相关文献"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
-          <button class="btn btn-icon btn-ghost" id="related-close" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
+          <button class="btn" id="related-refresh" title="忽略缓存重新检索" aria-label="刷新相关文献" data-i18n-title="忽略缓存重新检索" data-i18n-aria-label="刷新相关文献"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg></button>
+          <button class="btn btn-icon btn-ghost" id="related-close" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
         </div>
       </div>
       <div class="modal-body related-body" id="related-body"></div>
@@ -267,26 +275,31 @@
   </div>
 
   <div class="modal-backdrop" id="input-modal" role="dialog" aria-modal="true" aria-labelledby="input-title" aria-describedby="input-description" hidden>
-    <div class="modal"><div class="modal-head"><h3 id="input-title">图表观察</h3><button id="input-close" class="btn btn-icon btn-ghost" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
+    <div class="modal"><div class="modal-head"><h3 id="input-title"><span data-i18n="图表观察">图表观察</span></h3><button id="input-close" class="btn btn-icon btn-ghost" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
       <div class="modal-body"><p class="hint" id="input-description"></p><textarea id="input-value" rows="6" aria-labelledby="input-title" aria-describedby="input-description"></textarea></div>
-      <div class="modal-foot"><div class="spacer"></div><button id="input-cancel" class="btn">取消</button><button id="input-submit" class="btn btn-primary">确认</button></div>
+      <div class="modal-foot"><div class="spacer"></div><button id="input-cancel" class="btn"><span data-i18n="取消">取消</span></button><button id="input-submit" class="btn btn-primary"><span data-i18n="确认">确认</span></button></div>
     </div>
   </div>
 
   <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
 
+  <script src="i18n.js?v=20261105-v0110"></script>
+  <script src="i18n-shell.js?v=20261105-v0110"></script>
+  <script src="i18n-app.js?v=20261105-v0110"></script>
+  <script src="i18n-research.js?v=20261105-v0110"></script>
+  <script src="i18n-reading.js?v=20261105-v0110"></script>
   <script src="vendor/pdf.min.js"></script>
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/highlight.min.js"></script>
-  <script src="safe-markdown.js?v=20261105-v0100"></script>
+  <script src="safe-markdown.js?v=20261105-v0110"></script>
   <script src="export.js"></script>
-  <script src="evidence.js?v=20261105-v0100"></script>
-  <script src="resources.js?v=20261105-v0100"></script>
-  <script src="chat.js?v=20261105-v0100"></script>
-  <script src="zotero.js?v=20261105-v0100"></script>
-  <script src="library-search.js?v=20261105-v0100"></script>
-  <script src="reading-nav.js?v=20261105-v0100"></script>
-  <script src="note-sources.js?v=20261105-v0100"></script>
-  <script src="app.js?v=20261105-v0100"></script>
+  <script src="evidence.js?v=20261105-v0110"></script>
+  <script src="resources.js?v=20261105-v0110"></script>
+  <script src="chat.js?v=20261105-v0110"></script>
+  <script src="zotero.js?v=20261105-v0110"></script>
+  <script src="library-search.js?v=20261105-v0110"></script>
+  <script src="reading-nav.js?v=20261105-v0110"></script>
+  <script src="note-sources.js?v=20261105-v0110"></script>
+  <script src="app.js?v=20261105-v0110"></script>
 </body>
 </html>

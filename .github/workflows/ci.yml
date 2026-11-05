@@ -22,16 +22,7 @@ jobs:
         run: python3 evals/test_prepare_release.py -v
       - name: Frontend syntax and async reading regressions
         run: |
-          node --check app/frontend/app.js
-          node --check app/frontend/export.js
-          node --check app/frontend/evidence.js
-          node --check app/frontend/resources.js
-          node --check app/frontend/chat.js
-          node --check app/frontend/zotero.js
-          node --check app/frontend/library-search.js
-          node --check app/frontend/safe-markdown.js
-          node --check app/frontend/note-sources.js
-          node --check app/frontend/reading-nav.js
+          for source in app/frontend/*.js; do node --check "$source"; done
           node --test app/tests/test_*.cjs
       - name: Helper scripts compile
         run: python3 -m py_compile scripts/check_reading_record.py scripts/render_pdf_page.py scripts/prepare_release.py scripts/build_mygo.py scripts/package_mygo.py

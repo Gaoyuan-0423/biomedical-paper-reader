@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(__dirname, '../frontend/note-sources.js
 const A = 'a'.repeat(32), B = 'b'.repeat(32), G = 'c'.repeat(32), H = 'd'.repeat(32);
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
-function harness(request = async () => ({ snapshot_id: G, sources: [{ id: 'N1', page: 2, document_name: 'supplement.pdf', quote: 'Evidence.' }] })) {
+function harness(request = async () => ({ snapshot_id: G, sources: [{ id: 'N1', page: 2, document_name: 'supplement.pdf', quote: 'Evidence.' }] }), i18n) {
   const root = { items: [], querySelectorAll(selector) {
     return this.items.filter(node => selector.startsWith('a[') ? node.tag === 'a' && node.href.startsWith('note-source:') : node.tag === 'button' && node.className === 'note-citation');
   } };
@@ -20,15 +20,16 @@ function harness(request = async () => ({ snapshot_id: G, sources: [{ id: 'N1', 
       replaceWith(next) { root.items.splice(root.items.indexOf(this), 1, next); },
     };
   }
-  const context = vm.createContext({ window: {}, document: { createElement: node, createTextNode: text => ({ tag: 'text', textContent: text }) } });
+  const context = vm.createContext({ window: { BioI18n: i18n }, document: { createElement: node, createTextNode: text => ({ tag: 'text', textContent: text }) } });
   vm.runInContext(source, context);
   const calls = [], messages = [];
   const api = context.window.BioNoteSources;
-  api.init({ request, jump: async reference => { calls.push(reference); }, toast: message => messages.push(message) });
+  const hooks = { request, jump: async reference => { calls.push(reference); }, toast: message => messages.push(message) };
+  api.init(hooks);
   const paper = { id: A, notes_revision: 1, notes_source_snapshot: G, material_revision: 0 };
   function anchor(href = 'note-source:' + G + ':N1', inCode = false) { return { ...node('a'), href, inCode, textContent: 'N1' }; }
   function render(next = paper, entries = [anchor()], options = {}) { root.items = entries; api.render(next, root, options); }
-  return { api, root, paper, anchor, render, calls, messages };
+  return { api, root, paper, anchor, render, calls, messages, hooks };
 }
 
 test('only immutable-generation note references parse', () => {
@@ -79,4 +80,12 @@ test('a delayed list cannot activate sources while generation is in progress', a
 });
 test('clearing the workspace invalidates pending requests and detached citation actions', async () => {
   const h = harness(); h.render(); await tick(); const old=h.root.items[0]; h.api.clear(); await old.onclick(); assert.equal(h.calls.length,0);
+});
+
+test('language changes preserve source quotations and in-flight navigation guards',async()=>{
+ const i18n=require('./i18n_reading_harness.cjs')(),h=harness(async()=>({snapshot_id:G,sources:[{id:'N1',page:4,document_id:'main',document_name:'正文',quote:'来源不可用 is quoted paper text.'}]}),i18n);
+ h.render();await tick();const button=h.root.items[0];i18n.setLocale('en');
+ assert.equal(h.root.items[0],button);assert.equal(button.textContent,'Source · Page 4');assert.match(button.title,/Main text · PDF page 4\n来源不可用 is quoted paper text/);
+ const pending=deferred();h.hooks.jump=()=>pending.promise;const opening=button.onclick();assert.equal(button.disabled,true);
+ i18n.setLocale('zh-CN');assert.equal(button.disabled,true);assert.equal(button.textContent,'原文 · 4 页');pending.resolve();await opening;assert.equal(button.disabled,false);
 });
