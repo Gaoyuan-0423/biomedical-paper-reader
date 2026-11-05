@@ -37,11 +37,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       EXPECTED_COMMIT: ${{ inputs.expected_commit }}
       PREVIEW_PLATFORM: ${{ matrix.platform }}
-      PREVIEW_ASSETS: ${{ runner.temp }}/preview-assets
     steps:
       - name: Prepare strict draft and artifact verification
         shell: bash
         run: |
+          export PREVIEW_ASSETS="$RUNNER_TEMP/preview-assets"
+          echo "PREVIEW_ASSETS=$PREVIEW_ASSETS" >> "$GITHUB_ENV"
           cat > "$RUNNER_TEMP/preview_assets.py" <<'PY'
           import hashlib, io, json, os, subprocess, sys, urllib.error, urllib.parse, urllib.request, zipfile
           from pathlib import Path
