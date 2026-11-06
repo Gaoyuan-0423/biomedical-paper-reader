@@ -147,14 +147,26 @@ await changeAppearance('note_font_size', 22);
 verify(closeEnough(fontSize(appearanceEditor), 22) && closeEnough(fontSize(appearancePreview), 22), 'Note font size did not affect both editor and preview');
 verify(closeEnough(fontSize(uiProbe), enlargedUIFont) && closeEnough(fontSize(document.documentElement), 17), 'Note font size changed the interface size');
 const accentColors = new Set();
+const accentSamples = [];
 for (const accent of ['blue', 'teal', 'violet']) {
   await changeAppearance('accent', accent);
   verify(document.documentElement.dataset.accent === accent, 'Accent selection did not reach the document');
-  // Let the real button's 150 ms CSS transition finish before sampling its color.
+  // Visible engines complete this 150 ms transition naturally. A hidden
+  // WKWebView freezes its animation timeline at zero despite elapsed timers,
+  // so finish only this probe's finite CSS transitions before sampling the
+  // actual computed color. The product styles and three-color check stay intact.
   await new Promise(resolve => setTimeout(resolve, 220));
-  accentColors.add(getComputedStyle(document.querySelector('#settings-save')).backgroundColor);
+  const accentButton = document.querySelector('#settings-save');
+  if (document.visibilityState === 'hidden') {
+    for (const animation of accentButton.getAnimations()) {
+      if (animation instanceof CSSTransition && Number.isFinite(animation.effect.getComputedTiming().endTime)) animation.finish();
+    }
+  }
+  const renderedAccent = getComputedStyle(accentButton).backgroundColor;
+  accentColors.add(renderedAccent);
+  accentSamples.push({accent, renderedAccent, target: getComputedStyle(accentButton).getPropertyValue('--primary')});
 }
-verify(accentColors.size === 3, 'Accent presets do not produce three distinct control colors');
+verify(accentColors.size === 3, 'Accent presets do not produce three distinct control colors: ' + JSON.stringify(accentSamples));
 await changeAppearance('scheme', 'dark');
 verify(document.documentElement.dataset.colorScheme === 'dark', 'Dark appearance did not apply');
 const darkBackground = getComputedStyle(document.body).backgroundColor;
