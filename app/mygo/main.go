@@ -211,6 +211,12 @@ verify(icon.complete && icon.naturalWidth > 0 && icon.naturalHeight > 0, 'Brand 
 window.__bioreaderSmokeStage = 'complete';
 return text.items.some(item => item.str.includes('BioReader synthetic'));
 })()`)
+					fontProbe, stopFontProbe := context.WithTimeout(context.Background(), 2*time.Second)
+					fontDetails, _ := win.Page().EvalContext(fontProbe, "JSON.stringify(window.__bioreaderAppearanceFonts || null)")
+					stopFontProbe()
+					if details, ok := fontDetails.(string); ok && details != "null" {
+						fmt.Println("Native appearance font measurements:", details)
+					}
 					if err != nil {
 						probe, stop := context.WithTimeout(context.Background(), 2*time.Second)
 						stage, _ := win.Page().EvalContext(probe, "window.__bioreaderSmokeStage || document.readyState")
