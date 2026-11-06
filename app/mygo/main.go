@@ -161,6 +161,9 @@ func runWindow(service *serviceProcess, smoke bool) error {
 				if !sameOrigin(win.Page().URL(), service.ready.URL) {
 					return
 				}
+				// Older WKWebView versions defer variable-driven layout while hidden.
+				// Validate the same visible, synthetic interface a user would see.
+				win.Show()
 				go func() {
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					defer cancel()
@@ -251,7 +254,7 @@ return text.items.some(item => item.str.includes('BioReader synthetic'));
 
 func main() {
 	selfTest := flag.String("self-test", "", "write an isolated packaged-service diagnostic JSON report")
-	guiTest := flag.Bool("gui-test", false, "also open a hidden native MyGo WebView during --self-test")
+	guiTest := flag.Bool("gui-test", false, "also show a temporary synthetic native MyGo WebView during --self-test")
 	serviceOverride := flag.String("service", "", "backend executable override for development")
 	flag.Parse()
 	mygo.App.SetName("BioReader")

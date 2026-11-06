@@ -50,7 +50,7 @@ $sourceCommit = git rev-parse HEAD
 
 #### 诊断与公开发布
 
-`BioReader --self-test /absolute/path/report.json --gui-test` 使用隔离临时资料，启动实际随包服务，检查会话限制、PDF／笔记持久化与子进程关闭，并在隐藏的 WKWebView／WebView2 中用 PDF.js 渲染合成 PDF。它覆盖这段原生自动化路径；系统保存对话框、外部浏览器、剪贴板和各 Windows 用户环境仍须按实际交互验证记录描述。没有 `--gui-test` 的检查只覆盖服务路径，不能写成原生窗口验收。不可在最终原生 CI 完成前预填“全部通过”，也不将合成材料和模拟模型测试称为科学阅读质量评测。
+`BioReader --self-test /absolute/path/report.json --gui-test` 使用隔离临时资料，启动实际随包服务，检查会话限制、PDF／笔记持久化与子进程关闭，并在使用合成数据的可见 WKWebView／WebView2 窗口中用 PDF.js 渲染合成 PDF。它覆盖这段原生自动化路径；系统保存对话框、外部浏览器、剪贴板和各 Windows 用户环境仍须按实际交互验证记录描述。没有 `--gui-test` 的检查只覆盖服务路径，不能写成原生窗口验收。不可在最终原生 CI 完成前预填“全部通过”，也不将合成材料和模拟模型测试称为科学阅读质量评测。
 
 合并两平台生成的 SHA-256 清单，逐项核对上述三个程序附件的文件名、字节数和摘要。`build-info.json`、诊断报告及 Actions 结果留作构建证据；它们不替代最终合并的 `SHA256SUMS.txt`。公开 Release 前保持草稿，等三份程序附件、合并清单和对应平台验证齐备，再以正式版发布（`--prerelease=false --latest=true`）。发布后核对标签提交、三份程序附件和清单、正式发布标记及当前版本的 Latest 状态；不覆盖旧标签。
 
@@ -156,7 +156,7 @@ Build jobs first preserve packages, manifests and diagnostics as Actions artifac
 
 #### Diagnostics and publication
 
-`BioReader --self-test /absolute/path/report.json --gui-test` uses temporary isolated storage, starts the actual bundled service, checks its session boundary, PDF/note persistence, and child shutdown, and renders a synthetic PDF through PDF.js inside a hidden native WKWebView/WebView2. This covers that automated native path. System save dialogs, external browsers, clipboard behavior, and users' Windows environments need separate acceptance records. Without `--gui-test`, the diagnostic covers only the service path. Do not predeclare success before final native CI completes, and do not describe synthetic fixtures or simulated models as scientific reading-quality evaluation.
+`BioReader --self-test /absolute/path/report.json --gui-test` uses temporary isolated storage, starts the actual bundled service, checks its session boundary, PDF/note persistence, and child shutdown, and renders a synthetic PDF through PDF.js inside a visible native WKWebView/WebView2 window with synthetic content. This covers that automated native path. System save dialogs, external browsers, clipboard behavior, and users' Windows environments need separate acceptance records. Without `--gui-test`, the diagnostic covers only the service path. Do not predeclare success before final native CI completes, and do not describe synthetic fixtures or simulated models as scientific reading-quality evaluation.
 
 Combine both platforms' SHA-256 lists and verify each of the three application assets by filename, byte size, and digest. Retain `build-info.json`, diagnostic reports, and Actions results as build evidence; they do not replace the final combined `SHA256SUMS.txt`. Keep the Release in draft until all three application assets, the merged hash list, and platform validation are ready. Publish with `--prerelease=false --latest=true`, then verify the tag commit, assets, regular-release flag and the current version's Latest status. Do not overwrite an existing tag.
 

@@ -96,6 +96,7 @@ verify(afterFiguresResponse.ok && (await afterFiguresResponse.json()).find(figur
 const nativeAppearanceSmoke = `
 window.__bioreaderSmokeStage = 'appearance settings';
 verify(window.BioAppearance, 'Appearance module is unavailable');
+await waitForFigure(() => document.visibilityState === 'visible', 'Native diagnostic window did not become visible');
 document.querySelector('#view-preview').click();
 await window.BioChat.open(papers[0]);
 const appearanceDraft = document.querySelector('#chat-input');
@@ -142,6 +143,10 @@ const changeAppearance = async (field, value) => {
   return preferences;
 };
 await changeAppearance('ui_font_size', 17);
+const interfaceFontDeadline = Date.now() + 2500;
+while (Date.now() < interfaceFontDeadline && !(closeEnough(fontSize(document.documentElement), 17) && fontSize(uiProbe) > initialUIFont + 1)) {
+  await new Promise(resolve => setTimeout(resolve, 40));
+}
 window.__bioreaderAppearanceFonts = {initialRootFont, initialUIFont, initialEditorFont, initialPreviewFont, rootFont: fontSize(document.documentElement), uiFont: fontSize(uiProbe), editorFont: fontSize(appearanceEditor), previewFont: fontSize(appearancePreview), uiVariable: getComputedStyle(document.documentElement).getPropertyValue('--ui-font-size'), noteVariable: getComputedStyle(document.documentElement).getPropertyValue('--note-font-size'), visibility: document.visibilityState, controls: {ui: appearanceControls.ui_font_size.value, note: appearanceControls.note_font_size.value}, preferences: window.BioAppearance.getPreferences()};
 verify(closeEnough(fontSize(document.documentElement), 17) && fontSize(uiProbe) > initialUIFont + 1, 'Interface font size did not change computed styles: ' + JSON.stringify(window.__bioreaderAppearanceFonts));
 verify(closeEnough(fontSize(appearanceEditor), initialEditorFont) && closeEnough(fontSize(appearancePreview), initialPreviewFont), 'Interface font size changed the independent note size');

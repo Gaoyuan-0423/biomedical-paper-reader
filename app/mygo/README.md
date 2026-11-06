@@ -38,7 +38,7 @@ BioReader --self-test /absolute/path/report.json --gui-test
 ```
 
 This uses temporary storage, starts the real bundled backend, exercises session
-protection and PDF/note persistence, opens a hidden native MyGo WebView, renders
+protection and PDF/note persistence, opens an isolated native MyGo WebView window, renders
 a synthetic PDF using PDF.js, and verifies child shutdown. It records the app
 version, source commit, dirty-build flag, and exact checks. It does not call an
 AI provider. The native save dialog, external browser, and clipboard still need
