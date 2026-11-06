@@ -135,7 +135,7 @@ $sourceCommit = git rev-parse HEAD
 
 [`scripts/package_mygo.py`](../scripts/package_mygo.py) 验证实际解压的 Windows ZIP 或挂载的 Mac DMG，比对随包前端与 Git 提交、版本和构建标记，并执行原生诊断。输出位于 `app/dist/mygo-release/`：对应平台的程序附件、`SHA256SUMS.txt`、`build-info.json` 和诊断报告。维护者需合并两平台清单，详见[发布维护](../RELEASING.md#当前桌面正式版-v0130)。
 
-独立调用随包程序的诊断入口为 `BioReader --self-test /absolute/path/report.json --gui-test`（Windows 使用 `BioReader.exe`）。它使用隔离临时文献库，启动实际随包服务，检查会话边界、PDF／笔记持久化和子进程退出；`--gui-test` 还打开隐藏的系统 WebView，用 PDF.js 渲染合成 PDF。这是原生自动化诊断范围，系统保存对话框、外部浏览器和剪贴板仍需分别做交互验收。这里只描述流程；实际成功结果以 [App 验证记录](tests/README.md) 为准。
+独立调用随包程序的诊断入口为 `BioReader --self-test /absolute/path/report.json --gui-test`（Windows 使用 `BioReader.exe`）。它使用隔离临时文献库，启动实际随包服务，检查会话边界、PDF／笔记持久化和子进程退出；`--gui-test` 还打开使用合成数据的可见系统 WebView 窗口，用 PDF.js 渲染合成 PDF。这是原生自动化诊断范围，系统保存对话框、外部浏览器和剪贴板仍需分别做交互验收。这里只描述流程；实际成功结果以 [App 验证记录](tests/README.md) 为准。
 
 界面资源随程序提供；AI 模型调用、DOI 查询和相关文献检索仍需网络。模型 Key 以明文保存在本机设置文件中。MyGo 外壳通过私有管道启动绑定随机回环端口的服务，初次握手建立会话后跳转到不含 token 的地址；不需要用户配置或开放固定服务端口。
 

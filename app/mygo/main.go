@@ -161,6 +161,9 @@ func runWindow(service *serviceProcess, smoke bool) error {
 				if !sameOrigin(win.Page().URL(), service.ready.URL) {
 					return
 				}
+				// Older WKWebView versions defer variable-driven layout while hidden.
+				// Validate the same visible, synthetic interface a user would see.
+				win.Show()
 				go func() {
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					defer cancel()
@@ -211,6 +214,12 @@ verify(icon.complete && icon.naturalWidth > 0 && icon.naturalHeight > 0, 'Brand 
 window.__bioreaderSmokeStage = 'complete';
 return text.items.some(item => item.str.includes('BioReader synthetic'));
 })()`)
+					fontProbe, stopFontProbe := context.WithTimeout(context.Background(), 2*time.Second)
+					fontDetails, _ := win.Page().EvalContext(fontProbe, "JSON.stringify(window.__bioreaderAppearanceFonts || null)")
+					stopFontProbe()
+					if details, ok := fontDetails.(string); ok && details != "null" {
+						fmt.Println("Native appearance font measurements:", details)
+					}
 					if err != nil {
 						probe, stop := context.WithTimeout(context.Background(), 2*time.Second)
 						stage, _ := win.Page().EvalContext(probe, "window.__bioreaderSmokeStage || document.readyState")
@@ -245,7 +254,7 @@ return text.items.some(item => item.str.includes('BioReader synthetic'));
 
 func main() {
 	selfTest := flag.String("self-test", "", "write an isolated packaged-service diagnostic JSON report")
-	guiTest := flag.Bool("gui-test", false, "also open a hidden native MyGo WebView during --self-test")
+	guiTest := flag.Bool("gui-test", false, "also show a temporary synthetic native MyGo WebView during --self-test")
 	serviceOverride := flag.String("service", "", "backend executable override for development")
 	flag.Parse()
 	mygo.App.SetName("BioReader")
