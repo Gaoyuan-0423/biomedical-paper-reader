@@ -93,6 +93,102 @@ const afterFiguresResponse = await fetch(paperAddress + '/figures');
 verify(afterFiguresResponse.ok && (await afterFiguresResponse.json()).find(figure => figure.id === savedFigure.id)?.observation === savedFigure.observation, 'Opening saved figure observations changed the stored observation');
 `
 
+const nativeAppearanceSmoke = `
+window.__bioreaderSmokeStage = 'appearance settings';
+verify(window.BioAppearance, 'Appearance module is unavailable');
+document.querySelector('#view-preview').click();
+await window.BioChat.open(papers[0]);
+const appearanceDraft = document.querySelector('#chat-input');
+const appearanceHistory = document.querySelector('#chat-history');
+const appearanceEditor = document.querySelector('#editor');
+const appearancePreview = document.querySelector('#preview');
+verify(appearanceDraft && appearanceEditor && appearancePreview, 'Appearance content fixtures are missing');
+const appearanceQuestion = 'Keep this draft · 外观切换不改内容';
+appearanceDraft.value = appearanceQuestion;
+appearanceDraft.dispatchEvent(new Event('input', {bubbles: true}));
+const originalEditor = appearanceEditor.value;
+const originalPreview = appearancePreview.textContent;
+const originalLocale = document.documentElement.lang;
+const appearancePaperResponse = await fetch(paperAddress);
+verify(appearancePaperResponse.ok, 'Could not read notes before appearance changes');
+const appearancePaper = await appearancePaperResponse.json();
+document.querySelector('#btn-settings').click();
+await waitForFigure(() => !document.querySelector('#settings-modal').hidden, 'Settings did not open');
+const appearanceControls = {
+  scheme: document.querySelector('#appearance-scheme'),
+  accent: document.querySelector('#appearance-accent'),
+  ui_font_size: document.querySelector('#appearance-ui-font'),
+  note_font_size: document.querySelector('#appearance-note-font'),
+};
+verify(Object.values(appearanceControls).every(Boolean), 'Appearance settings controls are missing');
+const fontSize = element => parseFloat(getComputedStyle(element).fontSize);
+const closeEnough = (a, b) => Math.abs(a - b) < 0.15;
+const uiProbe = document.querySelector('#btn-settings');
+const initialUIFont = fontSize(uiProbe);
+const initialEditorFont = fontSize(appearanceEditor);
+const initialPreviewFont = fontSize(appearancePreview);
+const changeAppearance = async (field, value) => {
+  const control = appearanceControls[field];
+  control.value = String(value);
+  control.dispatchEvent(new Event(control.type === 'range' ? 'input' : 'change', {bubbles: true}));
+  verify(await window.BioAppearance.flush(), 'Appearance settings were not saved');
+  const response = await fetch('/api/ui-preferences');
+  verify(response.ok, 'Saved appearance preferences could not be read');
+  const preferences = await response.json();
+  verify(preferences[field] === value && preferences.locale === originalLocale, 'Appearance persistence changed another preference or lost its value');
+  verify(document.documentElement.dataset.appearanceState === 'ready', 'Appearance preferences did not reach the saved state');
+  return preferences;
+};
+await changeAppearance('ui_font_size', 17);
+verify(closeEnough(fontSize(document.documentElement), 17) && fontSize(uiProbe) > initialUIFont + 1, 'Interface font size did not change computed styles');
+verify(closeEnough(fontSize(appearanceEditor), initialEditorFont) && closeEnough(fontSize(appearancePreview), initialPreviewFont), 'Interface font size changed the independent note size');
+const enlargedUIFont = fontSize(uiProbe);
+await changeAppearance('note_font_size', 22);
+verify(closeEnough(fontSize(appearanceEditor), 22) && closeEnough(fontSize(appearancePreview), 22), 'Note font size did not affect both editor and preview');
+verify(closeEnough(fontSize(uiProbe), enlargedUIFont) && closeEnough(fontSize(document.documentElement), 17), 'Note font size changed the interface size');
+const accentColors = new Set();
+const accentSamples = [];
+for (const accent of ['blue', 'teal', 'violet']) {
+  await changeAppearance('accent', accent);
+  verify(document.documentElement.dataset.accent === accent, 'Accent selection did not reach the document');
+  // Visible engines complete this 150 ms transition naturally. A hidden
+  // WKWebView freezes its animation timeline at zero despite elapsed timers,
+  // so finish only this probe's finite CSS transitions before sampling the
+  // actual computed color. The product styles and three-color check stay intact.
+  await new Promise(resolve => setTimeout(resolve, 220));
+  const accentButton = document.querySelector('#settings-save');
+  if (document.visibilityState === 'hidden') {
+    for (const animation of accentButton.getAnimations()) {
+      if (animation instanceof CSSTransition && Number.isFinite(animation.effect.getComputedTiming().endTime)) animation.finish();
+    }
+  }
+  const renderedAccent = getComputedStyle(accentButton).backgroundColor;
+  accentColors.add(renderedAccent);
+  accentSamples.push({accent, renderedAccent, target: getComputedStyle(accentButton).getPropertyValue('--primary')});
+}
+verify(accentColors.size === 3, 'Accent presets do not produce three distinct control colors: ' + JSON.stringify(accentSamples));
+await changeAppearance('scheme', 'dark');
+verify(document.documentElement.dataset.colorScheme === 'dark', 'Dark appearance did not apply');
+const darkBackground = getComputedStyle(document.body).backgroundColor;
+await changeAppearance('scheme', 'light');
+verify(document.documentElement.dataset.colorScheme === 'light' && getComputedStyle(document.body).backgroundColor !== darkBackground, 'Light and dark appearances have the same rendered background');
+await changeAppearance('scheme', 'system');
+verify(document.documentElement.dataset.colorScheme === (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), 'System appearance does not match the native WebView media query');
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+verify(themeMeta && themeMeta.content, 'Native window theme-color metadata is missing');
+verify(document.documentElement.lang === originalLocale && controls.every(control => control.value === originalLocale), 'Appearance changes modified the interface language');
+verify(document.querySelector('#chat-input') === appearanceDraft && appearanceDraft.value === appearanceQuestion && document.querySelector('#chat-history') === appearanceHistory, 'Appearance changes replaced the chat draft or history');
+verify(document.querySelector('#editor') === appearanceEditor && appearanceEditor.value === originalEditor && appearancePreview.textContent === originalPreview, 'Appearance changes replaced or modified paper notes');
+const finalAppearanceResponse = await fetch('/api/ui-preferences');
+verify(finalAppearanceResponse.ok, 'Final appearance preferences could not be read');
+const finalAppearance = await finalAppearanceResponse.json();
+verify(finalAppearance.scheme === 'system' && finalAppearance.accent === 'violet' && finalAppearance.ui_font_size === 17 && finalAppearance.note_font_size === 22 && finalAppearance.locale === originalLocale, 'Appearance preference fields were not independently persisted');
+const unchangedPaperResponse = await fetch(paperAddress);
+verify(unchangedPaperResponse.ok && (await unchangedPaperResponse.json()).notes === appearancePaper.notes, 'Appearance settings changed stored paper notes');
+document.querySelector('#settings-close').click();
+await waitForFigure(() => document.querySelector('#settings-modal').hidden, 'Settings did not close after the appearance check');
+`
+
 func syntheticPDF() []byte {
 	// Keep the searchable text and PDF.js smoke marker, while exercising a
 	// standalone supplement title followed by smaller caption body lines.
@@ -380,6 +476,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 		report["locale_tested"] = true
 		report["brand_icon_tested"] = true
 		report["figure_reader_tested"] = true
+		report["appearance_tested"] = true
 	}
 	if _, err = requestBytes(client, "DELETE", address, "", nil, 200); err != nil {
 		return err
@@ -393,13 +490,13 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	}
 	report["checks"] = []string{"Real bundled sidecar on a random loopback socket", "Private owner handshake, required session, foreign-origin rejection", "Bundled frontend and native PDF import/retrieval/search", "Frozen backend extracts both smaller-font supplementary caption lines below a standalone figure title", "Opening legacy title-only captions automatically restores both body lines without changing IDs, crops or saved observations", "Damaged figure records recover saved observations from a valid backup while leaving both original files unchanged", "Unicode note persistence and deletion", "Child service exits when its owner pipe closes"}
 	if gui {
-		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render", "Chinese/English interface switching preserves the chat composer and Unicode draft, synchronizes both controls and persists the native dialog language", "Brand SVG loads and decodes in the native WebView", "Gallery thumbnail and View notes open the saved figure observation as complete Markdown beside its local image; close/reopen preserves both observation and paper note")
+		report["checks"] = append(report["checks"].([]string), "Native MyGo WebView loads the frontend, authenticated fetch, PDF.js worker and canvas render", "Chinese/English interface switching preserves the chat composer and Unicode draft, synchronizes both controls and persists the native dialog language", "Brand SVG loads and decodes in the native WebView", "Gallery thumbnail and View notes open the saved figure observation as complete Markdown beside its local image; close/reopen preserves both observation and paper note", "Native settings controls independently resize interface and notes, persist three accent presets and system/light/dark appearance, preserve language and research drafts, and update the native window background")
 	}
 	return nil
 }
 
 func runDiagnostic(executable, reportPath string, gui bool) (resultErr error) {
-	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false, "caption_tested": false, "caption_upgrade_tested": false, "figure_backup_tested": false, "figure_reader_tested": false,
+	report := map[string]any{"status": "failed", "platform": runtime.GOOS, "architecture": runtime.GOARCH, "desktop": "egoist/mygo", "mygo_version": "v0.7.4", "gui_tested": false, "locale_tested": false, "brand_icon_tested": false, "caption_tested": false, "caption_upgrade_tested": false, "figure_backup_tested": false, "figure_reader_tested": false, "appearance_tested": false,
 		"source_commit": buildCommit, "build_dirty": buildDirty != "false", "app_version": mygo.App.Version()}
 	defer func() {
 		if resultErr == nil {

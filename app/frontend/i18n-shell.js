@@ -1,6 +1,28 @@
 (function (global) {
   'use strict';
   global.BioI18n.register({
+    '外观与字号': 'Appearance and text size',
+    '即时预览并自动保存；不改变 PDF、原始图片或导出样式。': 'Preview instantly and save automatically. PDFs, original images and export styles stay unchanged.',
+    '外观模式': 'Appearance mode',
+    '跟随系统': 'Follow system',
+    '浅色': 'Light',
+    '深色': 'Dark',
+    '界面配色': 'Interface color',
+    '蓝色': 'Blue',
+    '青色': 'Teal',
+    '紫色': 'Violet',
+    '界面字号': 'Interface text size',
+    '笔记字号': 'Note text size',
+    '调整菜单、按钮和各模块界面的文字大小。': 'Adjust text in menus, buttons and app panels.',
+    '独立调整正文笔记、读图笔记及问答内容。': 'Independently adjust paper notes, figure notes and conversation text.',
+    '外观偏好未载入，当前预览尚未确认保存。': 'Appearance preferences could not load. This preview has not been confirmed as saved.',
+    '外观未保存，当前预览仍保留。': 'Appearance was not saved. Your preview is still applied.',
+    '正在保存外观…': 'Saving appearance…',
+    '正在载入外观…': 'Loading appearance…',
+    '外观已保存': 'Appearance saved',
+    '重试': 'Retry',
+    '新解读使用当前界面语言；已有论文和笔记不会自动翻译。': 'New analyses use the current interface language. Existing papers and notes are not automatically translated.',
+
     'BioReader · 文献阅读工作台': 'BioReader · Literature workspace',
     '文献阅读工作台': 'Literature workspace',
     '界面语言': 'Interface language',
