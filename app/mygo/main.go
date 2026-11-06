@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"image/color"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -27,9 +28,19 @@ func sameOrigin(raw, origin string) bool {
 	return err == nil && u.User == nil && u.Scheme+"://"+u.Host == origin
 }
 
-func configureWindow(win *mygo.Window, origin, dataDirectory string) {
+func configureWindow(win *mygo.Window, origin, dataDirectory string) *atomic.Bool {
 	text := func(chinese, english string) string { return nativeText(dataDirectory, chinese, english) }
 	page := win.Page()
+	var backgroundUpdated atomic.Bool
+	// Keep the native app appearance on the system setting so matchMedia stays
+	// truthful. The page's theme-color updates only the surface behind its CSS.
+	page.OnThemeColorChanged(func(c color.NRGBA, ok bool) {
+		if ok && sameOrigin(page.URL(), origin) {
+			if err := win.SetBackgroundColor(fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)); err == nil {
+				backgroundUpdated.Store(true)
+			}
+		}
+	})
 	var closeAllowed, checkingClose atomic.Bool
 	win.OnClose(func(event *mygo.CloseEvent) {
 		if closeAllowed.Load() || !sameOrigin(page.URL(), origin) {
@@ -88,6 +99,7 @@ func configureWindow(win *mygo.Window, origin, dataDirectory string) {
 			_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: win, Type: mygo.MessageError, Title: text("导出未完成", "Export did not finish"), Message: download.Err.Error()})
 		}
 	})
+	return &backgroundUpdated
 }
 
 func completedWindowResult(result <-chan error, smoke bool) error {
@@ -140,10 +152,10 @@ func runWindow(service *serviceProcess, smoke bool) error {
 			session = mygo.NewEphemeralSession()
 		}
 		win := mygo.NewWindow(mygo.WindowOptions{Title: "BioReader", URL: "about:blank", Width: 1440, Height: 900,
-			MinWidth: 800, MinHeight: 600, Hidden: smoke, StateKey: stateKey, BackgroundColor: "#f5f8ff",
+			MinWidth: 800, MinHeight: 600, Hidden: smoke, StateKey: stateKey, BackgroundColor: "light-dark(#f5f8ff, #0f172a)",
 			Page: mygo.PageOptions{TrustedOrigins: []string{service.ready.URL}, Session: session, DevTools: mygo.DevToolsDisabled}})
 		mainWindow = win
-		configureWindow(win, service.ready.URL, service.dataDirectory)
+		backgroundUpdated := configureWindow(win, service.ready.URL, service.dataDirectory)
 		if smoke {
 			win.Page().OnDidFinishLoad(func() {
 				if !sameOrigin(win.Page().URL(), service.ready.URL) {
@@ -195,6 +207,7 @@ verify(icon && icon.getAttribute('src') === 'brand-mark.svg', 'Brand icon is mis
 if (icon.decode) await icon.decode();
 verify(icon.complete && icon.naturalWidth > 0 && icon.naturalHeight > 0, 'Brand icon did not load in the native WebView');
 `+nativeFigureReaderSmoke+`
+`+nativeAppearanceSmoke+`
 window.__bioreaderSmokeStage = 'complete';
 return text.items.some(item => item.str.includes('BioReader synthetic'));
 })()`)
@@ -206,6 +219,9 @@ return text.items.some(item => item.str.includes('BioReader synthetic'));
 					}
 					if err == nil && value != true {
 						err = fmt.Errorf("WebView frontend check returned %v", value)
+					}
+					if err == nil && !backgroundUpdated.Load() {
+						err = errors.New("native window did not apply the page theme color")
 					}
 					finish(err)
 				}()

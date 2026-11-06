@@ -1716,3 +1716,8 @@ test('partial generated notes retain their captured language through failed save
   await i18n.setLocale('zh-CN',{persist:false});failing=false;edit(h,'Partial English model output + my edit');await h.flushSave();assert.equal(bodies.at(-1).notes_language,'en');assert.equal(h.state.current.notes_language,'en');assert.equal(h.state.current.notesDraftLanguage,undefined);
   edit(h,'An ordinary later manual edit');await h.flushSave();assert.equal(bodies.at(-1).notes_language,undefined);
 });
+
+test('native close waits for appearance persistence but does not trap the user after a preference failure', async () => {
+  const h=harness(),pending=deferred();let settled=false;h.context.window.BioAppearance={flush:()=>pending.promise};
+  const closing=h.prepareDesktopClose().then(value=>{settled=true;return value;});await new Promise(setImmediate);assert.equal(settled,false);pending.resolve(false);assert.equal(await closing,true);
+});

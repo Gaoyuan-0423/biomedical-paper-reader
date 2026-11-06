@@ -781,6 +781,12 @@ def get_ui_preferences():
 def put_ui_preferences(body: ui.PreferencesIn):
     return ui.write_preferences(DATA_DIR, body)
 
+
+@app.patch('/api/ui-preferences')
+def patch_ui_preferences(body: ui.PreferencesPatch):
+    return ui.write_preferences(DATA_DIR, body)
+
+
 @app.get("/api/settings")
 def get_settings():
     return public_settings(load_settings())

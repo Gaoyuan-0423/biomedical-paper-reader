@@ -288,7 +288,7 @@
     if (state.readingPending.size) { toast(() => tr('阅读位置尚未保存，请稍后再退出。'), 'error'); return false; }
     // Finish an in-flight preference write, but a non-critical preference error
     // must not trap the user in the window after their research has been saved.
-    if (window.BioI18n?.flush) await window.BioI18n.flush();
+    await Promise.all([window.BioI18n?.flush?.(), window.BioAppearance?.flush?.()]);
     return !state.pendingSave && !state.saveInFlight && !state.generating && !state.materialBusy && !state.figReading && !state.noteAppendBusy && !window.BioZotero?.isImporting() && canLeaveResearch();
   }
 
@@ -433,7 +433,9 @@
     bindText($('set-key-hint'), () => s.has_api_key ? tr('当前已保存 Key：{key}', { key: s.api_key_masked || tr('已设置') }) : tr('尚未设置 Key'));
     bindText($('set-s2-hint'), () => s.has_s2_api_key ? tr('已保存 Semantic Scholar Key（留空保持不变）') : tr('未设置；匿名额度较慢，免费申请 semanticscholar.org/product/api'));
     if (window.BioZotero) window.BioZotero.loadSettings();
-    openModal('settings-modal', 'set-base-url');
+    openModal('settings-modal', 'settings-ui-locale');
+    const body = $('settings-modal').querySelector('.modal-body');
+    if (body) body.scrollTop = 0;
   }
 
   function closeSettings() {

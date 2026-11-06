@@ -11,7 +11,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.12.1 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.12.1)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.13.0 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 
@@ -22,7 +22,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 Python 依赖见 `backend/requirements.txt`（fastapi、uvicorn、pypdf、httpx、python-multipart、
 pdfplumber、pypdfium2、Pillow）。
 
-## v0.12.1：查看已有读图笔记
+## 查看已有读图笔记（自 v0.12.0）
 
 在「图库」点击图片缩略图或「查看笔记」，打开图像与读图笔记的对照查看器：
 
@@ -300,3 +300,7 @@ app/data/
 - Semantic Scholar 匿名额度有限（约 1 请求/秒，共享池），频繁使用建议填免费 API Key。
 - OCR 未内置（ReadBox 有 Tesseract 管线，本应用为保持轻量暂未移植）。
 - 公众号粘贴对代码块已加固；数学公式仍建议截图插入。
+
+## 外观设置
+
+在设置中独立调整界面字号、笔记字号及蓝／青／紫配色，选择跟随系统、浅色或深色。即时生效并自动保存；外观偏好不改变PDF原图、正文内容或导出模板，原有界面语言设置保持独立。
