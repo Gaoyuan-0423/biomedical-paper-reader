@@ -105,6 +105,7 @@ class FigureObservationTests(unittest.TestCase):
             self.assertEqual(response.json()['observation'], MARKDOWN)
             records = self.assert_reopened({self.main_figure['id']: MARKDOWN})
         model.assert_awaited_once()
+        self.assertEqual(model.await_args.kwargs['max_tokens'], 1200)
         prompt = model.await_args.args[3][0]['content']
         self.assertIn('Compare the two synthetic groups.', prompt[0]['text'])
         self.assertIn(self.main_figure['caption'], prompt[0]['text'])
@@ -349,6 +350,96 @@ class FigureObservationTests(unittest.TestCase):
                     self.assertIn('读图模型没有返回有效内容', response.text)
                     self.assertEqual((self.directory / 'figures.json').read_bytes(), before)
                     self.assert_reopened({self.main_figure['id']: MARKDOWN})
+
+    def test_reasoning_budget_exhaustion_retries_once_and_saves_only_final_answer(self):
+        self.seed(self.main_figure, 'Existing observation')
+        model = AsyncMock(side_effect=[
+            main.CompletionError('length', finish_reason='length'), MARKDOWN,
+        ])
+        with patch.object(main, 'chat_once', model):
+            response = self.read_single(self.main_figure)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['observation'], MARKDOWN)
+        self.assertEqual([call.kwargs['max_tokens'] for call in model.await_args_list], [1200, 4096])
+        self.assertEqual(model.await_args_list[0].args, model.await_args_list[1].args)
+        self.assert_reopened({self.main_figure['id']: MARKDOWN})
+
+    def test_official_glm53_vision_budget_retries_without_changing_reasoning(self):
+        self.seed(self.main_figure, 'Existing observation')
+        for vision_model in ('glm-5.3', 'GLM-5.3-Flash'):
+            with self.subTest(model=vision_model):
+                settings = {**main.load_settings(), 'base_url': 'https://open.bigmodel.cn/api/paas/v4',
+                            'vision_model': vision_model}
+                model = AsyncMock(side_effect=[main.CompletionError('length', 'length'), MARKDOWN])
+                with patch.object(main, 'load_settings', return_value=settings), patch.object(main, 'chat_once', model):
+                    response = self.read_single(self.main_figure)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual([call.kwargs for call in model.await_args_list],
+                                 [{'max_tokens': 8192}, {'max_tokens': 16384}])
+                self.assert_reopened({self.main_figure['id']: MARKDOWN})
+
+    def test_other_vision_models_and_proxies_keep_original_initial_budget(self):
+        for base, vision_model in (
+            ('https://open.bigmodel.cn/api/paas/v4', 'glm-4.6v'),
+            ('https://proxy.example/v1', 'glm-5.3-flash'),
+            ('https://open.bigmodel.cn/api/paas/v4', 'glm-5.3-flash-custom'),
+        ):
+            with self.subTest(base=base, model=vision_model):
+                settings = {**main.load_settings(), 'base_url': base, 'vision_model': vision_model,
+                            'model': 'glm-5.3-flash'}
+                model = AsyncMock(return_value=MARKDOWN)
+                with patch.object(main, 'load_settings', return_value=settings), patch.object(main, 'chat_once', model):
+                    response = self.read_single(self.main_figure)
+                self.assertEqual(response.status_code, 200, response.text)
+                model.assert_awaited_once()
+                self.assertEqual(model.await_args.kwargs, {'max_tokens': 1200})
+                self.assert_reopened({self.main_figure['id']: MARKDOWN})
+
+    def test_http400_is_not_retried_and_keeps_existing_observation(self):
+        self.seed(self.main_figure, MARKDOWN)
+        before = (self.directory / 'figures.json').read_bytes()
+        model = AsyncMock(side_effect=main.UpstreamError('synthetic parameter rejection', status_code=400))
+        with patch.object(main, 'chat_once', model):
+            response = self.read_single(self.main_figure)
+        self.assertEqual(response.status_code, 400, response.text)
+        model.assert_awaited_once()
+        self.assertEqual((self.directory / 'figures.json').read_bytes(), before)
+        self.assert_reopened({self.main_figure['id']: MARKDOWN})
+
+    def test_exhausted_retry_keeps_notes_and_reports_failure_for_single_and_batch(self):
+        self.seed(self.main_figure, MARKDOWN)
+        settings = {**main.load_settings(), 'max_figures': 1}
+        before = (self.directory / 'figures.json').read_bytes()
+        for mode in ('single', 'batch'):
+            with self.subTest(mode=mode):
+                model = AsyncMock(side_effect=main.CompletionError('length', finish_reason='length'))
+                with patch.object(main, 'chat_once', model), patch.object(main, 'load_settings', return_value=settings):
+                    response = (self.read_single(self.main_figure) if mode == 'single'
+                                else self.client.post(self.url + '/figures/read?force=1'))
+                self.assertEqual(model.await_count, 2)
+                if mode == 'single':
+                    self.assertEqual(response.status_code, 400, response.text)
+                else:
+                    self.assertEqual([e['type'] for e in sse_events(response)], ['start', 'error'])
+                self.assertIn('读图达到生成长度上限', response.text)
+                self.assertEqual((self.directory / 'figures.json').read_bytes(), before)
+                self.assert_reopened({self.main_figure['id']: MARKDOWN})
+
+    def test_other_completion_failures_and_partial_answers_are_not_retried_or_saved(self):
+        self.seed(self.main_figure, MARKDOWN)
+        before = (self.directory / 'figures.json').read_bytes()
+        errors = [main.CompletionError(reason) for reason in
+                  ('empty', 'refusal', 'upstream_error', 'malformed', 'incomplete')]
+        errors.append(main.CompletionError('length', finish_reason='length', has_content=True))
+        for error in errors:
+            with self.subTest(reason=error.reason, has_content=error.has_content):
+                model = AsyncMock(side_effect=error)
+                with patch.object(main, 'chat_once', model):
+                    response = self.read_single(self.main_figure)
+                self.assertEqual(response.status_code, 400, response.text)
+                model.assert_awaited_once()
+                self.assertEqual((self.directory / 'figures.json').read_bytes(), before)
+                self.assert_reopened({self.main_figure['id']: MARKDOWN})
 
     def test_explicit_all_reads_beyond_budget_and_cached_figures_without_changing_automatic_note_budget(self):
         records = main.load_figures(self.directory)

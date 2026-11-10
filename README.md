@@ -6,7 +6,7 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.13.0。新增外观设置：独立界面字号与笔记字号、蓝／青／紫配色，以及跟随系统的浅色／深色模式。设置即时生效并持久保存，保持 PDF 原图、笔记内容和导出排版。保留读图保存、旧图注自动升级和中英文解读。
+版本：v0.13.1。修复推理模型读图和长文整理时因生成额度不足而中止的问题，识别不完整回答并保留已有笔记。对智谱官方 GLM-5.3／Flash 的中间整理使用轻量推理，最终报告的推理设置保持不变；保留外观、读图保存、旧图注升级和中英文解读。
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -43,14 +43,14 @@
 
 ### 使用
 
-#### macOS / Windows 桌面版（预览）
+#### macOS / Windows 桌面版
 
-下载入口：[v0.13.0 桌面版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.0)。本版通过双平台验收后按正式 Release 和 Latest 发布。按系统选择同版附件，以发布页实际提供为准：
+下载入口：[v0.13.1 桌面版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.1)。本版通过双平台验收后按正式 Release 和 Latest 发布。按系统选择同版附件，以发布页实际提供为准：
 
 | 系统 | 下载与打开 |
 |---|---|
-| Apple 芯片 Mac（arm64） | [BioReader-v0.13.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.0/BioReader-v0.13.0-macos-arm64.dmg)，打开 DMG 后将 `BioReader.app` 拖入应用程序 |
-| Windows 10 / 11（x64） | [安装 EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.0/BioReader-v0.13.0-windows-x64-setup.exe)，或 [BioReader-v0.13.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.0/BioReader-v0.13.0-windows-x64.zip)，完整解压文件夹后打开其中的 `BioReader.exe`，保留全部随附文件 |
+| Apple 芯片 Mac（arm64） | [BioReader-v0.13.1-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.1/BioReader-v0.13.1-macos-arm64.dmg)，打开 DMG 后将 `BioReader.app` 拖入应用程序 |
+| Windows 10 / 11（x64） | [安装 EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.1/BioReader-v0.13.1-windows-x64-setup.exe)，或 [BioReader-v0.13.1-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.1/BioReader-v0.13.1-windows-x64.zip)，完整解压文件夹后打开其中的 `BioReader.exe`，保留全部随附文件 |
 
 桌面包不需要另装 Python 或手动启动浏览器／终端。Windows 需要 Microsoft Edge WebView2 Runtime；缺少时安装[微软官方 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。用户数据独立保存：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`；退出旧版再替换程序，已有论文、笔记和设置保留。
 
@@ -173,7 +173,7 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.13.0. Adds independent interface and note font sizes, blue/teal/violet accents, and system/light/dark appearance. Preferences apply immediately and persist without changing PDF images, saved content or export formatting. Retains reliable figure observations, legacy caption upgrades and bilingual generation.
+Version: v0.13.1. Fixes generation-budget failures in figure analysis and long-document condensation, detects incomplete answers and preserves existing notes. Intermediate condensation uses light reasoning for supported models on the official BigModel API; final-report reasoning settings remain unchanged. Retains appearance preferences, saved figure observations, legacy caption upgrades and bilingual generation.
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -210,14 +210,14 @@ A full close-reading report follows this structure: opening guide → article in
 
 ### English quick start
 
-#### macOS / Windows desktop preview
+#### macOS / Windows desktop release
 
-Download page: [v0.13.0 desktop release](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.0). This version is published as a regular Release and Latest after native validation on both platforms. Choose the matching platform asset from the files actually published:
+Download page: [v0.13.1 desktop release](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.1). This version is published as a regular Release and Latest after native validation on both platforms. Choose the matching platform asset from the files actually published:
 
 | Platform | Download and open |
 |---|---|
-| Apple silicon Mac (arm64) | [BioReader-v0.13.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.0/BioReader-v0.13.0-macos-arm64.dmg); open the DMG and drag `BioReader.app` to Applications |
-| Windows 10 / 11 (x64) | [Installer EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.0/BioReader-v0.13.0-windows-x64-setup.exe), or [BioReader-v0.13.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.0/BioReader-v0.13.0-windows-x64.zip); extract the entire folder and open `BioReader.exe`, retaining all bundled files |
+| Apple silicon Mac (arm64) | [BioReader-v0.13.1-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.1/BioReader-v0.13.1-macos-arm64.dmg); open the DMG and drag `BioReader.app` to Applications |
+| Windows 10 / 11 (x64) | [Installer EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.1/BioReader-v0.13.1-windows-x64-setup.exe), or [BioReader-v0.13.1-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.13.1/BioReader-v0.13.1-windows-x64.zip); extract the entire folder and open `BioReader.exe`, retaining all bundled files |
 
 Desktop packages do not require Python or manually starting a browser/terminal. Windows requires Microsoft Edge WebView2 Runtime; install the [official Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if it is missing. User data remains separate: `~/Library/Application Support/BioReader/` on macOS and `%LOCALAPPDATA%\BioReader` on Windows. Quit the old version before replacing program files; existing papers, notes and settings are preserved.
 

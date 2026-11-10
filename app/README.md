@@ -11,7 +11,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.13.0 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.13.1 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.1)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 
@@ -21,6 +21,14 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 Python 依赖见 `backend/requirements.txt`（fastapi、uvicorn、pypdf、httpx、python-multipart、
 pdfplumber、pypdfium2、Pillow）。
+
+## 生成长度与推理模型（v0.13.1）
+
+读图与长文分段整理会检查模型是否完整回答，不把推理过程、空白或截断结果当作完整笔记保存。确认是生成长度耗尽时允许一次有上限的重试；其他错误会明确提示，原笔记保留。分段整理失败或取消后，排队和仍在执行的整理请求会停止。
+
+对于智谱官方标准 API 的 `glm-5.3`／`glm-5.3-flash`，提高读图和分段整理的生成预算，并仅在中间整理阶段使用轻量推理。其他服务及模型保留原来的首轮预算与推理参数。最终精读报告继续使用原有模型设置，因此仍可能等待较久；这次适配不承诺固定耗时或科学解释质量。
+
+设置中的「单次输出上限」控制最终笔记生成，读图和分段整理有独立预算。详细行为与实际验证范围见 [v0.13.1 发布说明](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.13.1) 和 [App 验证记录](tests/README.md)。
 
 ## 外观与字号（v0.13.0）
 
