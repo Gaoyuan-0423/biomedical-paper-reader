@@ -58,6 +58,8 @@ from library_search import search_library
 import note_sources as ns
 import ui_preferences as ui
 from llm import (
+    CompletionError,
+    is_official_glm53,
     UnsafeURLError,
     UpstreamError,
     build_messages,
@@ -78,6 +80,8 @@ MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 DOI_RE = re.compile(r"\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)")
 RELATED_TTL_SECONDS = 7 * 24 * 3600
 VISION_MAX_SIDE = 1400
+FIGURE_TOKEN_BUDGETS = (1200, 4096)
+GLM53_FIGURE_TOKEN_BUDGETS = (8192, 16384)
 TAG_TIMEOUT_SECONDS = 60.0
 TAG_RETRY_DELAY_SECONDS = 1.0
 
@@ -1718,7 +1722,22 @@ async def _read_one_figure(settings: dict, d: Path, fig: dict, question: str = "
         {"type": "text", "text": prompt},
         {"type": "image_url", "image_url": {"url": f"data:{image['mime']};base64,{image['data']}"}},
     ]}]
-    observation = (await chat_once(settings["base_url"], settings["api_key"], settings["vision_model"], messages, max_tokens=1200)).strip()
+    # Reasoning models share the output budget between thinking and the final
+    # answer. Retry only a confirmed budget exhaustion with no answer, once.
+    budgets = (GLM53_FIGURE_TOKEN_BUDGETS
+               if is_official_glm53(settings["base_url"], settings["vision_model"])
+               else FIGURE_TOKEN_BUDGETS)
+    for budget in budgets:
+        try:
+            observation = (await chat_once(settings["base_url"], settings["api_key"],
+                                          settings["vision_model"], messages, max_tokens=budget)).strip()
+            break
+        except CompletionError as exc:
+            if exc.reason != "length":
+                raise
+            if budget == budgets[0] and not exc.has_content:
+                continue
+            raise UpstreamError("读图达到生成长度上限，未保存不完整结果，已有读图笔记已保留。请缩小选区或更换读图模型后重试。") from exc
     if not observation:
         raise UpstreamError("读图模型没有返回有效内容，已有读图笔记已保留。")
     return observation
@@ -1919,6 +1938,7 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1,
                     figures_for_prompt = [f for f in load_figures(d) if not f.get("parent")]
             body_text, final_sources = source_input, original_sources
             if len(source_input) > budget:
+                yield _sse({'type': 'stage', 'stage': 'condense', 'message': '正在分段整理全文，保留原文出处…'})
                 options = {'preserve_sources': True} if mode == 'deep' else {}
                 async for ev in condense_long_text(settings["base_url"], settings["api_key"], settings["model"], source_input,
                                                     max(3000, int(budget * .5)) if mode == 'deep' else budget, **options):
