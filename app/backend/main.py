@@ -13,6 +13,7 @@ import asyncio
 import base64
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -38,8 +39,8 @@ from figures import FigureStorageError, crop_figure, load_figures, parse_pdf, sa
 from caption_migration import upgrade_captions
 from note_assets import illustrate_notes, markdown_bundle
 from reading_state import read_positions, save_position
-from reading_workflow import (DERIVED_FIELDS, SidecarError, annotate, atomic_json, defaults, evidence_lock,
-                      load_evidence, materials_changed, public_evidence, source_info, storage_lock)
+from reading_workflow import (DERIVED_FIELDS, PAPER_SCHEMA_VERSION, SidecarError, annotate, atomic_json, defaults,
+                      evidence_lock, load_evidence, materials_changed, public_evidence, source_info, storage_lock)
 from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourcePatch, ensure_unique,
                              load_resources, normalize_resource, public_resource, public_resources,
                              related_resources, resource_summary, source_revision, validate_source)
@@ -73,6 +74,7 @@ APP_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 # Source installations retain their existing data location unless explicitly set.
 DATA_DIR = Path(os.environ["BIOREADER_DATA_DIR"]).expanduser() if os.environ.get("BIOREADER_DATA_DIR") else APP_DIR / "data"
 PAPERS_DIR = DATA_DIR / "papers"
+TRASH_DIR = DATA_DIR / "trash"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 FRONTEND_DIR = APP_DIR / "frontend"
 
@@ -126,6 +128,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _raw_meta(d: Path) -> dict:
+    return json.loads((d / "meta.json").read_text("utf-8"))
+
+
+def schema_version_of(meta: dict) -> int:
+    # Papers written before versioning carry no field and stay readable as version 1.
+    try:
+        return int(meta.get("schema_version", 1))
+    except (TypeError, ValueError, AttributeError):
+        return 1
+
+
 def load_settings() -> dict:
     data = dict(DEFAULT_SETTINGS)
     if SETTINGS_FILE.exists():
@@ -167,12 +181,19 @@ def paper_dir(paper_id: str) -> Path:
     d = PAPERS_DIR / paper_id
     if not d.is_dir():
         raise HTTPException(404, "paper not found")
+    if _future_schema(d):
+        raise HTTPException(409, "该文献由更新版本的 BioReader 写入，为避免误读已拒绝访问；请升级应用后再试。")
     return d
 
 
 def read_meta(d: Path) -> dict:
     with storage_lock:
-        meta = json.loads((d / "meta.json").read_text("utf-8"))
+        meta = _raw_meta(d)
+        version = schema_version_of(meta)
+        if version > PAPER_SCHEMA_VERSION:
+            raise HTTPException(409, f"该文献由更新版本的 BioReader 写入（数据版本 {version}，"
+                                     f"当前支持 {PAPER_SCHEMA_VERSION}），为避免误读已拒绝加载；请升级应用。")
+        meta.setdefault("schema_version", PAPER_SCHEMA_VERSION)
         meta.setdefault("has_file", (d / "paper.pdf").is_file())
         meta.setdefault("tags", [])
         meta.setdefault("tags_revision", 0)
@@ -197,6 +218,8 @@ def annotate_paper(d: Path, meta: dict) -> dict:
 
 def write_meta(d: Path, meta: dict) -> None:
     with storage_lock:
+        if schema_version_of(meta) > PAPER_SCHEMA_VERSION or _future_schema(d):
+            raise HTTPException(409, "该文献数据版本较新，已拒绝写入以免覆盖；请升级应用后再操作。")
         meta.setdefault('notes_revision', 0)
         meta.setdefault('notes_source_snapshot', '')
         defaults(meta)
@@ -216,6 +239,9 @@ def list_meta() -> list[dict]:
     if PAPERS_DIR.is_dir():
         for d in PAPERS_DIR.iterdir():
             if (d / "meta.json").is_file():
+                if _future_schema(d):
+                    items.append(_incompatible_summary(d, _raw_meta(d)))
+                    continue
                 items.append(summary_of(read_meta(d)))
     items.sort(key=lambda m: m.get("added_at", ""), reverse=True)
     return items
@@ -226,6 +252,58 @@ def new_paper_dir() -> tuple[str, Path]:
     d = PAPERS_DIR / paper_id
     d.mkdir(parents=True, exist_ok=True)
     return paper_id, d
+
+
+def _future_schema(d: Path) -> bool:
+    """True when the folder was written by a newer build; refuse to interpret it."""
+    try:
+        return schema_version_of(_raw_meta(d)) > PAPER_SCHEMA_VERSION
+    except (OSError, ValueError):
+        return False
+
+
+def _incompatible_summary(d: Path, meta: dict) -> dict:
+    """Future-version papers stay visible in the list but are never derived from."""
+    stub = dict(meta)
+    stub.setdefault("has_file", (d / "paper.pdf").is_file())
+    stub.setdefault("tags", [])
+    stub.setdefault("tags_revision", 0)
+    stub.setdefault("notes_revision", 0)
+    stub.setdefault("notes_source_snapshot", '')
+    stub.setdefault("journal", "")
+    stub.setdefault("supplements", [])
+    stub["schema_incompatible"] = True
+    return summary_of(stub)
+
+
+def trash_paper_dir(paper_id: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{32}", paper_id):
+        raise HTTPException(404, "paper not found")
+    d = TRASH_DIR / paper_id
+    if not d.is_dir():
+        raise HTTPException(404, "paper not found in trash")
+    return d
+
+
+def list_trash() -> list[dict]:
+    items = []
+    if TRASH_DIR.is_dir():
+        for d in TRASH_DIR.iterdir():
+            if not (d / "meta.json").is_file():
+                continue
+            try:
+                meta = _raw_meta(d)
+            except (OSError, ValueError):
+                logging.getLogger(__name__).warning('回收站文献 %s 的元数据无法读取，已跳过。', d.name)
+                continue
+            if not isinstance(meta, dict):
+                logging.getLogger(__name__).warning('回收站文献 %s 的元数据格式无效，已跳过。', d.name)
+                continue
+            meta.setdefault("title", "")
+            meta.setdefault("doi", "")
+            items.append(summary_of(meta))
+    items.sort(key=lambda m: m.get("trashed_at", ""), reverse=True)
+    return items
 
 
 # ---------- PDF handling ----------
@@ -397,6 +475,7 @@ def _validate_pdf_upload(filename: str, content: bytes) -> None:
 def blank_meta(paper_id: str) -> dict:
     return {
         "id": paper_id,
+        "schema_version": PAPER_SCHEMA_VERSION,
         "filename": "",
         "added_at": _now(),
         "favorite": False,
@@ -691,6 +770,9 @@ def _resource_entries(paper_id: str = ''):
     entries = []
     for directory in directories:
         if (directory / 'meta.json').is_file():
+            if _future_schema(directory):
+                logging.getLogger(__name__).warning('文献 %s 由更新版本的 BioReader 写入，未参与资源扫描。', directory.name)
+                continue
             meta = read_meta(directory)
             entries.extend({**record, 'paper_id': meta['id'], 'paper_title': meta['title'], 'paper_doi': meta.get('doi', '')}
                            for record in public_resources(directory, meta))
@@ -905,8 +987,10 @@ def _import_zotero_preview(directory, papers_directory, config, record, attachme
     item = record['item']
     with storage_lock:
         zi.same_config(directory, config)
-        found = zi.duplicate(list_meta(), config, item)
+        found = zi.duplicate(list_meta() + list_trash(), config, item)
         if found:
+            if not (PAPERS_DIR / found['id']).is_dir():
+                raise HTTPException(409, '回收站中已有该条目；请先恢复或彻底删除后再导入')
             return {'paper': read_meta(paper_dir(found['id'])), 'existing': True,
                     'message': '文献库已包含该条目，已保留原有内容；需要补充 PDF 时可在论文页附加文件。'}
     content, filename = None, ''
@@ -943,8 +1027,10 @@ def _import_zotero_preview(directory, papers_directory, config, record, attachme
             write_meta(stage, meta)
             with storage_lock:
                 zi.same_config(directory, config)
-                found = zi.duplicate(list_meta(), config, {**item, 'doi': meta.get('doi') or item.get('doi')})
+                found = zi.duplicate(list_meta() + list_trash(), config, {**item, 'doi': meta.get('doi') or item.get('doi')})
                 if found:
+                    if not (PAPERS_DIR / found['id']).is_dir():
+                        raise HTTPException(409, '回收站中已有该条目；请先恢复或彻底删除后再导入')
                     return {'paper': read_meta(paper_dir(found['id'])), 'existing': True,
                             'message': '该文献已导入，已保留已有正文和笔记。'}
                 Path(papers_directory).mkdir(parents=True, exist_ok=True)
@@ -974,6 +1060,10 @@ def search_saved_library(q: str = Query(min_length=2, max_length=200),
     with storage_lock:
         for directory in sorted(PAPERS_DIR.iterdir()) if PAPERS_DIR.is_dir() else []:
             if not re.fullmatch(r'[0-9a-f]{32}', directory.name) or not (directory / 'meta.json').is_file():
+                continue
+            if _future_schema(directory):
+                warnings.append({'paper_id': directory.name, 'paper_title': '版本较新的文献',
+                                 'document_id': '', 'message': '该文献由更新版本的 BioReader 写入，未参与搜索。'})
                 continue
             try:
                 meta = read_meta(directory)
@@ -1043,6 +1133,9 @@ async def import_doi(body: DoiIn):
         for existing in list_meta():
             if (existing.get("doi") or "").lower() == doi:
                 raise HTTPException(409, f"文献库里已有该 DOI：{existing['title']}")
+        for existing in list_trash():
+            if (existing.get("doi") or "").lower() == doi:
+                raise HTTPException(409, f"回收站中已有该 DOI：{existing['title']}；请先恢复或彻底删除后再导入")
         paper_id, d = new_paper_dir()
         meta = blank_meta(paper_id)
         meta.update({
@@ -1377,7 +1470,52 @@ async def auto_tag_endpoint(paper_id: str):
 @app.delete("/api/papers/{paper_id}")
 def delete_paper(paper_id: str):
     with storage_lock:
-        shutil.rmtree(paper_dir(paper_id))
+        d = paper_dir(paper_id)
+        TRASH_DIR.mkdir(parents=True, exist_ok=True)
+        target = TRASH_DIR / paper_id
+        if target.exists():
+            raise HTTPException(409, "回收站中已存在同名文献目录，请先恢复或彻底删除后再操作")
+        try:
+            meta = _raw_meta(d)
+            meta["trashed_at"] = _now()
+            atomic_json(d / "meta.json",
+                        {k: v for k, v in meta.items() if k not in DERIVED_FIELDS + RESOURCE_DERIVED_FIELDS})
+        except (OSError, ValueError):
+            pass
+        shutil.move(str(d), str(target))
+        return {"ok": True, "trashed_id": target.name}
+
+
+@app.get("/api/trash")
+def get_trash():
+    return list_trash()
+
+
+@app.post("/api/trash/{paper_id}/restore")
+def restore_paper(paper_id: str):
+    with storage_lock:
+        source = trash_paper_dir(paper_id)
+        if _future_schema(source):
+            raise HTTPException(409, "该文献由更新版本的 BioReader 写入，为避免误读已拒绝恢复；请升级应用后再试。")
+        target = PAPERS_DIR / paper_id
+        if target.exists():
+            raise HTTPException(409, "文献库中已存在同名文献目录，无法恢复")
+        PAPERS_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(target))
+        try:
+            meta = _raw_meta(target)
+            meta.pop("trashed_at", None)
+            atomic_json(target / "meta.json",
+                        {k: v for k, v in meta.items() if k not in DERIVED_FIELDS + RESOURCE_DERIVED_FIELDS})
+        except (OSError, ValueError):
+            pass
+        return {"ok": True, "paper": read_meta(target)}
+
+
+@app.delete("/api/trash/{paper_id}")
+def purge_paper(paper_id: str):
+    with storage_lock:
+        shutil.rmtree(trash_paper_dir(paper_id))
         return {"ok": True}
 
 

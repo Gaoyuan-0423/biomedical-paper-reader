@@ -11,6 +11,9 @@ from fastapi import HTTPException
 READING_STATUSES = ('unread', 'skimmed', 'reading', 'completed')
 READING_DECISIONS = ('pending', 'priority', 'reference', 'irrelevant')
 DERIVED_FIELDS = ('tasks', 'notes_stale', 'evidence_count', 'evidence_pending', 'storage_warnings')
+# Bump when an older build would misread data written by the new version; papers stamped
+# with a larger schema_version are refused instead of interpreted.
+PAPER_SCHEMA_VERSION = 1
 # Evidence writes are short local transactions; one lock avoids lost updates.
 evidence_lock = RLock()
 storage_lock = evidence_lock
@@ -61,6 +64,7 @@ def atomic_json(path, value):
 
 def defaults(meta):
     # Keep legacy values readable without using them to derive tasks.
+    meta.setdefault('schema_version', PAPER_SCHEMA_VERSION)
     if meta.get('reading_status') not in READING_STATUSES:
         meta['reading_status'] = 'unread'
     if meta.get('reading_decision') not in READING_DECISIONS:
