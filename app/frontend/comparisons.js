@@ -72,6 +72,7 @@
   }
   function isAvailable(src, m) {
     if (!m) return false;
+    if (src.kind === 'pdf') return m.documents.some(d => d.id === src.document_id && src.page <= d.pages && d.revision === src.source_revision);
     if (src.kind === 'page') return m.documents.some(d => d.id === src.document_id && src.page <= d.pages &&
       src.key === 'page:' + d.id + ':' + src.page + ':' + d.revision);
     return m.sources.some(item => item.key === src.key && item.available);
@@ -270,6 +271,7 @@
   async function click(s,e) {
     const el = e.target.closest('button'); if (!el || locked(s)) return;
     if (el.hasAttribute('data-build-draft')) return drafts.build(s);
+    if (el.hasAttribute('data-pdf-draft')) return drafts.build(s,true);
     if (el.hasAttribute('data-fold-paper')) return drafts.fold(s,el.dataset.foldPaper);
     if (el.hasAttribute('data-review')) return drafts.action(s,el);
     if (el.hasAttribute('data-new')) return choose(s,'');

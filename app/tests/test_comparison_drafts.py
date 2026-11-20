@@ -188,6 +188,56 @@ class ComparisonDraftTests(unittest.TestCase):
             self.assertEqual(self.client.put(self.url, json=request).status_code, 409)
         self.assertEqual(self.client.get(self.base).json(), [])
 
+    def test_opt_in_pdf_fills_only_missing_cohort_cells_then_checks_selected_block(self):
+        self.card(self.a, self.enrolled)
+        doc = self.client.post('/api/papers/' + self.a + '/supplements',
+                               files={'file': ('extra.pdf', fixture_pdf(marker=self.single))}).json()['supplements'][0]['id']
+        base = self.draft()[0]
+        self.assertNotIn('', base)
+        request = {**self.query, 'include_pdf': True}
+        result = self.client.post(self.base + '/draft', json=request).json()
+        self.assertEqual(result['scope'], 'saved_and_pdf')
+        paper = result['papers'][0]
+        self.assertEqual({(c['document_id'], c['examined']) for c in paper['pdf_coverage']}, {('main', 1), (doc, 1)})
+        cohorts = {c['cohort']: c['cells'] for c in paper['cohorts']}
+        self.assertEqual({c['source']['kind'] for c in cohorts['discovery cohort']['enrolled']['candidates']}, {'evidence'})
+        candidate = cohorts['']['single_cell']['candidates'][0]
+        source = candidate['source']
+        self.assertEqual((candidate['value'], source['kind'], source['document_id'], source['page']), ('6 patients','pdf',doc,1))
+        self.assertEqual(source['text'], self.single)
+        missing = result['papers'][1]['cohorts'][0]['cells']['paired']
+        self.assertEqual((missing['status'], missing['reason_source']['kind']), ('missing_supplement','pdf'))
+        url = self.base + '/material/' + self.a + '/source'
+        self.assertEqual(self.client.get(url,params={'key':source['key']}).json()['text'], self.single)
+        self.assertEqual(self.client.get(self.base+'/material/'+self.b+'/source',params={'key':source['key']}).status_code,409)
+        self.assertEqual(self.client.get(self.base).json(),[])
+        cell = {'column':'single_cell', 'cohort':'', 'value':'6（复核）', 'source_key':source['key']}
+        rows = [{'paper_id':self.a,'note':'Handwritten','cells':[cell]}, {'paper_id':self.b}]
+        saved = self.client.put(self.url, json={'revision':0,'question':request['question'],'rows':rows})
+        self.assertEqual(saved.status_code,200,saved.text)
+        snapshot = saved.json()['rows'][0]['cells'][0]
+        self.assertEqual((snapshot['source']['text'],snapshot['value']), (self.single,'6（复核）'))
+        original = main.paper_dir(self.a)/'supplements'/(doc+'.pdf')
+        original.write_bytes(fixture_pdf(marker=self.single + ' New revision'))
+        self.assertEqual(self.client.get(url,params={'key':source['key']}).status_code,409)
+        changed = {**rows[0], 'cells':[dict(cell,value='edited again')]}
+        self.assertEqual(self.client.put(self.url,json={'revision':1,'question':request['question'],'rows':[changed,rows[1]]}).status_code,409)
+        self.assertEqual(self.client.get(self.url).json()['rows'][0]['cells'][0],snapshot)
+
+    def test_pdf_budget_and_image_only_pages_show_what_was_unread(self):
+        pdf = PdfWriter()
+        pdf.add_blank_page(width=600,height=800)
+        pdf.add_page(PdfReader(io.BytesIO(fixture_pdf(marker=self.single))).pages[0])
+        blob = io.BytesIO()
+        pdf.write(blob)
+        doc = self.client.post('/api/papers/'+self.a+'/supplements',files={'file':('mixed.pdf',blob.getvalue())}).json()['supplements'][0]['id']
+        with patch.object(main.comparison_pdf,'PER_DRAFT_PAGES',4):
+            result = self.client.post(self.base+'/draft',json={**self.query,'include_pdf':True}).json()
+        paper = result['papers'][0]
+        coverage = next(c for c in paper['pdf_coverage'] if c['document_id'] == doc)
+        self.assertEqual((coverage['examined'],coverage['total'],coverage['no_text']), (1,2,[1]))
+        self.assertTrue(all(g['cells']['single_cell']['status']=='not_found' for g in paper['cohorts']))
+
     def test_ambiguous_counts_no_sample_conversion_and_positive_sites(self):
         source = {'kind': 'evidence'}
         for clause, col in [('20 samples were enrolled.', 'enrolled'), ('40 primary-metastasis pairs.', 'paired'),

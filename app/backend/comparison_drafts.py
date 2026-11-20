@@ -9,12 +9,14 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from chat_sources import load_document_pages
+import comparison_pdf
 
 Column = Literal['enrolled', 'paired', 'single_cell', 'sites']
 PaperId = Annotated[str, Field(pattern=r'^[0-9a-f]{32}$')]
 
 
 class DraftIn(BaseModel):
+    include_pdf: bool = Field(default=False, strict=True)
     question: str = Field(min_length=1, max_length=2000)
     paper_ids: list[PaperId] = Field(min_length=2, max_length=100)
     columns: list[Column] = Field(min_length=1, max_length=4)
@@ -231,7 +233,7 @@ def requested_pair_sites(question):
     return [primary, metastatic, *(specified if len(specified) == 1 else [])]
 
 
-def paper_draft(directory, meta, material, columns, keys=None, question=''):
+def paper_draft(directory, meta, material, columns, keys=None, question='', pdf_budget=0):
     sources, warnings = verified_sources(directory, meta, material, keys)
     attachments = attachment_identities(directory, meta, material)
     cohorts = {}
@@ -240,10 +242,15 @@ def paper_draft(directory, meta, material, columns, keys=None, question=''):
     def new_cells():
         return {column: {'status': 'not_found', 'candidates': []} for column in columns}
 
-    for source in sources:
+    saved_cells, clipped = set(), set()
+
+    def consider(source):
         for cohort, clause in labelled_units(source['text']):
             table = '、'.join(match.group().strip() for match in supp_table.finditer(clause))
             for column in columns:
+                cell_id = (cohort, column)
+                if source['kind'] == 'pdf' and cell_id in saved_cells:
+                    continue
                 value = proposed_value(column, clause, source)
                 if column == 'paired' and value and not all(site.search(clause) for site in pairing_sites):
                     continue
@@ -253,6 +260,11 @@ def paper_draft(directory, meta, material, columns, keys=None, question=''):
                     cohorts[cohort] = new_cells()
                 cell = cohorts[cohort][column]
                 if value:
+                    if source['kind'] != 'pdf':
+                        saved_cells.add(cell_id)
+                    elif len(cell['candidates']) >= comparison_pdf.PER_CELL:
+                        clipped.add(cell_id)
+                        continue
                     item = {'value': value, 'source': source}
                     if item not in cell['candidates']:
                         cell['candidates'].append(item)
@@ -263,7 +275,15 @@ def paper_draft(directory, meta, material, columns, keys=None, question=''):
                     status = supplement_status(table, attachments)
                     if cell['status'] == 'not_found' or status == 'check_supplement':
                         cell.update(status=status, reason_source=source, supplement_label=table)
+    for source in sources:
+        consider(source)
+    coverage = []
+    if pdf_budget or (keys and any(key.startswith('pdf:') for key in keys)):
+        for source in comparison_pdf.scan(directory, meta, material, coverage, budget=pdf_budget, keys=keys):
+            consider(source)
+    if clipped:
+        warnings.append(f'同一格最多显示 {comparison_pdf.PER_CELL} 个 PDF 候选。')
     if not cohorts:
         cohorts[''] = new_cells()
-    return {'paper_id': meta['id'], 'title': material['title'], 'warnings': [*material['warnings'], *warnings],
+    return {'paper_id': meta['id'], 'title': material['title'], 'pdf_coverage': coverage, 'warnings': [*material['warnings'], *warnings],
             'cohorts': [{'cohort': name, 'cells': cells} for name, cells in cohorts.items()]}

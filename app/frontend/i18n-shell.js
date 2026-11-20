@@ -1,6 +1,10 @@
 (function (global) {
   'use strict';
   global.BioI18n.register({
+    '加载更多':'Load more', 'Zotero 原笔记':'Original Zotero notes', '从本机 Zotero 文库迁移':'Import a local Zotero library',
+    'Zotero 资料目录或 zotero.sqlite 的路径':'Zotero data directory or zotero.sqlite path', '选择资料目录':'Choose data directory',
+    '选择数据库文件':'Choose database file', '预览本地文库':'Preview local library', '导入所选条目':'Import selected items',
+    '核对这句话':'Review this claim', '本次读图':'Figure coverage', '关闭复核':'Close review', '为这几篇补正文':'Get full text for these papers',
     '补充附件': 'Supplementary files', '下载选中附件': 'Download selected files',
     '编号 / 链接': 'IDs / Links', '按编号或链接导入': 'Import by ID or link',
     'DOI、PMID、文章网页或 PDF 链接': 'DOIs, PMIDs, article page URLs or PDF links',

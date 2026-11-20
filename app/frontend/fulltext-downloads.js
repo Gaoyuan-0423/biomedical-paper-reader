@@ -140,6 +140,12 @@
     const view = show(document.getElementById('fulltext-single'), [paper], 'all', 'paper/' + paper.id, true);
     if (!jobs.has(view.key)) void run(view, [paper]);
   }
-  window.BioFulltext = {init: options => { hooks = options; }, openSingle,
+  function openImported(papers, scope) {
+    const missing = papers.filter(p => !p.has_file && !p.schema_incompatible);
+    hooks.show();
+    return show(document.getElementById('fulltext-single'), missing, scope,
+      'import/' + scope + '/' + missing.map(p => p.id).sort().join(','));
+  }
+  window.BioFulltext = {openImported, init: options => { hooks = options; }, openSingle,
     project: (root, scope, papers) => show(root, papers, scope, scope), busy: () => paperRequests.size > 0};
 })();

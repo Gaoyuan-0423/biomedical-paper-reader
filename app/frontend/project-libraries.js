@@ -147,7 +147,7 @@
     } else {
       window.BioFigureShelf.open($('project-figures'), papers.map(p => p.id), async (id, figure) => {
         if (await window.BioFigureShelf.jump(id, figure) !== false) close();
-      });
+      }, active);
     }
   }
   async function archive(record, archived) {

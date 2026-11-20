@@ -185,3 +185,24 @@ test('the field-source picker and accepted snapshot render in Chinese and Englis
     assert.ok(!html.includes('undefined'));
   }
 });
+
+test('explicit PDF fallback displays the examined range, scanned pages and distinct source',async()=>{
+  const item = {...src,kind:'pdf',key:'pdf:main:p2-b0:0:digest',source_revision:'r1',text:'We enrolled 12 patients.'};
+  const preview = {scope:'saved_and_pdf', papers:[{paper_id:A,title:'Paper',warnings:[],
+    pdf_coverage:[{document_name:'Main.pdf',examined:2,total:4,no_text:[1],error:''}],
+    cohorts:[{cohort:'',cells:{enrolled:{status:'candidates',candidates:[{value:'12 patients',source:item}]},
+      paired:{status:'not_found',candidates:[]}}}]}]};
+  const h=harness({preview,additionalMaterials:[item]});
+  await h.open('all');
+  h.input('data-question',{value:'How many were enrolled?'});
+  for(const id of [A,B]) await h.change('data-paper',{id,checked:true});
+  await h.click('data-pdf-draft');
+  const req=h.calls.find(([url])=>url.endsWith('/draft'))[1];
+  assert.equal(JSON.parse(req.body).include_pdf,true);
+  assert.match(h.root.innerHTML,/已查页数／总页数/);
+  assert.match(h.root.innerHTML,/需 OCR 后再核对/);
+  assert.match(h.root.innerHTML,/已查的 PDF 页面及已保存材料中未找到/);
+  assert.match(h.root.innerHTML,/PDF 补查原句/);
+  await h.click('data-review',{id:A,col:'enrolled',review:'source'});
+  assert.equal(h.jumps.length,1);
+});

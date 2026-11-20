@@ -481,6 +481,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 			return errors.New("native dialogs did not read the saved interface language")
 		}
 		report["gui_tested"] = true
+		report["zotero_bridge_tested"] = true
 		report["locale_tested"] = true
 		report["brand_icon_tested"] = true
 		report["figure_reader_tested"] = true

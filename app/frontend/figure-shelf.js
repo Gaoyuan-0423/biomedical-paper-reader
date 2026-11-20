@@ -16,7 +16,7 @@
     if (Object.keys(params).length) el.dataset.i18nParams = JSON.stringify(params);
     return el;
   }
-  async function open(container, paperIds, openFigure) {
+  async function open(container, paperIds, openFigure, scope = 'all') {
     const ids = [...new Set(paperIds)];
     if (!hooks || !container) return;
     const session = { count: 0 };
@@ -31,7 +31,8 @@
     const status = node('p', 'hint'); status.setAttribute('role', 'status');
     const grid = node('div', 'figure-shelf-grid');
     const more = ui('button', '加载更多', {}, 'btn'); more.type = 'button'; more.hidden = true;
-    container.replaceChildren(form, status, grid, more);
+    const deck = window.BioFigureDeck?.open(container,scope,hooks);
+    container.replaceChildren(...(deck ? [deck.panel] : []),form,status,grid,more);
     let query = '', offset = 0;
     const live = version => sessions.get(container) === session && session.count === version;
     function card(figure) {
@@ -40,6 +41,7 @@
         const image = node('img'); image.loading = 'lazy'; image.alt = figure.label;
         image.src = hooks.image(figure.paper_id, figure.id); article.append(image);
       }
+      if (deck && figure.has_image) article.append(deck.pick(figure));
       article.append(node('strong', '', figure.label), node('p', '', figure.paper_title));
       const source = node('small');
       source.append(figure.document_id === 'main' ? ui('span', '正文') : node('span', '', figure.document_name), ' · ', ui('span', '第 {page} 页', { page: figure.page }));

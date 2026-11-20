@@ -114,3 +114,18 @@ test('stopping after the active link keeps unprocessed links selected', async ()
   assert.equal(h.row(0).children[0].checked,false);
   assert.equal(h.row(1).children[0].checked,true);
 });
+
+test('successful import offers only this batch of missing PDFs in its captured project', async () => {
+  const h=harness([previewRow(0),previewRow(1,{is_link:true}),previewRow(2,{status:'trashed'})],'project-a');
+  let request;
+  h.hooks.batchPdf=(ids,scope)=>{request={ids:Array.from(ids),scope};};
+  await h.preview();
+  assert.equal(h.node('doi-batch-pdf').hidden,true);
+  const pending=h.apply();
+  h.writes[0].resolve({rows:[saved(0,null)]}); await next();
+  h.writes[1].resolve({rows:[saved(1,'downloaded')]});
+  await pending;
+  assert.equal(h.node('doi-batch-pdf').hidden,false);
+  h.node('doi-batch-pdf').onclick();
+  assert.deepEqual(request,{ids:['paper-0'],scope:'project-a'});
+});

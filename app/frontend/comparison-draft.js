@@ -7,6 +7,10 @@
     '入组人数':'Participants enrolled', '完整配对人数':'Participants with complete pairs',
     '实际进入单细胞分析的人数':'Participants in single-cell analysis', '取样部位':'Sampling sites',
     '比较字段':'Comparison fields', '论文与队列':'Papers and cohorts', '为勾选的论文起草比较表':'Draft a table for selected papers',
+    '从正文和补充 PDF 补查缺项':'Find missing fields in main and supplementary PDFs',
+    'PDF 补查原句':'Excerpt found in PDF', '已查的 PDF 页面及已保存材料中未找到':'Not found in the examined PDF pages or saved excerpts',
+    '本次 PDF 补查范围':'PDF pages examined', '已查页数／总页数':'Pages examined / total', '未查页数':'Pages not examined',
+    '无可读文字的页码':'Pages without readable text', '需 OCR 后再核对':'OCR needed for text review',
     '正在起草…':'Drafting…', '从已保存的证据卡和字段摘录起草。逐格核对后采纳，再保存比较。':'Uses saved evidence cards and field excerpts. Review and accept each cell, then save the comparison.',
     '请至少勾选一个比较字段。':'Select at least one comparison field.',
     '请先移除已不在课题库中的论文，再起草。':'Remove papers that are no longer in this library before drafting.',
@@ -38,13 +42,14 @@
       return '<div class="cmp-draft-controls"><fieldset><legend>' + ui('比较字段') + '</legend><div class="cmp-draft-columns">' +
         columns.map(k => '<label><input type="checkbox" data-draft-column="' + k + '"' + (selected(s).includes(k) ? ' checked' : '') +
           '>' + ui(labels[k]) + '</label>').join('') + '</div></fieldset><div><button type="button" class="btn" data-build-draft>' +
-        ui(s.drafting ? '正在起草…' : '为勾选的论文起草比较表') + '</button></div><p class="hint">' +
+        ui(s.drafting ? '正在起草…' : '为勾选的论文起草比较表') + '</button> <button type="button" class="btn btn-ghost" data-pdf-draft>' +
+        ui('从正文和补充 PDF 补查缺项') + '</button></div><p class="hint">' +
         ui('从已保存的证据卡和字段摘录起草。逐格核对后采纳，再保存比较。') + '</p></div><div data-draft-review>' + review(s) + '</div>';
     }
     function citation(source, index, material, accepted) {
       if (!source) return '';
       const stale = accepted && material && !isAvailable(source,material);
-      return '<blockquote>' + escape(source.text) + '</blockquote><button type="button" class="btn btn-ghost" data-review="source" data-index="' +
+      return (source.kind === 'pdf' ? '<small>' + ui('PDF 补查原句') + '</small>' : '') + '<blockquote>' + escape(source.text) + '</blockquote><button type="button" class="btn btn-ghost" data-review="source" data-index="' +
         index + '"' + (stale ? ' disabled' : '') + '>' + ui('查看原句') + ' · ' +
         escape([source.document_name, 'p. ' + source.page, source.figure_label].filter(Boolean).join(' · ')) + '</button>' +
         (stale ? '<small class="cmp-warning">' + ui('来源或记录已变化，保留保存时的内容。') + '</small>' : '');
@@ -74,10 +79,18 @@
           (proposal.supplement_label ? ' · ' + escape(proposal.supplement_label) : '') + '</span>' +
           citation(proposal.reason_source,'reason',m,false) + '</div>';
       } else if (proposal) {
-        content = '<small>' + ui('已保存的材料中未找到') + '</small>';
+        content = '<small>' + ui(s.preview?.scope === 'saved_and_pdf' ? '已查的 PDF 页面及已保存材料中未找到' : '已保存的材料中未找到') + '</small>';
       } else content = '—';
       return '<td data-draft-paper="' + escape(row.paper_id) + '" data-draft-cohort="' + escape(cohort) + '" data-draft-col="' + column +
         '"><strong class="cmp-mobile-col">' + ui(labels[column]) + '</strong>' + content + '</td>';
+    }
+    function pdfCoverage(paper) {
+      if (!paper?.pdf_coverage?.length) return '';
+      const rows = paper.pdf_coverage.map(doc => '<li>' + escape(doc.document_name) + ' · ' + ui('已查页数／总页数') + ' ' +
+        doc.examined + '/' + doc.total + (doc.examined < doc.total ? ' · ' + ui('未查页数') + ' ' + (doc.total-doc.examined) : '') +
+        (doc.no_text.length ? ' · ' + ui('无可读文字的页码') + ' ' + escape(doc.no_text.join(', ')) + ' · ' + ui('需 OCR 后再核对') : '') +
+        (doc.error ? ' · ' + escape(doc.error) : '') + '</li>').join('');
+      return '<details open><summary>' + ui('本次 PDF 补查范围') + '</summary><ul>' + rows + '</ul></details>';
     }
     function review(s) {
       const papers = new Map((s.preview?.papers || []).map(p => [p.paper_id,p]));
@@ -97,7 +110,7 @@
         return '<tbody><tr><th scope="rowgroup" colspan="' + (visible.length+1) + '"><button class="btn btn-ghost" type="button" aria-expanded="' +
           !folded + '" data-fold-paper="' + escape(row.paper_id) + '"><span aria-hidden="true">' + (folded ? '▸' : '▾') + '</span> ' +
           escape(paper?.title || row.title || row.paper_id) + '</button>' +
-          (paper?.warnings || []).map(w => '<p class="cmp-warning">' + escape(w) + '</p>').join('') + '</th></tr>' + groups + '</tbody>';
+          (paper?.warnings || []).map(w => '<p class="cmp-warning">' + escape(w) + '</p>').join('') + pdfCoverage(paper) + '</th></tr>' + groups + '</tbody>';
       }).join('');
       return '<div class="cmp-table-wrap"><table class="cmp-review-table"><thead><tr><th scope="col">' + ui('论文与队列') + '</th>' +
         visible.map(col => '<th scope="col">' + ui(labels[col]) + '</th>').join('') + '</tr></thead>' + bodies + '</table></div>';
@@ -108,13 +121,13 @@
       refresh(s);
       s.root.querySelector('[data-fold-paper="' + id + '"]')?.focus?.();
     }
-    async function build(s) {
+    async function build(s, includePdf = false) {
       if (!s.draft.question.trim() || s.draft.rows.length < 2) return status(s,t('请先填写研究问题并选择至少两篇不同的论文。'),true);
       if (!selected(s).length) return status(s,t('请至少勾选一个比较字段。'),true);
       if (s.draft.rows.some(r => !s.papers.some(p => p.id === r.paper_id))) return status(s,t('请先移除已不在课题库中的论文，再起草。'),true);
       s.drafting = true; render(s);
       try {
-        const preview = await request(base(s) + '/draft', {question:s.draft.question, paper_ids:s.draft.rows.map(r => r.paper_id), columns:selected(s)}, 'POST');
+        const preview = await request(base(s) + '/draft', {question:s.draft.question, paper_ids:s.draft.rows.map(r => r.paper_id), columns:selected(s),include_pdf:includePdf}, 'POST');
         clearPreview(s); s.preview = preview;
         s.drafting = false; render(s);
       } catch (err) {

@@ -115,6 +115,7 @@ func completedWindowResult(result <-chan error, smoke bool) error {
 }
 
 func runWindow(service *serviceProcess, smoke bool) error {
+	mygo.BindAs("ZoteroPicker", &zoteroPicker{dataDirectory: service.dataDirectory})
 	text := func(chinese, english string) string { return nativeText(service.dataDirectory, chinese, english) }
 	// Completion is explicit and synchronized: an early normal App.Run return
 	// must not turn an unfinished native diagnostic into a successful result.
@@ -172,6 +173,14 @@ const response = await fetch('/api/papers');
 window.__bioreaderSmokeStage = 'library';
 const papers = await response.json();
 if (!response.ok || !papers.length || !document.title.includes('BioReader') || !document.querySelector('#toast')) return false;
+window.__bioreaderSmokeStage = 'Zotero native bridge';
+if (typeof window.mygo?.call !== 'function') return false;
+try {
+  await window.mygo.call('ZoteroPicker.ShowItem', '');
+  return false;
+} catch (err) {
+  if (!/Zotero 条目地址无效|Invalid Zotero item URL/.test(String(err?.message || err))) return false;
+}
 const pdfResponse = await fetch('/api/papers/' + papers[0].id + '/file');
 window.__bioreaderSmokeStage = 'PDF load';
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';

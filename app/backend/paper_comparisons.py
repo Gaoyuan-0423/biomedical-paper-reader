@@ -211,7 +211,12 @@ def reviewed_cells(row, old, current, verified):
             continue
         if (*identity, cell.source_key) not in verified:
             raise HTTPException(409, '候选摘录、来源文件或队列已变更，请重新起草并复核。')
-        source = resolve_source(cell.source_key, current) if current else None
+        if cell.source_key.startswith('pdf:'):
+            snapshot = verified[(*identity, cell.source_key)]
+            source = snapshot if any(d['id'] == snapshot['document_id'] and d['revision'] == snapshot['source_revision']
+                                     for d in current.get('documents', [])) else None
+        else:
+            source = resolve_source(cell.source_key, current) if current else None
         if not source:
             raise HTTPException(409, '采纳的出处已变更，请重新起草并复核。')
         result.append({**cell.model_dump(), 'source': source})
