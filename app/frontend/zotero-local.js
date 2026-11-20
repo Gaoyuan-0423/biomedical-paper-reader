@@ -11,6 +11,7 @@
     '全部作为补充 PDF':'Import all as supplementary PDFs', '已保留当前正文，所选 PDF 将作为补充材料。':'The main PDF will be kept. Selected PDFs are added as supplements.',
     '已导入':'Imported', '已写入全部文献，课题归集失败，可重试。':'Saved to All papers. Retry to add it to the project.',
     '请勾选指定的正文 PDF。':'Select the PDF designated as the main paper.',
+    'Windows 无法复制 Zotero 文库。请退出 Zotero 后重试，若仍失败请检查文库读取权限和临时目录写入权限。':'Windows could not copy the Zotero library. Quit Zotero and try again. If it still fails, check read access to the library and write access to the temporary folder.',
     '正在预览本机文库…':'Opening local library…', '本地来源':'Local source', '在 Zotero 中打开条目':'Open item in Zotero', '请先填写资料路径。':'Enter the library path first.',
     '本次已导入 {count} 篇。':'Imported {count} papers.', '刷新论文列表失败':'Could not refresh the paper list',
   };
@@ -83,7 +84,7 @@
         await hooks.request('POST','/api/zotero-local/preview',{path:$('zlocal-path').value.trim(),library_id:scope});
       token=response.preview; more=response.has_more; items.push(...response.items); response.items.forEach(addCard);
       $('zlocal-more').hidden=!more; status(items.length?'':t('本地文库没有可导入的条目。'));
-    } catch (error) { status(error.message); }
+    } catch (error) { status(t(error.message)); }
     finally { lock(false); }
   }
   async function importItems() {
