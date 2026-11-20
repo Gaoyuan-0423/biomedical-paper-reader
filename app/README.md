@@ -11,7 +11,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.14.0 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.14.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.15.0 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.15.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 
@@ -116,7 +116,8 @@ Markdown、Word 和公众号导出使用可读的文件名、PDF 页码与摘录
 
 ## 文献收集与下载
 
-- 在侧栏 DOI／PMID 入口粘贴一批编号，预览后选中需要的条目并加入当前课题。可以用 DOI 或 PubMed 链接，含 DOI 的出版商链接也可识别。
+- 在侧栏「编号 / 链接」粘贴文章网页、PDF 直链、DOI 或 PMID，可以混合输入。先核对预览里的题名和已有条目，再勾选加入当前课题。选中网址时会自动尝试获取正文；只输入编号时，先加入题录。
+- 网页地址中没有 DOI 也可以尝试导入。程序查看页面公开的论文题录和 PDF 链接；遇到 PDF 直链则从文档识别论文。无法识别论文的网页会在预览列出原因。题录已识别但全文暂不可取时仍可保存题录，稍后重试。
 - 缺正文时点击「查找全文」。在「课题库 → 补齐全文」可以勾选多篇依次查找，过程中可停止后续任务。按篇查看结果，PDF 获取后进入原有条目。身份不确定时可打开来源核对并手动附加文件。重开应用可再次筛选仍缺正文的条目。
 - 在论文页主动查找补充材料。可用附件来自公开来源的论文记录，选择所需文件后获取。PDF 进入补充阅读，表格和 ZIP 作为附件保留。没有清单时可从文章官方网站手动取得材料。
 - 「课题库 → PubMed 检索」保存检索式。点「检查新增文献」查询最近发表的最多 50 个匹配 PMID。可将尚未看过的结果送入编号预览，也可主动标记本次结果已看。服务不在后台定时查询。
@@ -232,8 +233,8 @@ PDF 导入只支持配置目录中已经存在的 Zotero 存储附件（`importe
 - **长 PDF**：只渲染可见页及相邻页，滚远后释放画布；跳页优先显示目标页，单页加载失败可点击重试。横竖版混排按最宽页适宽；手动放大仍可横向滚动。图库卡片的「查看原文」自动切换到对应文件和页码。
 - **导入 PDF**：点击或拖拽（≤80MB）；几何解析器自动产出**双栏正确阅读顺序**的全文（含章节标题识别），
   并按图注锚定**提取全部主图与子图**（图注合并整理、期刊页眉页脚过滤、面板字母切分）。
-- **按 DOI 或 PMID 导入文献**。在侧栏点「DOI / PMID」，一次粘贴最多 50 个编号，用换行或空格分隔。也可粘贴 PubMed 链接、doi.org 链接或路径中含完整 DOI 的出版社链接。点「预览条目」查看 Crossref 或 Europe PMC 返回的题名，核对已有文献、批内重复、回收站记录和无效编号。
-  勾选需要的论文后点「加入所选文献」。在课题库中发起时，已有论文会沿用原条目和笔记。查询失败可单独重试，已加入的文献可直接打开并附加 PDF。
+- **按编号或网址导入文献**。在侧栏点「编号 / 链接」，用换行或空格分隔，每批最多 50 项。支持文章页、PDF 直链、DOI 和 PMID。预览时可核对题名、已有文献、批内重复和回收站记录。
+  勾选需要的论文后点「加入所选文献」。在课题库中发起时，已有论文会沿用原条目和笔记。已识别的条目在勾选后才归集。网址可以为库内缺正文的论文补 PDF；已有正文与笔记继续沿用。应用通过本机网络访问公开网页和 PDF，登录或验证页面可在浏览器中打开，取得文件后可手动附加。
 - **元数据补全**：文献标题旁「补全文献信息」按钮用 CrossRef 补作者/年份/期刊（已有字段不覆盖）。
 - **收藏 / 搜索 / 标签**：精读／速读笔记成功保存后自动识别主题标签；已有文献可在标题下点击「识别标签」补全，无需重写笔记。也可回车手动添加、点 × 移除，侧栏标签常显并可直接筛选。自动识别使用当前文本模型，增加一次简短请求；未配置 API Key 时可继续手动管理。每次识别最多等待60秒，超时、临时网络／限流或无效格式会自动重试一次。识别只补充标签，不删除已有标签；失败可重试，不影响已保存笔记。
 
@@ -325,7 +326,7 @@ app/data/
 | POST | `/api/papers/{id}/figures/read` | 批量读图（SSE，观察缓存） |
 | POST | `/api/papers/{id}/read?mode=deep\|quick` | SSE 流式生成笔记 |
 
-出站请求包括你配置的 LLM 接口（SSRF 校验 + 重定向逐跳复检）、`api.crossref.org`、`api.semanticscholar.org`、按需调用的 PubMed E-utilities、PMC 公共文件与索引、Europe PMC、OpenAlex 和受支持的文章及 PDF 网站，固定的 GEO 元数据端点 `www.ncbi.nlm.nih.gov/geo/query/acc.cgi`，以及你明确配置并调用的 Zotero MCP 地址。MCP 默认连接本机 `127.0.0.1:8000`；只调用检索、元数据和附件列表工具，不执行服务器提供的任意工具或下载其返回的任意 URL。
+出站请求包括你配置的 LLM 接口（SSRF 校验 + 重定向逐跳复检）、`api.crossref.org`、`api.semanticscholar.org`、按需调用的 PubMed E-utilities、PMC 公共文件与索引、Europe PMC、OpenAlex，以及导入时粘贴的公开文章网址、其正文 PDF 链接和重定向目标，固定的 GEO 元数据端点 `www.ncbi.nlm.nih.gov/geo/query/acc.cgi`，以及你明确配置并调用的 Zotero MCP 地址。MCP 默认连接本机 `127.0.0.1:8000`；只调用检索、元数据和附件列表工具，不执行服务器提供的任意工具或下载其返回的任意 URL。
 
 ## 已知边界
 

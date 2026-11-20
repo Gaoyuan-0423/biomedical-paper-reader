@@ -302,3 +302,9 @@ Windows 首轮运行发现并修复：合成测试文件未明确 UTF-8 编码�
 使用临时文献库，通过 Chrome 从已保存的 PubMed 检索式查到 PMID 36537061，预览题录、加入文献库并打开 10 页正文。下载的 PDF 共 471,593 字节，符合 PMC 清单公布的 MD5。再次查找会识别已附加的正文。另从同一篇文章的补充附件列表勾选 XLSX，下载后导出得到 696,554 字节的表格。
 
 单元测试覆盖按库过滤和逐篇重试、导入去重、下载与手动附加并发、附件身份及校验失败，以及按检索结果快照标记已看。[正文下载](test_fulltext_download.py) · [批量队列](test_fulltext_downloads.cjs) · [补充材料](test_remote_supplements.py) · [批量题录](test_identifier_import.py) · [保存的检索式](test_saved_pubmed.py)
+
+## 2026-11-20 v0.15.0 文章网址与 PDF 直链
+
+在独立的临时文献库内，通过 Chrome 从侧栏「编号 / 链接」导入 JMLR 的 *Scikit-learn: Machine Learning in Python*。文章网址不含 DOI，预览识别出题名，确认后将 6 页正文附到所选课题的论文上。另用 PMC10009416 官方 PDF 直链实测识别题录、入库与正文下载。arXiv 示例在一次请求中识别出题名但 PDF 下载超时，界面保留题录并显示重试操作。远程站点可用性按次判断。
+
+回归覆盖混合输入、直接 PDF 的指纹比对、选中后才写入、失败与重试、跨课题复用、导入过程中移出课题或删除文献，以及网页和 PDF 的身份核对。[公开网址读取](test_article_links.py) · [混合预览](test_identifier_url_preview.py) · [确认与保存](test_article_link_import.py) · [前端交互](test_identifier_import.cjs)

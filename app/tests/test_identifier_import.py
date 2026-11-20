@@ -45,6 +45,9 @@ class IdentifierImportTests(unittest.TestCase):
 
     def test_mixed_preview_apply_existing_and_trash_protection(self):
         pasted = 'https://journals.example/article/10.1234/study(3)?src=email\nPMID: 12345 bad https://pubmed.ncbi.nlm.nih.gov/12345/'
+        # Public links now also look up the article page and its main PDF.
+        self.start(patch.object(main.article_links, 'inspect_url', AsyncMock(side_effect=main.article_links.ArticleLinkError('Offline fixture'))))
+        self.start(patch.object(main.oa, 'obtain', AsyncMock(return_value={'outcome':'not_found', 'message':'Fixture without full text'})))
         pre = self.preview(pasted)
         self.assertEqual([r['status'] for r in pre['rows']],['new','duplicate','invalid','duplicate'])
         self.assertEqual(pre['rows'][0]['pmid'],PMID)

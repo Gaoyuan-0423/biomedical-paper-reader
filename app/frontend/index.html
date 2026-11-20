@@ -59,7 +59,7 @@
         </div>
         <div class="import-row">
           <label class="btn btn-primary upload-btn" for="file-input" tabindex="0" role="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></label>
-          <button id="btn-doi-import" class="btn" title="按 DOI 或 PMID 导入" data-i18n-title="按 DOI 或 PMID 导入"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg>DOI / PMID</button>
+          <button id="btn-doi-import" class="btn" title="按编号或链接导入" data-i18n-title="按编号或链接导入"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg><span data-i18n="编号 / 链接">编号 / 链接</span></button>
         </div>
         <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
         <input type="file" id="attach-input" accept="application/pdf,.pdf" hidden>
@@ -116,7 +116,7 @@
             <span class="empty-eyebrow"><span data-i18n="你的下一次发现，从这里开始">你的下一次发现，从这里开始</span></span>
             <h2 class="empty-title"><span data-i18n="留一点时间，读懂一篇好论文">留一点时间，读懂一篇好论文</span></h2>
             <p class="empty-copy" id="pdf-empty-text"><span data-i18n="从文献库选择一篇论文，或导入新的 PDF。">从文献库选择一篇论文，或导入新的 PDF。</span><br><span data-i18n="原文、图表与思考，在这里并排展开。">原文、图表与思考，在这里并排展开。</span></p>
-            <div class="empty-actions"><button id="btn-empty-import" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></button><button id="btn-empty-doi" class="btn btn-ghost"><span data-i18n="按 DOI 或 PMID 导入">按 DOI 或 PMID 导入</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button></div>
+            <div class="empty-actions"><button id="btn-empty-import" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></button><button id="btn-empty-doi" class="btn btn-ghost"><span data-i18n="按编号或链接导入">按编号或链接导入</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button></div>
             <button id="find-fulltext" class="btn btn-primary" hidden><span data-i18n="查找全文">查找全文</span></button>
             <button id="btn-attach-pdf" class="btn btn-primary" hidden><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="附加 PDF 文件">附加 PDF 文件</span></button>
             <div class="welcome-footnote"><span data-i18n="原文对照">原文对照</span><span>·</span><span data-i18n="图表精读">图表精读</span><span>·</span><span data-i18n="笔记沉淀">笔记沉淀</span></div>
@@ -302,15 +302,16 @@
   <div class="modal-backdrop" id="doi-modal" role="dialog" aria-modal="true" aria-labelledby="doi-title" hidden>
     <div class="modal identifier-import-modal">
       <div class="modal-head">
-        <h3 id="doi-title" data-i18n="按 DOI 或 PMID 导入">按 DOI 或 PMID 导入</h3>
+        <h3 id="doi-title" data-i18n="按编号或链接导入">按编号或链接导入</h3>
         <button class="btn btn-icon btn-ghost" id="doi-close" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
       </div>
       <div class="modal-body">
         <p id="identifier-target" class="hint"></p>
-        <label class="field"><span data-i18n="论文编号或含编号的链接">论文编号或含编号的链接</span>
-          <textarea id="doi-input" rows="3" maxlength="20000" placeholder="10.1234/example&#10;PMID: 12345678"></textarea>
-          <small data-i18n="一次最多 50 项，可用换行或空格分隔。">一次最多 50 项，可用换行或空格分隔。</small>
+        <label class="field"><span data-i18n="DOI、PMID、文章网页或 PDF 链接">DOI、PMID、文章网页或 PDF 链接</span>
+          <textarea id="doi-input" rows="3" maxlength="20000" placeholder="10.1234/example&#10;PMID: 12345678&#10;https://example.org/article.pdf"></textarea>
+          <small data-i18n="可混合输入，最多 50 项，以空格或换行分隔。">可混合输入，最多 50 项，以空格或换行分隔。</small>
         </label>
+        <p class="hint" data-i18n="确认后将所选论文加入上方文献库，并为链接条目获取缺少的正文。">确认后将所选论文加入上方文献库，并为链接条目获取缺少的正文。</p>
         <p id="identifier-status" role="status"></p>
         <div id="identifier-rows"></div>
       </div>

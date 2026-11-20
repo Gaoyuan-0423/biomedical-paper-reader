@@ -520,7 +520,7 @@
         uiHtml(() => formatDate(p.added_at)),
         p.notes_updated_at ? '<span class="badge badge-notes">' + uiHtml(() => tr('有笔记')) + '</span>' : '',
         p.figures_count ? '<span class="badge badge-fig">' + uiHtml(() => tr('图 {count}', { count: p.figures_count })) + '</span>' : '',
-        ['doi', 'pmid'].includes(p.source) && !p.has_file ? '<span class="badge badge-src">' + uiHtml(() => tr('缺 PDF')) + '</span>' : '',
+        ['doi', 'pmid', 'url'].includes(p.source) && !p.has_file ? '<span class="badge badge-src">' + uiHtml(() => tr('缺 PDF')) + '</span>' : '',
       ].filter(Boolean).map((m) => '<span>' + m + '</span>').join('');
       const tagRow = (p.tags || []).length
         ? '<div class="paper-item-tags">' + p.tags.slice(0, 4).map((t) => '<span>#' + escapeHtml(t) + '</span>').join('') + '</div>' : '';
@@ -3110,22 +3110,24 @@
     window.addEventListener('pagehide', () => { rememberReadingPosition(); flushReadingPositions(); });
   }
 
+  async function refreshAttachedPdf(id, metadata) {
+    const meta = metadata || await api.paper(id);
+    updateListItem(meta);
+    const paper = state.current;
+    if (paper?.id !== id || paper.has_file || !meta.has_file) return;
+    for (const field of ['has_file','pages','filename','figures_count','document_revisions','material_revision','notes_stale','fulltext_source']) {
+      if (Object.hasOwn(meta,field)) paper[field] = meta[field];
+    }
+    renderDocuments(); renderHead(); renderWorkflow();
+    if (state.documentId === 'main') await loadPdf();
+    if (state.current === paper) await fetchFigures();
+  }
+
   async function init() {
     window.BioFulltext?.init({
       fetch: (id, scope) => api.json(paperPath(id, '/fetch-fulltext?library_id=' + encodeURIComponent(scope)), {method:'POST'}),
       ready: () => !state.generating && !state.materialBusy && canLeaveResearch(),
-      attached: async (id, metadata) => {
-        const meta = metadata || await api.paper(id);
-        updateListItem(meta);
-        const paper = state.current;
-        if (paper?.id !== id || paper.has_file || !meta.has_file) return;
-        for (const field of ['has_file','pages','filename','figures_count','document_revisions','material_revision','notes_stale','fulltext_source']) {
-          if (Object.hasOwn(meta,field)) paper[field] = meta[field];
-        }
-        renderDocuments(); renderHead(); renderWorkflow();
-        if (state.documentId === 'main') await loadPdf();
-        if (state.current === paper) await fetchFigures();
-      },
+      attached: refreshAttachedPdf,
       show: () => openModal('fulltext-modal','fulltext-close'), toast,
     });
     $('find-fulltext').onclick = () => window.BioFulltext.openSingle(state.current);
@@ -3187,6 +3189,8 @@
     window.BioIdentifierImport?.init({
       request: (path, body) => api.jsonBody('POST', path, body), show: openModal, hide: closeModal,
       currentScope: () => window.BioProjects?.activeId() || 'all',
+      onAttached: (id, paper) => state.current?.id === id && refreshAttachedPdf(id, paper),
+      readyForDownload: () => !state.generating && !state.materialBusy && canLeaveResearch(),
       scopeName: id => [...$('project-scope').options].find(opt => opt.value === id)?.textContent,
       refresh: async () => { await loadPapers(); await window.BioProjects?.refresh(); },
       openPaper: async id => {

@@ -2,8 +2,10 @@
   'use strict';
   global.BioI18n.register({
     '补充附件': 'Supplementary files', '下载选中附件': 'Download selected files',
-    '按 DOI 或 PMID 导入': 'Import by DOI or PMID', '论文编号或含编号的链接': 'Identifiers or links containing a DOI or PMID',
-    '一次最多 50 项，可用换行或空格分隔。': 'Enter up to 50 items, separated by spaces or line breaks.',
+    '编号 / 链接': 'IDs / Links', '按编号或链接导入': 'Import by ID or link',
+    'DOI、PMID、文章网页或 PDF 链接': 'DOIs, PMIDs, article page URLs or PDF links',
+    '可混合输入，最多 50 项，以空格或换行分隔。': 'Mix up to 50 items, separated by spaces or line breaks.',
+    '确认后将所选论文加入上方文献库，并为链接条目获取缺少的正文。': 'Confirm to add selected papers to the library above and look for missing PDFs for links.',
     '加入所选文献': 'Add selected papers', '预览条目': 'Preview records',
     'PubMed 检索': 'PubMed searches', '查找全文': 'Find full text', '补齐全文': 'Missing PDFs',
     '课题库': 'Projects', '课题文献库': 'Project libraries', '当前课题库': 'Current library',
