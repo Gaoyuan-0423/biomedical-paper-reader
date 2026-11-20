@@ -58,6 +58,7 @@ import zotero_import as zi
 from zotero_mcp import ZoteroMCPClient, MCPError
 from library_search import search_library
 import paper_comparisons as comparisons
+import comparison_drafts
 import figure_shelf as fs
 import note_sources as ns
 import identifier_import as ids
@@ -727,6 +728,28 @@ def verify_comparison_source(library_id: str, paper_id: str, key: str = Query(mi
         return {**source, 'metadata_revision': doc['metadata_revision']}
 
 
+def comparison_draft_paper(paper_id, columns, keys=None, question=''):
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        meta = read_meta(directory)
+        material = comparisons.material(directory, meta)
+    return comparison_drafts.paper_draft(directory, meta, material, columns, keys, question)
+
+
+@app.post('/api/comparisons/{library_id}/draft')
+def draft_comparison(library_id: str, body: comparison_drafts.DraftIn):
+    def require_membership():
+        if not set(body.paper_ids).issubset(project_paper_ids(library_id)):
+            raise HTTPException(409, '所选论文已不在当前课题库。')
+
+    with storage_lock:
+        require_membership()
+    papers = [comparison_draft_paper(pid, body.columns, question=body.question) for pid in body.paper_ids]
+    with storage_lock:
+        require_membership()
+    return {'scope': 'saved_sources', 'columns': body.columns, 'papers': papers}
+
+
 @app.get('/api/comparisons/{library_id}/{comparison_id}')
 def get_comparison(library_id: str, comparison_id: str):
     with storage_lock:
@@ -736,9 +759,28 @@ def get_comparison(library_id: str, comparison_id: str):
 
 @app.put('/api/comparisons/{library_id}/{comparison_id}')
 def save_comparison(library_id: str, comparison_id: str, body: comparisons.ComparisonIn):
+    # Extract/check PDF pages outside the shared storage lock. At commit, check the
+    # comparison revision, project membership and source identities again.
+    with storage_lock:
+        allowed = project_paper_ids(library_id)
+        path = comparisons.record_path(DATA_DIR, library_id, comparison_id)
+        previous = comparisons.load(path) if path.exists() else {}
+        if previous.get('request_digest') == comparisons.request_digest(body):
+            return previous
+        if previous.get('revision', 0) != body.revision:
+            raise HTTPException(409, '比较记录已在其他窗口更新，请重新打开后合并修改。')
+        changed = comparisons.changed_cells(previous, body)
+        if not set(changed).issubset(allowed):
+            raise HTTPException(409, '所选论文已不在当前课题库。')
+    verified = {}
+    for paper_id, cells in changed.items():
+        draft = comparison_draft_paper(paper_id, {c.column for c in cells}, {c.source_key for c in cells}, body.question)
+        verified[paper_id] = {(group['cohort'], col, candidate['source']['key'])
+                              for group in draft['cohorts'] for col, data in group['cells'].items()
+                              for candidate in data['candidates']}
     with storage_lock:
         return comparisons.save(DATA_DIR, library_id, comparison_id, body, project_paper_ids(library_id),
-                                comparison_material)
+                                comparison_material, verified)
 
 
 # ---------- data and code resources ----------

@@ -2,7 +2,8 @@
 (function (global) {
   'use strict';
   const words = {
-    '已保存的比较': 'Saved comparisons', '新建比较': 'New comparison', '研究问题': 'Research question',
+    '加入当前比较':'Add to current comparison', '已加入当前比较，保存比较后生效。':'Added to the current comparison. Save the comparison to keep it.',
+    '当前比较或所选课题已变更。':'The selected comparison or library has changed.', '字段出处':'Field excerpt', '已定位':'Located on cited page', '已保存的比较': 'Saved comparisons', '新建比较': 'New comparison', '研究问题': 'Research question',
     '参与比较的论文': 'Papers to compare', '选择至少两篇论文': 'Select at least two papers',
     '论文与数据编号': 'Paper and data accessions', '原文与图表依据': 'Sources and figures',
     '此论文对问题的证据': 'How this paper bears on the question', '未判断': 'Unassessed',
@@ -12,7 +13,7 @@
     '保留修改并另存为新比较，或重新载入已保存版本。': 'Keep your changes as a new comparison, or reload the saved version.',
     '尚未保存': 'Unsaved changes', '比较已保存': 'Comparison saved', '刷新材料': 'Refresh materials',
     '读取材料中…': 'Loading materials…', '论文已移出本库或不可用，保留先前记录。': 'Paper is outside this library or unavailable. Earlier records are retained.',
-    '选取证据卡或图表': 'Select an evidence card or figure', '添加依据': 'Add source', '添加原文页': 'Add PDF page',
+    '选取证据卡、图表或字段出处': 'Select an evidence card, figure or field excerpt', '添加依据': 'Add source', '添加原文页': 'Add PDF page',
     '原文文件': 'Source PDF', 'PDF 页码': 'PDF page', '页码超出所选文件范围。': 'Page is outside this PDF.',
     '证据卡': 'Evidence card', '图表': 'Figure', '原文页': 'PDF page', '已核查': 'Verified', '待核查': 'Pending',
     '不支持该判断': 'Rejected', '移除此依据': 'Remove source', '查看原文': 'Open source',
@@ -40,15 +41,15 @@
   const option = (value, label) => '<option value="' + escape(value) + '">' + escape(label) + '</option>';
   const translatedOption = (value, label, selected = false) => '<option value="' + escape(value) + '" data-i18n="' + escape(label) + '"' + (selected ? ' selected' : '') + '>' + escape(t(label)) + '</option>';
   const relations = { unassessed:'未判断', supports:'支持', qualifies:'部分支持或需限定', contradicts:'相反证据', unreported:'未报告相关结果' };
-  const kinds = { page:'原文页', figure:'图表', evidence:'证据卡' };
-  const statuses = { verified:'已核查', pending:'待核查', rejected:'不支持该判断' };
+  const kinds = { field:'字段出处', page:'原文页', figure:'图表', evidence:'证据卡' };
+  const statuses = { located:'已定位', unavailable:'来源不可用', verified:'已核查', pending:'待核查', rejected:'不支持该判断' };
   const states = new Map();
   let active;
   const uid = () => Array.from(global.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
   const fresh = () => ({id:uid(), revision:0, question:'', synthesis:'', rows:[]});
   const base = s => '/api/comparisons/' + encodeURIComponent(s.libraryId);
-  async function request(url, data) {
-    const response = await global.fetch(url, data ? {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
+  async function request(url, data, method = 'PUT') {
+    const response = await global.fetch(url, data ? {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
     const result = await response.json();
     if (!response.ok) {
       const err = new Error(typeof result.detail === 'string' ? t(result.detail) : t('请检查问题、所选文献和文本长度。'));
@@ -58,6 +59,7 @@
   }
   const isActive = s => active === s && s.root?.dataset.comparisonScope === s.libraryId;
   const findPaper = (s, id) => s.papers.find(p => p.id === id);
+  const newRow = p => ({paper_id:p.id, title:p.title, population:'', contrast:'', relation:'unassessed', note:'', sources:[],cells:[]});
   const findRow = (s, id) => s.draft.rows.find(r => r.paper_id === id);
   function status(s, message, error = false) {
     if (!isActive(s)) return;
@@ -74,6 +76,8 @@
       src.key === 'page:' + d.id + ':' + src.page + ':' + d.revision);
     return m.sources.some(item => item.key === src.key && item.available);
   }
+  const drafts = global.BioComparisonDraft.create({escape,ui,t,request,base,status,dirty,render,jump,isAvailable});
+  const locked = s => s.busy || s.drafting;
   function pageRef(doc, page) {
     return {key:'page:' + doc.id + ':' + page + ':' + doc.revision, kind:'page', document_id:doc.id,
       document_name:doc.name, page, figure_id:'', label:'', text:'', status:''};
@@ -81,7 +85,7 @@
   function sourceCard(src, m, index) {
     const valid = isAvailable(src, m), location = [src.document_name, 'p. ' + src.page, src.figure_label].filter(Boolean).join(' · ');
     return '<div class="cmp-ref"><div>' + ui(kinds[src.kind]) + (src.status ? ' · ' + ui(statuses[src.status]) : '') +
-      (src.label ? ' · <strong>' + escape(src.label) + '</strong>' : '') + '</div>' +
+      (src.label ? ' · <strong>' + (src.kind === 'field' ? ui(src.label) : escape(src.label)) + '</strong>' : '') + '</div>' +
       (src.text ? '<blockquote>' + escape(src.text) + '</blockquote>' : '') +
       '<div class="cmp-ref-actions"><button type="button" class="btn btn-ghost" data-jump="' + index + '"' +
       (valid ? '' : ' disabled') + field('查看原文') + '>' + escape(location) + '</button>' +
@@ -96,8 +100,8 @@
     if (s.errors.has(id)) return cards + '<p class="cmp-error">' + escape(s.errors.get(id)) + '</p>' + retry;
     if (!m) return cards + '<p class="hint">' + ui('读取材料中…') + '</p>';
     const candidates = m.sources.filter(src => src.available && !row.sources.some(item => item.key === src.key));
-    const picker = candidates.length ? '<div class="cmp-line"><select data-candidate' + field('选取证据卡或图表') + '>' +
-      candidates.map(src => option(src.key, t(kinds[src.kind]) + ' · ' + src.label + ' · p. ' + src.page)).join('') +
+    const picker = candidates.length ? '<div class="cmp-line"><select data-candidate' + field('选取证据卡、图表或字段出处') + '>' +
+      candidates.map(src => option(src.key, t(kinds[src.kind]) + ' · ' + (src.kind === 'field' ? t(src.label) : src.label) + ' · p. ' + src.page)).join('') +
       '</select><button type="button" class="btn" data-attach>' + ui('添加依据') + '</button></div>' : '';
     const pages = m.documents.length ? '<div class="cmp-line"><select data-document' + field('原文文件') + '>' +
       m.documents.map(d => option(d.id, d.name)).join('') + '</select><input data-page type="number" min="1" max="600" value="1"' +
@@ -156,6 +160,7 @@
       tr.querySelector('.cmp-accessions').textContent = s.materials.get(id)?.accessions.join(' · ') || '';
       tr.querySelector('[data-samples]').innerHTML = sampleHTML(s.materials.get(id));
     }
+    if (row?.cells?.length && !s.root.querySelector('[data-draft-review] textarea:focus')) drafts.refresh(s);
     refreshOverlap(s);
   }
   function versions(s) {
@@ -170,12 +175,12 @@
     s.root.innerHTML = '<div class="cmp-board"><div class="cmp-toolbar"><label>' + ui('已保存的比较') +
       '<select data-comparisons' + field('选择比较记录') + '></select></label><button type="button" class="btn" data-new>' +
       ui('新建比较') + '</button><button type="button" class="btn btn-ghost" data-reload>' + ui('重新载入') + '</button></div>' +
-      '<fieldset class="cmp-fields"' + (s.busy ? ' disabled' : '') + '><label>' + ui('研究问题') +
+      '<fieldset class="cmp-fields"' + (locked(s) ? ' disabled' : '') + '><label>' + ui('研究问题') +
       '<textarea rows="2" maxlength="2000" data-question>' + escape(s.draft.question) + '</textarea></label><details class="cmp-selection"' +
       ((s.selectionOpen ?? rows.length < 2) ? ' open' : '') + '><summary>' + ui('参与比较的论文') + ' (' + rows.length + ')</summary><div class="cmp-papers">' +
       (s.papers.length || extra.length ? [...s.papers,...extra].map(p => '<label><input type="checkbox" data-paper="' + escape(p.id) + '"' +
         (findRow(s,p.id) ? ' checked' : '') + '><span>' + escape(p.title || p.id) + '</span></label>').join('') : ui('本库没有可选的论文。')) + '</div></details>' +
-      '<p class="cmp-warning" data-overlap hidden></p>' +
+      drafts.controls(s) + '<p class="cmp-warning" data-overlap hidden></p>' +
       (rows.length ? '<div class="cmp-table-wrap"><table class="cmp-table"><thead><tr><th>' + ui('论文与数据编号') + '</th><th>' + ui('研究对象') + ' / ' + ui('关键对照') + '</th><th>' + ui('原文与图表依据') +
         '</th><th>' + ui('此论文对问题的证据') + '</th></tr></thead><tbody>' + rows.map(r => rowHTML(s,r)).join('') + '</tbody></table></div>' :
         '<p class="hint">' + ui('选择至少两篇论文') + '</p>') +
@@ -184,9 +189,9 @@
       ui(s.busy ? '正在保存…' : '保存比较') + '</button><button type="button" class="btn" data-copy' + (s.conflict ? '' : ' hidden') + '>' +
       ui('另存为新比较') + '</button><span role="status" data-cmp-status></span></div></fieldset></div>';
     versions(s); refreshOverlap(s);
-    status(s, s.busy ? t('正在保存…') : s.dirty ? t('尚未保存') : s.draft.revision ? t('比较已保存') : '');
+    status(s, s.drafting ? t('正在起草…') : s.busy ? t('正在保存…') : s.dirty ? t('尚未保存') : s.draft.revision ? t('比较已保存') : '');
   }
-  function switchAllowed(s) { return !s.busy && (!s.dirty || global.confirm(t('换到其他比较会丢弃当前未保存的修改，继续吗？'))); }
+  function switchAllowed(s) { return !locked(s) && (!s.dirty || global.confirm(t('换到其他比较会丢弃当前未保存的修改，继续吗？'))); }
   async function choose(s, id) {
     if (!switchAllowed(s)) { versions(s); return; }
     const ticket = ++s.view;
@@ -194,7 +199,7 @@
     try {
       const next = id ? await request(base(s) + '/' + id) : fresh();
       if (ticket !== s.view) return;
-      s.draft = next; s.selectionOpen = null; s.dirty = false; s.conflict = false; s.busy = false; render(s);
+      drafts.clearPreview(s); s.draft = next; s.selectionOpen = null; s.dirty = false; s.conflict = false; s.busy = false; render(s);
       await Promise.all(next.rows.map(r => loadMaterial(s,r.paper_id)));
     } catch (err) { if (ticket === s.view) { s.busy = false; render(s); status(s, err.message, true); } }
   }
@@ -207,14 +212,16 @@
     } catch (err) { if (epoch === s.epoch) status(s, err.message, true); }
   }
   async function save(s, asNew = false) {
-    if (s.busy) return;
+    if (locked(s)) return;
     if (!s.draft.question.trim() || s.draft.rows.length < 2) { status(s,t('请先填写研究问题并选择至少两篇不同的论文。'),true); return; }
     const d = s.draft;
+    if (d.rows.some(r => r.cells?.some(cell => !cell.value.trim()))) { status(s,t('采纳的字段值不能为空。'),true); return; }
     // Keep the same ID on network retry so a successful write cannot create a duplicate.
     if (asNew) { d.id = uid(); d.revision = 0; s.conflict = false; }
-    const body = {revision:d.revision, question:d.question, synthesis:d.synthesis, rows:d.rows.map(r => ({
+    const body = {revision:d.revision, question:d.question, synthesis:d.synthesis,
+      ...(d.columns || d.rows.some(r => r.cells?.length) ? {columns:drafts.selected(s)} : {}), rows:d.rows.map(r => ({
       paper_id:r.paper_id, population:r.population || '', contrast:r.contrast || '',
-      relation:r.relation, note:r.note, references:r.sources.map(src => src.key)
+      relation:r.relation, note:r.note, cells:(r.cells || []).map(({cohort,column,value,source_key}) => ({cohort,column,value,source_key})), references:r.sources.map(src => src.key)
     }))};
     s.busy = true; render(s);
     try {
@@ -226,9 +233,13 @@
     }
   }
   function edit(s,e) {
-    if (s.busy) return;
+    if (locked(s)) return;
     const el = e.target, row = findRow(s,el.closest('[data-row]')?.dataset.row);
-    if (el.hasAttribute('data-question')) s.draft.question = el.value;
+    if (el.hasAttribute('data-draft-value') || el.hasAttribute('data-accepted-value')) return drafts.input(s,el);
+    if (el.hasAttribute('data-question')) {
+      s.draft.question = el.value;
+      if (s.preview) { drafts.clearPreview(s); drafts.refresh(s); }
+    }
     else if (el.hasAttribute('data-synthesis')) s.draft.synthesis = el.value;
     else if (row && el.hasAttribute('data-population')) row.population = el.value;
     else if (row && el.hasAttribute('data-contrast')) row.contrast = el.value;
@@ -240,22 +251,27 @@
   function change(s,e) {
     const el = e.target;
     if (el.hasAttribute('data-comparisons')) return choose(s, el.value);
-    if (s.busy || !el.hasAttribute('data-paper')) return;
+    if (locked(s)) return;
+    if (el.hasAttribute('data-draft-column')) return drafts.toggle(s,el);
+    if (!el.hasAttribute('data-paper')) return;
     s.selectionOpen = !!el.closest('details')?.open;
     const id = el.dataset.paper, old = findRow(s,id);
     if (el.checked && !old) {
       const paper = findPaper(s,id); if (!paper) return;
-      s.draft.rows.push({paper_id:id, title:paper.title, population:'', contrast:'', relation:'unassessed', note:'', sources:[]});
+      s.draft.rows.push(newRow(paper));
     } else if (!el.checked && old) {
-      if ((old.note.trim() || old.population?.trim() || old.contrast?.trim() || old.relation !== 'unassessed' || old.sources.length) &&
+      if ((old.note.trim() || old.population?.trim() || old.contrast?.trim() || old.relation !== 'unassessed' || old.sources.length || old.cells?.length) &&
           !global.confirm(t('该论文有未保留到其他位置的判断和依据，确定从本次比较移除吗？'))) { el.checked = true; return; }
       s.draft.rows = s.draft.rows.filter(r => r.paper_id !== id);
     }
-    dirty(s); render(s);
+    drafts.clearPreview(s); dirty(s); render(s);
     if (el.checked) return loadMaterial(s,id);
   }
   async function click(s,e) {
-    const el = e.target.closest('button'); if (!el || s.busy) return;
+    const el = e.target.closest('button'); if (!el || locked(s)) return;
+    if (el.hasAttribute('data-build-draft')) return drafts.build(s);
+    if (el.hasAttribute('data-fold-paper')) return drafts.fold(s,el.dataset.foldPaper);
+    if (el.hasAttribute('data-review')) return drafts.action(s,el);
     if (el.hasAttribute('data-new')) return choose(s,'');
     if (el.hasAttribute('data-save')) return save(s);
     if (el.hasAttribute('data-copy')) return save(s,true);
@@ -265,15 +281,9 @@
     const m = s.materials.get(id);
     if (el.hasAttribute('data-retry')) return loadMaterial(s,id);
     if (el.hasAttribute('data-jump')) {
-      const src = row.sources[Number(el.dataset.jump)], epoch = s.epoch, view = s.view;
-      if (!src) return;
-      try {
-        const live = await request(base(s) + '/material/' + id + '/source?key=' + encodeURIComponent(src.key));
-        if (!isActive(s) || s.root.closest?.('[hidden]') || epoch !== s.epoch || view !== s.view || !row.sources.includes(src)) return;
-        return await s.openSource(id,live.document_id,live.page,live.figure_id,live.metadata_revision);
-      } catch (err) {
-        await loadMaterial(s,id); status(s,err.message,true); return;
-      }
+      const src = row.sources[Number(el.dataset.jump)];
+      if (src) return jump(s,id,src,() => row.sources.includes(src));
+      return;
     }
     if (el.hasAttribute('data-drop')) row.sources.splice(Number(el.dataset.drop),1);
     else if (m && el.hasAttribute('data-attach')) {
@@ -289,6 +299,18 @@
     } else return;
     dirty(s); refreshMaterial(s,id);
   }
+  async function jump(s,id,src,stillSelected) {
+    const epoch = s.epoch, view = s.view, token = {};
+    s.jumpToken = token;
+    try {
+      const live = await request(base(s) + '/material/' + id + '/source?key=' + encodeURIComponent(src.key));
+      if (s.jumpToken !== token || locked(s) || !isActive(s) || s.root.closest?.('[hidden]') || epoch !== s.epoch || view !== s.view || !stillSelected()) return;
+      return await s.openSource(id,live.document_id,live.page,live.figure_id,live.metadata_revision,...(live.bbox ? [live.bbox] : []));
+    } catch (err) {
+      if (s.jumpToken !== token || !isActive(s) || epoch !== s.epoch || view !== s.view) return;
+      await loadMaterial(s,id); status(s,err.message,true);
+    }
+  }
   async function open(root, {libraryId,papers,openSource}) {
     let s = states.get(libraryId);
     if (!s) {
@@ -296,11 +318,31 @@
       states.set(libraryId,s);
     }
     active = s; Object.assign(s,{root,papers:papers.filter(p => !p.schema_incompatible),openSource});
+    if (!s.edits) drafts.clearPreview(s);
     ++s.epoch; s.materials.clear(); s.errors.clear();
     root.dataset.comparisonScope = libraryId;
     root.oninput = e => edit(s,e); root.onchange = e => change(s,e); root.onclick = e => click(s,e);
     render(s);
     await Promise.all([reloadList(s), ...s.draft.rows.map(r => loadMaterial(s,r.paper_id))]);
   }
-  global.BioCompare = {open, canLeave:() => !active?.busy, hasUnsaved:(id) => [...states.values()].some(s => (!id || s.libraryId === id) && (s.dirty || s.busy))};
+  function evidenceTarget(scope,id) {
+    const s = states.get(scope);
+    return s && !locked(s) && findPaper(s,id) && s.draft.question.trim() ? s.draft : null;
+  }
+  async function attachEvidence(scope,id,record,target,stillCurrent) {
+    if (!target || evidenceTarget(scope,id) !== target) throw new Error(t('当前比较或所选课题已变更。'));
+    const s = states.get(scope);
+    const material = await request(base(s) + '/material/' + id);
+    if (!stillCurrent() || evidenceTarget(scope,id) !== target) throw new Error(t('当前比较或所选课题已变更。'));
+    const src = material.sources.find(src => src.kind === 'evidence' && src.key.startsWith('evidence:' + record.id + ':') &&
+      src.available && src.text === (record.quote || '') && src.label === record.claim &&
+      src.page === record.page && src.document_id === record.document_id && src.status === record.status);
+    if (!src) throw new Error(t('所选证据或原文已变更，请刷新材料后重新选择。'));
+    let row = findRow(s,id);
+    if (row?.sources.some(item => item.key === src.key)) return;
+    if (!row) { row = newRow(findPaper(s,id)); target.rows.push(row); drafts.clearPreview(s); }
+    row.sources.push(src);
+    s.materials.set(id,material); s.errors.delete(id); dirty(s); render(s);
+  }
+  global.BioCompare = {open,evidenceTarget,attachEvidence, canLeave:() => !active || !locked(active), hasUnsaved:(id) => [...states.values()].some(s => (!id || s.libraryId === id) && (s.dirty || s.busy))};
 })(window);

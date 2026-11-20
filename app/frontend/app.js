@@ -1781,7 +1781,7 @@
     if (window.BioResources) window.BioResources.open(state.current);
   }
 
-  async function openProjectSource(paperId, documentId, page, figureId, revision) {
+  async function openProjectSource(paperId, documentId, page, figureId, revision, bbox) {
     const paper = state.papers.find(p => p.id === paperId);
     if (!paper || state.generating || state.materialBusy || !canLeaveResearch()) return false;
     state.pendingPaper = paper;
@@ -1798,7 +1798,7 @@
       const figure = state.figures.find(f => f.id === figureId && (f.document_id || 'main') === documentId && f.page === page);
       if (state.current?.id !== paperId || !figure) { toast(tr('来源已变化，请重新打开比较。'), 'error'); return false; }
     }
-    return jumpChatSource({paper_id: paperId, document_id: documentId, page}, 'preview');
+    return jumpChatSource({paper_id: paperId, document_id: documentId, page, bbox}, 'preview');
   }
 
   async function openLibrarySearchResult(result, navigation = {}) {

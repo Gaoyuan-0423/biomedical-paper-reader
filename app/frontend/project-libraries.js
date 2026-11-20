@@ -122,7 +122,7 @@
   }
   function close() {
     if (!visible || !canNavigate()) return false;
-    draft = null; visible = false; hooks.hideModal('project-modal'); return true;
+    draft = null; visible = false; hooks.hideModal('project-modal'); window.BioEvidence?.refreshComparison?.(); return true;
   }
   function activePapers() { return scoped(hooks.papers()).filter(p => !p.schema_incompatible); }
   function renderSection() {
