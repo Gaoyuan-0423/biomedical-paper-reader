@@ -122,7 +122,7 @@
   }
   function close() {
     if (!visible || !canNavigate()) return false;
-    draft = null; visible = false; hooks.hideModal('project-modal'); return true;
+    draft = null; visible = false; hooks.hideModal('project-modal'); window.BioEvidence?.refreshComparison?.(); return true;
   }
   function activePapers() { return scoped(hooks.papers()).filter(p => !p.schema_incompatible); }
   function renderSection() {
@@ -147,7 +147,7 @@
     } else {
       window.BioFigureShelf.open($('project-figures'), papers.map(p => p.id), async (id, figure) => {
         if (await window.BioFigureShelf.jump(id, figure) !== false) close();
-      });
+      }, active);
     }
   }
   async function archive(record, archived) {

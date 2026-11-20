@@ -52,3 +52,15 @@
   .zotero-import-status { flex-basis: 100%; }
   #zotero-footer .btn:last-child { margin-left: auto; }
 }
+
+.zotero-local-entry { padding: 12px 22px 0; }
+.zotero-local-actions { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+#zlocal-path { width:100%; }
+#zlocal-list article { border-top:1px solid var(--border); padding:10px 0; }
+#zlocal-list label { display:flex; gap:7px; align-items:baseline; }
+#zlocal-list input { flex:0 0 auto; width:auto; }
+#zlocal-list details { padding:4px 0 4px 16px; }
+#zlocal-list pre, #zlocal-notes pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
+#zlocal-notes { position:relative; }
+#zlocal-notes > div { position:absolute; z-index:5; right:0; width:min(370px,65vw); max-height:50vh; overflow:auto; padding:12px; border:1px solid var(--border); border-radius:6px; background:var(--panel,Canvas); }
+#zlocal-status { flex:1; white-space:pre-line; overflow-wrap:anywhere; }

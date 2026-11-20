@@ -7,8 +7,14 @@ from fastapi import HTTPException
 from chat_sources import document_source, file_revision, load_document_pages
 
 
+# English PDF blocks can fold case and remove Python's ASCII whitespace in one pass.
+_ASCII_SEARCH_TABLE = {i: None if chr(i).isspace() else ord(chr(i).lower()) for i in range(128)}
+
+
 def _normalized(value):
-    return ''.join(c for c in unicodedata.normalize('NFKC', value).casefold() if not c.isspace())
+    if value.isascii():
+        return value.translate(_ASCII_SEARCH_TABLE)
+    return ''.join(unicodedata.normalize('NFKC', value).casefold().split())
 
 
 def _snippet(text, query):

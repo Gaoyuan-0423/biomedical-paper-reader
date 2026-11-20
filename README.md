@@ -6,7 +6,19 @@
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
 
-版本：v0.15.0。现在可以粘贴文章网页或 PDF 链接，预览后加入当前课题库，并获取可用的正文。
+版本：v0.16.0。可以把以前读过的原句放进跨篇比较表，给报告中的关键结论留下复核依据，也可把收藏的图编成组会幻灯片。
+
+| 想完成的工作 | 桌面版入口与结果 |
+|---|---|
+| 比较多篇论文的入组与取样 | 在「课题库 → 跨篇比较」勾选论文和字段。先按队列查看已有证据卡和字段出处，再按需从正文、Methods 和补充 PDF 补查空格；从原页逐格采纳、修改或跳过。 |
+| 复核报告中的一句结论 | 选中报告中的原句，点「核对这句话」。把邻近引文、图注、方法和干预相关片段放在一起复核，保存修订、支持程度和判断依据。 |
+| 核查这份报告实际用过哪些图 | 点「本次读图」分别查看正文图和补图的视觉观察、仅用图注、未处理及读图失败记录。可补读单图、手动补入漏提取的图。 |
+| 从导入一路读到比较 | 批量导入后可「为这几篇补正文」，读完图可「记为证据」，证据卡可「加入当前比较」。 |
+| 跟进课题的新文献 | 保存 PubMed 检索式。下次启动时补查上次成功检查以来新收录的文献，积压结果每页最多 50 篇，可分批预览导入、标记已看。 |
+| 准备组会 | 在「课题库 → 收藏图表」选图、排序，从已存读图笔记起草或手工填写英文内容和中文讲者备注，导出带论文、图号和 PDF 页码的可编辑 PPTX。 |
+| 迁入本机 Zotero 文献 | 在 Zotero 入口选择「从本机 Zotero 文库迁移」，预览题录、笔记、本机 PDF 和重复项，勾选所需材料导入课题。 |
+
+全库检索已优化文字匹配。5 篇与 128 篇合成论文的端到端测量涵盖原实现、Python 标准库优化和 Rust 原型，桌面发行版使用标准库优化。[基准与复跑方式](evals/benchmarks/README.md)
 
 这里的版本指当前分支源码；[正式 Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) 需单独发布，可能晚于 `main`。安装当前源码可按下文克隆或更新；维护者发布步骤见[发布维护](RELEASING.md)。
 
@@ -45,20 +57,24 @@
 
 #### macOS / Windows 桌面版
 
-下载入口：[v0.15.0 桌面版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.15.0)。本版通过双平台验收后按正式 Release 和 Latest 发布。按系统选择同版附件，以发布页实际提供为准：
+下载入口：[v0.16.0 桌面版](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.16.0)。本版通过双平台验收后按正式 Release 和 Latest 发布。按系统选择同版附件，以发布页实际提供为准：
 
 | 系统 | 下载与打开 |
 |---|---|
-| Apple 芯片 Mac（arm64） | [BioReader-v0.15.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.15.0/BioReader-v0.15.0-macos-arm64.dmg)，打开 DMG 后将 `BioReader.app` 拖入应用程序 |
-| Windows 10 / 11（x64） | [安装 EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.15.0/BioReader-v0.15.0-windows-x64-setup.exe)，或 [BioReader-v0.15.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.15.0/BioReader-v0.15.0-windows-x64.zip)，完整解压文件夹后打开其中的 `BioReader.exe`，保留全部随附文件 |
+| Apple 芯片 Mac（arm64） | [BioReader-v0.16.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.16.0/BioReader-v0.16.0-macos-arm64.dmg)，打开 DMG 后将 `BioReader.app` 拖入应用程序 |
+| Windows 10 / 11（x64） | [安装 EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.16.0/BioReader-v0.16.0-windows-x64-setup.exe)，或 [BioReader-v0.16.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.16.0/BioReader-v0.16.0-windows-x64.zip)，完整解压文件夹后打开其中的 `BioReader.exe`，保留全部随附文件 |
 
 桌面包不需要另装 Python 或手动启动浏览器／终端。Windows 需要 Microsoft Edge WebView2 Runtime；缺少时安装[微软官方 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。用户数据独立保存：macOS 为 `~/Library/Application Support/BioReader/`，Windows 为 `%LOCALAPPDATA%\BioReader`；退出旧版再替换程序，已有论文、笔记和设置保留。
 
 两平台使用同一版本、同一检查过的源码提交发布；更新时下载对应平台的新包。本版没有应用内自动更新或跨电脑文献库同步。安装、自行构建与平台限制见[桌面版说明](app/DESKTOP.md)，实际回归和打包结果见 [App 验证记录](app/tests/README.md)。macOS 包未做 Apple 开发者签名和公证。AI 模型、DOI 和相关文献查询仍需联网。
 
-![BioReader v0.5.0 蓝白阅读工作台：文献库、补充 PDF 与数据资源记录](docs/screenshots/bioreader-v0.5.0-bluewhite.png)
+#### 从补图到跨篇比较
 
-蓝白工作台 v0.5.0 实测截图（1440px，当前版已简化阅读状态并更新资源表格）：左侧筛选与待办，中间正文／补充材料阅读，右侧资源记录与原文定位。截图使用原创合成 PDF 和虚构记录。
+下面三张图来自同一篇原创合成论文。正文纳入 12 人，补图中有 8 人具备原发灶和肝转移灶配对标本，另有 4 人仅取原发灶。点击截图可放大。
+
+| ① 在补图中核对两组取样，选中原句后点「记证据」 | ② 保存判断，核对补充文件名和 PDF 页码 | ③ 在跨篇比较中采纳这条证据 |
+| --- | --- | --- |
+| [![补图 S1 显示配对组和仅取原发灶的对照组](docs/screenshots/comparison-supplement.png)](docs/screenshots/comparison-supplement.png) | [![证据卡保留完整配对人数、原句和补充 PDF 第 1 页](docs/screenshots/comparison-evidence.png)](docs/screenshots/comparison-evidence.png) | [![跨篇比较中的配对人数与对应证据](docs/screenshots/comparison-draft.png)](docs/screenshots/comparison-draft.png) |
 
 #### 用链接收集论文
 
@@ -102,7 +118,7 @@
 
 #### 从 Zotero 导入
 
-在设置中保存 Zotero MCP 地址（默认 `http://127.0.0.1:8000/mcp`）和本机 Zotero `storage` 目录，再从「Zotero」入口检索、预览并选择导入方式。首批兼容 [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp) 的 Streamable HTTP 工具；可仅导入元数据，或复制已下载到本机的 Zotero 存储 PDF。已有文献按来源和 DOI 查重，命中时返回原记录并保留已有笔记，可点击「打开文献」查看。
+一次性迁移可在 Zotero 入口选择「从本机 Zotero 文库迁移」。想继续通过 Zotero MCP 搜索时，在设置中保存 Zotero MCP 地址（默认 `http://127.0.0.1:8000/mcp`）和本机 Zotero `storage` 目录，再从「Zotero」入口检索、预览并选择导入方式。首批兼容 [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp) 的 Streamable HTTP 工具；可仅导入元数据，或复制已下载到本机的 Zotero 存储 PDF。已有文献按来源和 DOI 查重，命中时返回原记录并保留已有笔记，可点击「打开文献」查看。
 
 还没安装服务时可以先保存设置。BioReader 不代装或启动 Zotero MCP，不自动导入整库，也不写回 Zotero。官方安装／启动命令、附件范围及连接排错见 [App 使用说明](app/README.md#连接-zotero-mcp)。
 
@@ -181,7 +197,19 @@ git clone https://github.com/Gaoyuan-0423/biomedical-paper-reader.git ~/.codex/s
 
 **Read one biomedical paper closely: understand why each experiment was done, assess what the evidence supports, and identify research designs you can adapt.**
 
-Version: v0.15.0. Paste article pages or PDF links, preview the papers, then add them to a project and retrieve available full text.
+Version: v0.16.0. Bring quotations you have already saved into cross-paper comparisons. You can also review a claim in a report or turn saved figures into a journal club presentation.
+
+| Task | Desktop workflow |
+|---|---|
+| Compare enrollment and sampling | Select papers and fields in **Compare papers**. Review saved evidence by cohort. Optionally search the main and supplementary PDFs, including Methods, for missing values. Open each cited page before accepting, editing or skipping the cell. |
+| Check a report claim | Select a sentence and choose **Review this claim**. Inspect nearby citations, candidate figures and captions, methods, and possible intervention excerpts. Save the revised wording, evidence strength and reason for your decision. |
+| Inspect figure coverage | **Figure coverage** shows main and supplementary figures from the report generation run. Check which supplied a visual observation or only a caption, which were unprocessed, and which visual reads failed. Read individual figures or capture missing ones. |
+| Continue a reading session | After batch import, get full text for those papers. From a figure reading, save evidence. From an evidence card, add its source to the current comparison. |
+| Track new citations | Save a PubMed query. A startup check catches up from the last successful search by PubMed creation date. Preview, import and mark the local unread queue as seen in pages of up to 50. |
+| Prepare a journal club talk | Select and order saved project figures, draft from figure notes or write English slides and Chinese speaker notes, and export an editable PPTX with the paper, figure and PDF page on each slide. |
+| Migrate a local Zotero library | Use the local migration option under Zotero to preview records, notes, downloaded PDFs and duplicates, then choose what to add to the project. |
+
+Library search now uses a faster standard-library text matcher. The end-to-end benchmark compares the original matcher, the Python optimization and a Rust prototype on 5 and 128 generated papers. [Benchmark and reproduction steps](evals/benchmarks/README.md)
 
 This version describes the source on the current branch. [Formal Releases](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases) are published separately and may lag behind `main`. Clone or update as described below to use the current source; maintainers can follow the [release guide](RELEASING.md).
 
@@ -220,12 +248,12 @@ A full close-reading report follows this structure: opening guide → article in
 
 #### macOS / Windows desktop release
 
-Download page: [v0.15.0 desktop release](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.15.0). This version is published as a regular Release and Latest after native validation on both platforms. Choose the matching platform asset from the files actually published:
+Download page: [v0.16.0 desktop release](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.16.0). This version is published as a regular Release and Latest after native validation on both platforms. Choose the matching platform asset from the files actually published:
 
 | Platform | Download and open |
 |---|---|
-| Apple silicon Mac (arm64) | [BioReader-v0.15.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.15.0/BioReader-v0.15.0-macos-arm64.dmg); open the DMG and drag `BioReader.app` to Applications |
-| Windows 10 / 11 (x64) | [Installer EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.15.0/BioReader-v0.15.0-windows-x64-setup.exe), or [BioReader-v0.15.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.15.0/BioReader-v0.15.0-windows-x64.zip); extract the entire folder and open `BioReader.exe`, retaining all bundled files |
+| Apple silicon Mac (arm64) | [BioReader-v0.16.0-macos-arm64.dmg](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.16.0/BioReader-v0.16.0-macos-arm64.dmg); open the DMG and drag `BioReader.app` to Applications |
+| Windows 10 / 11 (x64) | [Installer EXE](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.16.0/BioReader-v0.16.0-windows-x64-setup.exe), or [BioReader-v0.16.0-windows-x64.zip](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/download/v0.16.0/BioReader-v0.16.0-windows-x64.zip); extract the entire folder and open `BioReader.exe`, retaining all bundled files |
 
 Desktop packages do not require Python or manually starting a browser/terminal. Windows requires Microsoft Edge WebView2 Runtime; install the [official Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if it is missing. User data remains separate: `~/Library/Application Support/BioReader/` on macOS and `%LOCALAPPDATA%\BioReader` on Windows. Quit the old version before replacing program files; existing papers, notes and settings are preserved.
 
@@ -273,7 +301,7 @@ Data resources retain their per-paper grouping while recording species, tissue, 
 
 #### Import from Zotero
 
-Save a Zotero MCP endpoint in Settings (default `http://127.0.0.1:8000/mcp`) and your local Zotero `storage` directory. Open Zotero search, preview an item and explicitly choose metadata-only or a locally downloaded stored PDF. The first adapter targets [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp) over Streamable HTTP. Source identity and DOI deduplication return existing records for explicit opening without overwriting their notes.
+For a one-time migration, choose the local migration option under Zotero. To search through Zotero MCP, save a Zotero MCP endpoint in Settings (default `http://127.0.0.1:8000/mcp`) and your local Zotero `storage` directory. Open Zotero search, preview an item and explicitly choose metadata-only or a locally downloaded stored PDF. The first adapter targets [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp) over Streamable HTTP. Source identity and DOI deduplication return existing records for explicit opening without overwriting their notes.
 
 Settings can be saved before the server is installed. BioReader does not install or start the MCP server, import a whole library automatically, or write back to Zotero. See the [App setup guide](app/README.md#连接-zotero-mcp) and the [upstream installation guide](https://github.com/54yyyu/zotero-mcp/blob/main/docs/getting-started.md). Remote-only attachments and linked files are outside this first PDF import path.
 

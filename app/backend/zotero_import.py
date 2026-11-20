@@ -129,7 +129,11 @@ def duplicate(papers, config, item):
 def _managed_path(config, parent, attachment):
     if urlparse(config['endpoint']).hostname not in ('127.0.0.1', 'localhost', '::1'):
         raise HTTPException(422, '远程 MCP 的附件不能作为本机文件读取；可仅导入文献信息')
-    if not config['storage_root']:
+    return local_attachment_path(config['storage_root'], parent, attachment)
+
+
+def local_attachment_path(storage_root, parent, attachment):
+    if not storage_root:
         raise HTTPException(422, '请先设置本机 Zotero 附件目录')
     if not parent.get('library_type') or parent.get('library_id') is None:
         raise HTTPException(422, '无法确认附件所属文献库，可仅导入文献信息')
@@ -144,7 +148,7 @@ def _managed_path(config, parent, attachment):
             any(c in filename for c in ('/', '\\', '\x00')) or filename in ('.', '..') or
             not filename.lower().endswith('.pdf') or attachment.get('content_type') != 'application/pdf'):
         raise HTTPException(422, '附件不是可导入的 PDF')
-    root = Path(config['storage_root']).expanduser().resolve()
+    root = Path(storage_root).expanduser().resolve()
     candidate = root / key / filename
     try:
         resolved = candidate.resolve(strict=True)
@@ -172,6 +176,10 @@ def attachment_view(config, parent, attachment):
 
 def read_managed_pdf(config, parent, attachment):
     path = _managed_path(config, parent, attachment)
+    return read_local_pdf(path), attachment['filename']
+
+
+def read_local_pdf(path):
     try:
         descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
         with os.fdopen(descriptor, 'rb') as stream:
@@ -184,7 +192,7 @@ def read_managed_pdf(config, parent, attachment):
         raise HTTPException(413, 'PDF 超过 80 MB 限制')
     if not content.startswith(b'%PDF'):
         raise HTTPException(422, '所选附件不是有效 PDF，请检查 Zotero 本地副本')
-    return content, attachment['filename']
+    return content
 
 
 def preview(directory, config, item, attachments):

@@ -129,7 +129,9 @@
     const title = node('h2'); title.id = 'figure-reader-title';
     const source = node('div', 'figure-reader-source'); source.id = 'figure-reader-source';
     const closeButton = button('close', '关闭图文阅读', '×'); closeButton.classList.add('btn-icon', 'btn-ghost');
-    heading.append(title, source); header.append(heading, closeButton);
+    heading.append(title, source); header.append(heading);
+    if (hooks.evidence) header.append(button('evidence', '记为证据'));
+    header.append(closeButton);
     const columns = node('div', 'figure-reader-columns'), imagePane = node('section', 'figure-reader-image-pane');
     const toolbar = node('div', 'figure-reader-image-toolbar'), fit = button('fit', '适应窗口'), zoomOut = button('zoom-out', '缩小图片', '−'), zoomIn = button('zoom-in', '放大图片', '+'), percent = node('output', 'figure-reader-zoom');
     toolbar.append(fit, zoomOut, percent, zoomIn);
@@ -150,6 +152,10 @@
       if (event.target === root) { close(); return; }
       const action = event.target.closest('[data-figure-reader-action]')?.dataset.figureReaderAction;
       if (action === 'close') close();
+      else if (action === 'evidence') {
+        const paper = current.paperId, f = current.figure;
+        close(false); hooks.evidence?.(paper, f);
+      }
       else if (action === 'retry-image') { current.retry++; loadImage(); }
       else if (action === 'fit') { zoom = 1; fitImage(); viewport.scrollTop = viewport.scrollLeft = 0; }
       else if (action === 'zoom-in' || action === 'zoom-out') { zoom = Math.max(0.25, Math.min(8, zoom * (action === 'zoom-in' ? 1.25 : 0.8))); fitImage(); }

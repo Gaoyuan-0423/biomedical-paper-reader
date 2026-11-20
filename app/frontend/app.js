@@ -278,7 +278,7 @@
 
   async function prepareDesktopClose() {
     if (state.generating) { toast(() => tr('正在生成笔记，请先停止生成后退出。'), 'error'); return false; }
-    if (state.materialBusy || state.figReading || state.noteAppendBusy || (window.BioSupplementDownloads?.busy() || window.BioFulltext?.busy() || window.BioZotero?.isImporting() || window.BioIdentifierImport?.isImporting())) {
+    if (state.materialBusy || state.figReading || state.noteAppendBusy || (window.BioSupplementDownloads?.busy() || window.BioFulltext?.busy() || window.BioLocalZotero?.busy() || window.BioZotero?.isImporting() || window.BioIdentifierImport?.isImporting())) {
       toast(() => tr('正在保存或处理文献，请等待完成后退出。'), 'error'); return false;
     }
     if (!canLeaveResearch() || window.BioProjects?.canExit() === false) return false;
@@ -289,7 +289,7 @@
     // Finish an in-flight preference write, but a non-critical preference error
     // must not trap the user in the window after their research has been saved.
     await Promise.all([window.BioI18n?.flush?.(), window.BioAppearance?.flush?.()]);
-    return !state.pendingSave && !state.saveInFlight && !state.generating && !state.materialBusy && !state.figReading && !state.noteAppendBusy && !(window.BioSupplementDownloads?.busy() || window.BioFulltext?.busy() || window.BioZotero?.isImporting() || window.BioIdentifierImport?.isImporting()) && canLeaveResearch();
+    return !state.pendingSave && !state.saveInFlight && !state.generating && !state.materialBusy && !state.figReading && !state.noteAppendBusy && !(window.BioSupplementDownloads?.busy() || window.BioFulltext?.busy() || window.BioLocalZotero?.busy() || window.BioZotero?.isImporting() || window.BioIdentifierImport?.isImporting()) && canLeaveResearch();
   }
 
   async function appendChatNote({ paperId, message }) {
@@ -634,6 +634,8 @@
     const summary = Object.assign({}, paper);
     preserveNewerTags(summary);
     delete summary.notes;
+    delete summary.claim_reviews;
+    delete summary.notes_figure_coverage;
     delete summary.abstract;
     if (idx >= 0) state.papers[idx] = summary; else state.papers.unshift(summary);
     renderList();
@@ -838,6 +840,7 @@
     renderWorkflow();
     $('btn-capture-evidence').disabled = !state.current;
     const paper = state.current;
+    window.BioLocalZotero?.renderNotes(paper);
     const head = $('paper-head');
     if (!paper) { head.hidden = true; return; }
     head.hidden = false;
@@ -1359,6 +1362,7 @@
 
   function updateNoteActions() {
     const empty = !$('editor').value.trim();
+    if ($('report-review-tools')) $('report-review-tools').hidden = empty || !state.current || state.generating || !['preview','edit'].includes(state.tab);
     const noExport = empty && !hasResearchRecords(state.current);
     $('btn-export-md').disabled = noExport;
     $('btn-export-word').disabled = noExport;
@@ -1695,6 +1699,7 @@
     const page = state.pdfView && $('pdf-scroll').clientWidth ? currentPage() : Number($('pdf-page').value) || state.pdfDeferredPage;
     const doc = state.pdf;
     state.tab = name;
+    if ($('report-review-tools')) $('report-review-tools').hidden = !state.current || !$('editor').value.trim() || state.generating || !['preview','edit'].includes(name);
     state.readingMode = name === 'chat' ? 'chat' : 'notes';
     updateReadingMode();
     document.body.dataset.noteTab = name;
@@ -1781,7 +1786,7 @@
     if (window.BioResources) window.BioResources.open(state.current);
   }
 
-  async function openProjectSource(paperId, documentId, page, figureId, revision) {
+  async function openProjectSource(paperId, documentId, page, figureId, revision, bbox) {
     const paper = state.papers.find(p => p.id === paperId);
     if (!paper || state.generating || state.materialBusy || !canLeaveResearch()) return false;
     state.pendingPaper = paper;
@@ -1798,7 +1803,7 @@
       const figure = state.figures.find(f => f.id === figureId && (f.document_id || 'main') === documentId && f.page === page);
       if (state.current?.id !== paperId || !figure) { toast(tr('来源已变化，请重新打开比较。'), 'error'); return false; }
     }
-    return jumpChatSource({paper_id: paperId, document_id: documentId, page}, 'preview');
+    return jumpChatSource({paper_id: paperId, document_id: documentId, page, bbox}, 'preview');
   }
 
   async function openLibrarySearchResult(result, navigation = {}) {
@@ -1901,6 +1906,27 @@
 
   function openEvidence() {
     if (window.BioEvidence) window.BioEvidence.open(state.current, state.figures);
+  }
+
+  function claimSelection() {
+    const editor = $('editor');
+    if (state.tab === 'edit') {
+      const original = editor.value.slice(editor.selectionStart, editor.selectionEnd);
+      return original ? {original, start:Array.from(editor.value.slice(0,editor.selectionStart)).length} : null;
+    }
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !$('preview').contains(sel.anchorNode) || !$('preview').contains(sel.focusNode)) return null;
+    if (!sel.toString().trim()) return null;
+    return window.BioReportReview.previewSelection($('preview'),editor.value,sel.getRangeAt(0));
+  }
+
+  async function openReportReview(coverage) {
+    const paper = state.current;
+    if (!paper || state.generating || state.materialBusy) return;
+    const selection = coverage ? null : claimSelection();
+    if (!await flushSave() || state.current !== paper) return;
+    if (coverage) await window.BioReportReview.coverage(paper);
+    else await window.BioReportReview.review(paper,selection);
   }
 
   async function captureEvidence() {
@@ -2024,6 +2050,7 @@
         '<button class="btn btn-figure-notes" data-view-figure-notes="' + f.id + '">' + icon('book') + uiHtml(() => tr('查看笔记')) + '</button>' +
         '<button class="btn" data-source-fig="' + f.id + '"' + (oldCrop ? ' disabled' : '') + uiAttr('title', oldCrop ? '此裁图来自旧版 PDF，请在当前原文重新取图。' : '打开这张图所在的 PDF 页面') + '>' + icon('file') + uiHtml(() => tr(oldCrop ? '原文已更换' : '查看原文')) + '</button>' +
         '<button class="btn btn-read" data-read-fig="' + f.id + '"' + uiAttr('title', '让读图模型观察这张图，可带追问') + '>' + icon('eye') + uiHtml(() => tr('读图')) + '</button>' +
+        (f.observation && !cropSourceChanged(f) ? '<button class="btn" data-figure-evidence="' + f.id + '">' + uiHtml(() => tr('记为证据')) + '</button>' : '') +
         '<button class="btn" data-insert="' + f.id + '">' + icon('plus') + uiHtml(() => tr('插入笔记')) + '</button>' +
         '<button class="btn" data-edit-caption="' + f.id + '">' + icon('edit') + uiHtml(() => tr('图注')) + '</button>' +
         '<button class="btn btn-icon btn-ghost" data-del-fig="' + f.id + '"' + uiAttr('title', '删除图片') + uiAttr('aria-label', '删除 {label}', { label: f.label }) + '>' + icon('trash') + '</button>' +
@@ -2065,6 +2092,7 @@
       if (updated?.id !== fid || typeof updated.observation !== 'string') throw new Error(tr('读图结果格式无效，请重试。'));
       // A read request owns only its observation; caption/geometry are edited elsewhere.
       fig.observation = updated.observation;
+      if (updated.observation_source_revision) fig.observation_source_revision = updated.observation_source_revision;
       if (['en', 'zh-CN'].includes(updated.observation_language)) fig.observation_language = updated.observation_language;
       renderFigures();
       toast(() => tr('观察已更新到卡片（生成笔记时会一并使用）'), 'ok');
@@ -2076,6 +2104,23 @@
       state.figReading = false;
       if (isCurrent() && btn?.isConnected) { btn.disabled = false; btn.innerHTML = icon('eye') + uiHtml(() => tr('读图')); }
     }
+  }
+
+  async function startFigureEvidence(id, figure) {
+    const paper = state.current;
+    if (!figure || paper?.id !== id || !canLeaveResearch() || cropSourceChanged(figure)) return;
+    const doc = figure.document_id || 'main';
+    const revision = paper.document_revisions?.[doc];
+    if (!revision || revision === 'legacy') { toast(tr('当前原图已变化'),'error'); return; }
+    try {
+      const live = await api.jsonBody('POST', paperPath(id,'/report-review/locate'),
+        {document_id:doc,page:figure.page,source_revision:revision,figure_id:figure.id,bbox:figure.bbox});
+      if (state.current !== paper || !state.figures.some(f => f.id === figure.id) || !canLeaveResearch()) return;
+      switchTab('evidence');
+      window.BioEvidence?.start({document_id:doc, page:live.page, figure_id:live.figure_id,
+        claim:(live.observation || '').slice(0,4000), quote:(live.caption || '').slice(0,12000),
+        expected_source_revision:revision});
+    } catch (e) { if (state.current === paper) toast(e.message, 'error'); }
   }
 
   function openLightbox(fid, trigger) {
@@ -2908,6 +2953,7 @@
           if (modal.id === 'input-modal') finishInput(null);
           else if (modal.id === 'remote-supplement-modal') window.BioSupplementDownloads?.close();
           else if (modal.id === 'settings-modal') closeSettings();
+          else if (modal.id === 'zlocal-modal') window.BioLocalZotero?.close();
           else if (modal.id === 'zotero-modal' && window.BioZotero) window.BioZotero.close();
           else if (modal.id === 'doi-modal' && window.BioIdentifierImport) window.BioIdentifierImport.close();
           else if (modal.id === 'project-modal' && window.BioProjects) window.BioProjects.close();
@@ -3045,6 +3091,8 @@
       if (tags) { void editFigureShelf(tags.dataset.tagFigure, 'tags'); return; }
       const rf = e.target.closest('[data-read-fig]');
       if (rf) { state.pendingFigure = rf.dataset.readFig; readSingleFigure(); return; }
+      const capture = e.target.closest('[data-figure-evidence]');
+      if (capture) { startFigureEvidence(state.current?.id,state.figures.find(f=>f.id===capture.dataset.figureEvidence)); return; }
       const ins = e.target.closest('[data-insert]');
       if (ins) { insertFigureRef(ins.dataset.insert); return; }
       const ec = e.target.closest('[data-edit-caption]');
@@ -3101,7 +3149,7 @@
     window.addEventListener('beforeunload', (e) => {
       rememberReadingPosition();
       flushReadingPositions();
-      if (state.pendingSave || state.saveInFlight || state.generating || window.BioSupplementDownloads?.busy() || (window.BioFulltext?.busy() || window.BioZotero?.isImporting() || window.BioIdentifierImport?.isImporting()) || window.BioProjects?.hasUnsaved() || !canLeaveResearch()) {
+      if (state.pendingSave || state.saveInFlight || state.generating || window.BioSupplementDownloads?.busy() || (window.BioFulltext?.busy() || window.BioLocalZotero?.busy() || window.BioZotero?.isImporting() || window.BioIdentifierImport?.isImporting()) || window.BioProjects?.hasUnsaved() || !canLeaveResearch()) {
         flushSave();
         e.preventDefault();
         e.returnValue = '';
@@ -3134,7 +3182,20 @@
     $('fulltext-close').onclick = () => closeModal('fulltext-modal');
     $('fulltext-modal').onclick = event => { if (event.target === event.currentTarget) closeModal('fulltext-modal'); };
     window.BioFigureShelf?.init({ query: body => api.jsonBody('POST', '/api/figure-shelf/query', body),
-      image: api.figUrl, jump: jumpShelfFigure, toast });
+      image: api.figUrl, jump: jumpShelfFigure, toast,
+      modelMode: () => state.settings?.has_api_key && (state.settings.vision_model ? 'vision' : state.settings.model ? 'text' : ''),
+      draftSlide: (scope,body) => api.jsonBody('POST','/api/figure-decks/'+encodeURIComponent(scope)+'/draft',body),
+      previewDeck: (scope,ref) => api.jsonBody('POST','/api/figure-decks/'+encodeURIComponent(scope)+'/preview',ref),
+      exportDeck: async (scope,body) => {
+        const res = await fetch('/api/figure-decks/'+encodeURIComponent(scope)+'/pptx',
+          {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        if (!res.ok) {
+          const data = await res.json().catch(()=>({}));
+          throw new Error(typeof data.detail === 'string' ? data.detail : tr('PPTX 导出失败'));
+        }
+        downloadRaw('BioReader-Journal-Club.pptx',await res.blob());
+      },
+    });
     window.BioSupplementDownloads?.init({
       show: openModal, hide: closeModal, toast,
       find: id => api.json(paperPath(id, '/supplement-candidates')),
@@ -3167,7 +3228,35 @@
         downloadRaw(file.filename, await res.blob());
       },
     });
-    window.BioFigureReader?.init({ returnFocus: ({ paperId, figureId }) => {
+    window.BioReportReview?.init({
+      paper: () => state.current, toast, image: api.figUrl,
+      api: (id, suffix, body) => body ? api.jsonBody('POST',paperPath(id,'/report-review'+suffix),body) : api.json(paperPath(id,'/report-review'+suffix)),
+      apply: async (id, body) => {
+        if (state.current?.id !== id || state.generating || state.materialBusy || state.pendingSave || state.saveInFlight)
+          throw new Error(tr('报告有新的修改，请重新选句。'));
+        return api.jsonBody('POST',paperPath(id,'/report-review/apply'),body);
+      },
+      saved: updated => {
+        if (state.current?.id !== updated.id) return;
+        Object.assign(state.current,updated); $('editor').value=updated.notes; updateListItem(updated);
+        renderPreview(); renderHead(); updateNoteActions();
+      },
+      locate: (id,src) => api.jsonBody('POST',paperPath(id,'/report-review/locate'),
+        {document_id:src.document_id, page:src.page, source_revision:src.source_revision,
+         ...(src.figure_id ? {figure_id:src.figure_id,bbox:src.bbox} : {})}),
+      jump: (id,src) => state.current?.id===id && jumpChatSource({paper_id:id,...src},'preview'),
+      read: (id,fid) => {
+        if(state.current?.id!==id || state.generating) return;
+        state.pendingFigure=fid; void readSingleFigure();
+      },
+      crop: id => { if(state.current?.id===id && state.pdf){setWorkspaceView('pdf');setCropping(true);toast(tr('取图时先选择对应 PDF 和页面。'));} },
+    });
+    if ($('report-claim')) {
+      $('report-claim').onmousedown = event => event.preventDefault();
+      $('report-claim').onclick = () => openReportReview(false);
+      $('report-coverage').onclick = () => openReportReview(true);
+    }
+    window.BioFigureReader?.init({ evidence: startFigureEvidence, returnFocus: ({ paperId, figureId }) => {
       if (state.current?.id !== paperId) return;
       (document.querySelector('[data-view-figure-notes="' + figureId + '"]') || $('btn-fig-extract'))?.focus();
     } });
@@ -3188,6 +3277,7 @@
     });
     window.BioIdentifierImport?.init({
       request: (path, body) => api.jsonBody('POST', path, body), show: openModal, hide: closeModal,
+      batchPdf: (ids,scope) => window.BioFulltext.openImported(state.papers.filter(p => ids.includes(p.id)),scope),
       currentScope: () => window.BioProjects?.activeId() || 'all',
       onAttached: (id, paper) => state.current?.id === id && refreshAttachedPdf(id, paper),
       readyForDownload: () => !state.generating && !state.materialBusy && canLeaveResearch(),
@@ -3198,6 +3288,31 @@
         if (!target) return false;
         state.pendingPaper = target; await openPaper();
         return state.current?.id === id;
+      },
+    });
+    window.BioLocalZotero?.init({
+      request: (method,path,body) => body === undefined ? api.json(path,{method}) : api.jsonBody(method,path,body),
+      show:openModal, hide:closeModal, scope:() => window.BioProjects?.activeId() || 'all',
+      scopeName:() => $('project-scope').selectedOptions?.[0]?.textContent || tr('全部文献'),
+      refresh:async ids => {
+        await loadPapers(); await window.BioProjects?.refresh();
+        const current = state.current;
+        if (current && ids.includes(current.id)) {
+          const updated = await api.paper(current.id);
+          if (current === state.current) {
+            current.zotero_local_notes = updated.zotero_local_notes;
+            current.zotero_local_origins = updated.zotero_local_origins;
+            const newMain = !current.has_file && updated.has_file;
+            const changed = current.material_revision !== updated.material_revision;
+            current.supplements = updated.supplements;
+            if (newMain) await refreshAttachedPdf(current.id,updated);
+            else if (changed) {
+              for (const field of ['document_revisions','material_revision','figures_count','notes_stale']) current[field]=updated[field];
+              renderDocuments(); renderWorkflow(); await fetchFigures();
+            }
+            if (current === state.current) window.BioLocalZotero?.renderNotes(current);
+          }
+        }
       },
     });
     if (window.BioZotero) window.BioZotero.init({
@@ -3269,6 +3384,7 @@
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
       openSource: openProjectSource, toast, showModal: openModal, hideModal: closeModal,
     })]);
+    void window.BioPubMed?.startup?.((method, path) => api.json(path, {method}));
     // Deep link: ?paper=<id> only scrolls to and flashes the matching sidebar
     // entry; opening a paper always requires a real user click, so request ids
     // never derive from the URL query parameter.

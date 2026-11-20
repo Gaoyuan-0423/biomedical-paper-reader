@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css?v=20261106-v0130">
   <link rel="stylesheet" href="evidence.css?v=20261106-v0130">
   <link rel="stylesheet" href="comparisons.css">
+  <link rel="stylesheet" href="figure-deck.css">
   <link rel="stylesheet" href="resources.css?v=20261106-v0130">
   <link rel="stylesheet" href="chat.css?v=20261106-v0130">
   <link rel="stylesheet" href="zotero.css?v=20261106-v0130">
@@ -17,6 +18,7 @@
   <link rel="stylesheet" href="identifier-import.css">
   <link rel="stylesheet" href="library-search.css?v=20261106-v0130">
   <link rel="stylesheet" href="reading-nav.css?v=20261106-v0130">
+  <link rel="stylesheet" href="report-review.css">
   <link rel="stylesheet" href="figure-reader.css?v=20261106-v0130">
   <link rel="stylesheet" href="appearance.css?v=20261106-v0130">
   <script src="appearance.js?v=20261106-v0130"></script>
@@ -136,6 +138,7 @@
             <button class="tab" data-tab="resources" role="tab" id="view-resources" aria-controls="tab-resources" aria-selected="false"><span data-i18n="数据与复现">数据与复现</span></button>
             <button class="tab" data-tab="evidence" role="tab" id="view-evidence" aria-controls="tab-evidence" aria-selected="false"><span data-i18n="证据">证据</span></button>
           </div>
+          <details id="zlocal-notes" class="zotero-local-notes" hidden><summary data-i18n="Zotero 原笔记">Zotero 原笔记</summary><div></div></details>
           <button id="btn-capture-evidence" class="btn btn-ghost" title="把选中的笔记文字作为待核查结论，补充原文和来源" data-i18n-title="把选中的笔记文字作为待核查结论，补充原文和来源"><span data-i18n="记证据">记证据</span></button>
           <details id="export-menu" class="export-menu"><summary class="btn btn-ghost"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span data-i18n="导出">导出</span></summary><div class="export-popover">
             <div class="popover-label"><span data-i18n="导出笔记与已保存的证据、资源">导出笔记与已保存的证据、资源</span></div>
@@ -157,6 +160,7 @@
           <div id="paper-tasks" class="paper-tasks" aria-label="当前文献需要处理的问题" data-i18n-aria-label="当前文献需要处理的问题"></div>
           <div class="note-review-actions"><button id="notes-complete" class="btn btn-ghost" hidden><span data-i18n="已手动补完笔记">已手动补完笔记</span></button><button id="notes-reviewed" class="btn btn-ghost" hidden><span data-i18n="已核对新材料">已核对新材料</span></button></div>
         </div>
+        <div class="report-review-tools" id="report-review-tools" hidden><button class="btn btn-ghost" type="button" id="report-claim" data-i18n="核对这句话">核对这句话</button><button class="btn btn-ghost" type="button" id="report-coverage" data-i18n="本次读图">本次读图</button></div>
         <div class="tab-body" id="tab-preview" role="tabpanel" aria-labelledby="view-preview"><article class="markdown-body" id="preview"><div class="empty notes-empty"><div class="empty-symbol"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg></div><h2 class="empty-title"><span data-i18n="把阅读，变成自己的思考">把阅读，变成自己的思考</span></h2><p class="empty-copy"><span data-i18n="选择文献后生成结构化阅读笔记，">选择文献后生成结构化阅读笔记，</span><br><span data-i18n="也可以在「编辑」中记录你的想法。">也可以在「编辑」中记录你的想法。</span></p><div class="empty-steps"><span><b>01</b><span data-i18n="理解研究问题">理解研究问题</span></span><span><b>02</b><span data-i18n="核对图表证据">核对图表证据</span></span><span><b>03</b><span data-i18n="留下你的判断">留下你的判断</span></span></div></div></article></div>
         <div class="tab-body" id="tab-chat" role="tabpanel" aria-labelledby="view-chat" hidden><div id="chat-panel"></div></div>
         <div class="tab-body" id="tab-edit" role="tabpanel" aria-labelledby="view-edit" hidden><textarea id="editor" aria-label="Markdown 笔记" spellcheck="false" placeholder="记下研究问题、关键证据，以及你的思考…&#10;&#10;支持 Markdown，编辑后自动保存。" data-i18n-aria-label="Markdown 笔记" data-i18n-placeholder="记下研究问题、关键证据，以及你的思考…
@@ -294,11 +298,28 @@
   <div class="modal-backdrop" id="zotero-modal" role="dialog" aria-modal="true" aria-labelledby="zotero-title" hidden>
     <div class="modal zotero-modal">
       <div class="modal-head"><div><span class="modal-eyebrow"><span data-i18n="添加到 BioReader">添加到 BioReader</span></span><h3 id="zotero-title"><span data-i18n="从 Zotero 导入">从 Zotero 导入</span></h3></div><button type="button" class="btn btn-icon btn-ghost" id="zotero-close" data-zotero-action="close" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
+      <div class="zotero-local-entry"><button type="button" class="btn" id="zlocal-open" data-i18n="从本机 Zotero 文库迁移">从本机 Zotero 文库迁移</button></div>
       <div class="modal-body" id="zotero-panel"></div>
       <div class="modal-foot" id="zotero-footer"></div>
     </div>
   </div>
 
+  <div class="modal-backdrop" id="zlocal-modal" role="dialog" aria-modal="true" aria-labelledby="zlocal-title" hidden>
+    <div class="modal zotero-modal">
+      <div class="modal-head"><h3 id="zlocal-title" data-i18n="从本机 Zotero 文库迁移">从本机 Zotero 文库迁移</h3>
+        <button class="btn btn-ghost" id="zlocal-close" data-i18n="关闭">关闭</button></div>
+      <div class="modal-body">
+        <label for="zlocal-path" data-i18n="Zotero 资料目录或 zotero.sqlite 的路径">Zotero 资料目录或 zotero.sqlite 的路径</label>
+        <input id="zlocal-path" type="text" spellcheck="false" autocomplete="off">
+        <div class="zotero-local-actions"><button class="btn" id="zlocal-folder" hidden data-i18n="选择资料目录">选择资料目录</button>
+          <button class="btn" id="zlocal-file" hidden data-i18n="选择数据库文件">选择数据库文件</button>
+          <button class="btn" id="zlocal-preview" data-i18n="预览本地文库">预览本地文库</button></div>
+        <p class="hint" id="zlocal-scope"></p><div id="zlocal-list"></div>
+        <button class="btn" id="zlocal-more" hidden data-i18n="加载更多">加载更多</button>
+      </div><div class="modal-foot"><span role="status" id="zlocal-status"></span>
+        <button class="btn btn-primary" id="zlocal-import" disabled data-i18n="导入所选条目">导入所选条目</button></div>
+    </div>
+  </div>
   <div class="modal-backdrop" id="doi-modal" role="dialog" aria-modal="true" aria-labelledby="doi-title" hidden>
     <div class="modal identifier-import-modal">
       <div class="modal-head">
@@ -319,6 +340,7 @@
         <button class="btn" id="doi-cancel" data-i18n="关闭">关闭</button>
         <div class="spacer"></div>
         <button class="btn" id="doi-preview" data-i18n="预览条目">预览条目</button>
+        <button class="btn" type="button" id="doi-batch-pdf" hidden data-i18n="为这几篇补正文">为这几篇补正文</button>
         <button class="btn btn-primary" id="doi-submit" data-i18n="加入所选文献" disabled>加入所选文献</button>
       </div>
     </div>
@@ -357,11 +379,14 @@
   <script src="safe-markdown.js?v=20261105-v0120"></script>
   <script src="export.js"></script>
   <script src="evidence.js?v=20261105-v0110"></script>
+  <script src="comparison-draft.js"></script>
   <script src="comparisons.js"></script>
   <script src="remote-supplements.js"></script>
   <script src="resources.js?v=20261105-v0110"></script>
+  <script src="figure-deck.js"></script>
   <script src="figure-shelf.js"></script>
   <script src="chat.js?v=20261105-v0110"></script>
+  <script src="zotero-local.js"></script>
   <script src="zotero.js?v=20261105-v0110"></script>
   <script src="saved-pubmed.js"></script>
   <script src="fulltext-downloads.js"></script>
@@ -370,6 +395,8 @@
   <script src="library-search.js?v=20261105-v0110"></script>
   <script src="reading-nav.js?v=20261105-v0110"></script>
   <script src="note-sources.js?v=20261105-v0110"></script>
+  <dialog id="report-review-dialog"><header><h2></h2><button class="btn" type="button" data-close-review data-i18n="关闭复核">关闭复核</button></header><p role="status" aria-live="polite"></p><div class="review-body"></div></dialog>
+  <script src="report-review.js"></script>
   <script src="figure-reader.js?v=20261105-v0120"></script>
   <script src="app.js?v=20261106-v0130"></script>
 </body>

@@ -52,6 +52,7 @@
 
   function cardHTML(record) {
     const changedCrop = linkedCropChanged(record);
+    const comparison = window.BioCompare?.evidenceTarget?.(window.BioProjects?.activeId(),paper.id);
     const available = record.source_available !== false && !changedCrop;
     const status = ((!available || record.source_changed) && record.status === 'verified') ? 'pending' : (STATUS[record.status] ? record.status : 'pending');
     const disabled = busy || draft ? ' disabled' : '';
@@ -63,6 +64,8 @@
       (record.figure_id ? ' · ' + esc(figures.find(f => f.id === record.figure_id)?.label || record.figure_id) : '') + '</p>' +
       (changedCrop ? '<p class="evidence-warning">' + ui("此裁图来自旧版 PDF，请在当前原文重新取图。") + '</p>' : !available ? "<p class=\"evidence-warning\">" + ui("来源已移除或页码已失效，请编辑并重新选择来源。") + "</p>" : record.source_changed ? "<p class=\"evidence-warning\">" + ui("来源文件已更新，请重新查看原文并核查这条证据。") + "</p>" : '') +
       '<div class="evidence-card-actions"><button type="button" class="btn" data-evidence-action="jump" data-evidence-id="' + esc(record.id) + '"' + (!available || busy ? ' disabled' : '') + ">" + ui("查看原文") + "</button>" +
+      (available && !record.source_changed && comparison ? '<button type="button" class="btn" data-evidence-action="compare" data-evidence-id="' +
+        esc(record.id) + '" title="' + esc(comparison.question) + '"' + disabled + '>' + ui('加入当前比较') + '</button>' : '') +
       "<label class=\"evidence-verdict-label\"><span class=\"sr-only\">" + ui("核查结果") + "</span><select aria-label=\"核查结果\" data-i18n-aria-label=\"核查结果\" data-evidence-status=\"" + esc(record.id) + '"' + disabled + '>' +
       Object.entries(STATUS).map(([key, label]) => '<option value="' + key + '"' + (key === status ? ' selected' : '') + (key === 'verified' && !available ? ' disabled' : '') + ' data-i18n="' + esc(label) + '">' + esc(t(label)) + '</option>').join('') + '</select></label>' +
       '<button type="button" class="btn btn-ghost danger-ghost" data-evidence-action="delete" data-evidence-id="' + esc(record.id) + '"' + disabled + ">" + ui("删除") + "</button></div></article>";
@@ -199,6 +202,18 @@
     if (action === 'reload') { await open(paper, figures); return; }
     const record = records.find(r => r.id === button.dataset.evidenceId);
     if (!record) return;
+    if (action === 'compare') {
+      const scope = window.BioProjects?.activeId(), id = paper.id, token = epoch;
+      const target = window.BioCompare?.evidenceTarget(scope,id);
+      if (!target || draft || record.source_available === false || record.source_changed || linkedCropChanged(record)) return;
+      button.disabled = true;
+      try {
+        await window.BioCompare.attachEvidence(scope,id,record,target,() => isCurrent(token,id) && window.BioProjects?.activeId() === scope);
+        hooks.toast?.(t('已加入当前比较，保存比较后生效。'));
+      } catch (err) { hooks.toast?.(err.message,'error'); }
+      finally { button.disabled = false; }
+      return;
+    }
     if (action === 'edit') { start(record); return; }
     if (action === 'delete') {
       if (window.confirm(t("删除这条证据记录？原文与笔记不会删除。"))) await mutate('DELETE', record.id);
@@ -229,5 +244,5 @@
     return true;
   }
 
-  window.BioEvidence = { init, open, clear, start, canLeave };
+  window.BioEvidence = { init, open, clear, start, canLeave, refreshComparison:() => { if (!busy && !draft) render(); } };
 })();

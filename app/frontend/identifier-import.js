@@ -63,6 +63,12 @@
     $('identifier-status').textContent = progress ? tr('已处理') + ' ' + progress.done + ' / ' + progress.total :
       phase ? tr('正在查询题录…') :
       [feedback ? tr(feedback) : '', rows.length ? tr('条目数') + ' ' + rows.length + ' · ' + tr('已选') + ' ' + selected.size : ''].filter(Boolean).join(' · ');
+    const batch = $('doi-batch-pdf');
+    if (batch) {
+      const ids = rows.filter(row => ['added','joined','existing'].includes(row.result) && row.paper_id && !row.has_file).map(row => row.paper_id);
+      batch.hidden = !ids.length || !!phase;
+      batch.onclick = () => { if (!phase) { const target = scope; close(); hooks.batchPdf?.(ids,target); } };
+    }
     const root = $('identifier-rows');
     root.replaceChildren(...rows.map(row => {
       const wrap = document.createElement('div'); wrap.className = 'identifier-row';

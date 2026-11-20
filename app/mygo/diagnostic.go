@@ -473,6 +473,10 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	if !bytes.Contains(data, []byte(id)) {
 		return errors.New("native PDF parsing/search failed")
 	}
+	if err = exerciseFigureDeck(client, service.ready.URL, id, figureID); err != nil {
+		return fmt.Errorf("packaged PowerPoint export: %w", err)
+	}
+	report["figure_deck_tested"] = true
 	if gui {
 		if err = runWindow(service, true); err != nil {
 			return err
@@ -481,6 +485,7 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 			return errors.New("native dialogs did not read the saved interface language")
 		}
 		report["gui_tested"] = true
+		report["zotero_bridge_tested"] = true
 		report["locale_tested"] = true
 		report["brand_icon_tested"] = true
 		report["figure_reader_tested"] = true
