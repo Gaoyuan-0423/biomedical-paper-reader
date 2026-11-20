@@ -384,6 +384,9 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
     others = [f for f in previous if f.get("document_id", "main") != document_id]
     def identity(f):
         return (f.get("label"), f.get("page"), tuple(f.get("bbox", [])), bool(f.get("parent")))
+    prior_revision = (_raw_meta(d).get("document_revisions", {}).get(document_id, "legacy")
+                      if (d / "meta.json").is_file() else "legacy")
+    new_revision = hashlib.sha256(content).hexdigest()
     old_by_key = {identity(f): f for f in own if f.get("source") != "manual"}
     occupied = [int(p.stem[1:]) for p in (d / "figures").glob("*.png") if re.fullmatch(r"[a-z]\d{3,6}", p.stem)]
     counter = max(occupied + [int(f["id"][1:]) for f in previous], default=0)
@@ -409,10 +412,14 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
             if old:
                 item.update({key: old[key] for key in ("favorite", "tags", "shelf_key", "shelf_source_revision") if key in old})
                 item["observation"] = old.get("observation", "")
+                if item["observation"] and (prior_revision != new_revision or "observation_source_revision" in old):
+                    item["observation_source_revision"] = old.get("observation_source_revision", prior_revision)
                 if old.get("observation_language") in ("zh-CN", "en"):
                     item["observation_language"] = old["observation_language"]
                 if old.get("caption_edited"):
                     item.update(caption=old["caption"], caption_edited=True)
+                    if prior_revision != new_revision or "caption_source_revision" in old:
+                        item["caption_source_revision"] = old.get("caption_source_revision", prior_revision)
             fresh.append(item)
         for item, original in zip(fresh, parsed["figures"]):
             item["parent"] = mapping.get(original.get("parent"))
@@ -424,7 +431,6 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
         # Manual crops keep their original source even when the PDF is replaced.
         manual = [f for f in own if f.get("source") == "manual"]
         if any("crop_source_revision" not in f for f in manual) and (d / "meta.json").is_file():
-            prior_revision = _raw_meta(d).get("document_revisions", {}).get(document_id, "legacy")
             for item in manual:
                 item.setdefault("crop_source_revision", prior_revision)
         figures = others + fresh + manual
@@ -434,7 +440,7 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
         if document_id == "main":
             (d / "text.txt").write_text(text, "utf-8")
         save_figures(d, figures)
-        save_parsed_blocks(d, document_id, hashlib.sha256(content).hexdigest(), parsed['pages'])
+        save_parsed_blocks(d, document_id, new_revision, parsed['pages'])
     return parsed, figures
 
 
@@ -2620,9 +2626,11 @@ def patch_figure(paper_id: str, fid: str, body: FigurePatch):
                 if body.label is not None and body.label.strip():
                     f["label"] = body.label.strip()[:60]
                 if body.caption is not None:
+                    f.pop("caption_source_revision", None)
                     f["caption"] = body.caption.strip()
                     f["caption_edited"] = True
                 if body.observation is not None:
+                    f.pop("observation_source_revision", None)
                     f["observation"] = body.observation.strip()
                     if not f["observation"]:
                         f.pop("observation_language", None)
@@ -2665,13 +2673,17 @@ def _image_payload(path: Path) -> dict:
 
 
 def _figures_to_read(d: Path, settings: dict, force: bool, *, all_figures: bool = False,
-                     language: str = "zh-CN") -> tuple[list[dict], list[dict]]:
+                     language: str = "zh-CN", verified_docs=None) -> tuple[list[dict], list[dict]]:
     figures = load_figures(d)
     parents = [f for f in figures if not f.get("parent")]
+    if verified_docs is not None:
+        revisions = {doc: entry[0] for doc, entry in verified_docs.items()}
+        parents = [f for f in parents if f.get("document_id", "main") in revisions and not crop_source_changed(f, revisions)]
     parents.sort(key=lambda f: (f.get("document_id", "main") != "main", f.get("document_id", "main"), f.get("page", 0), f.get("id", "")))
     limit = int(settings.get("max_figures") or 0)
     selected = parents if all_figures else (parents[:limit] if limit else [])
     todo = [f for f in selected if force or not f.get("observation")
+            or verified_docs is not None and not rr.current_figure_inputs(f, verified_docs[f.get("document_id","main")][0]).get("observation")
             or (f.get("observation_language") or "zh-CN") != language]
     return figures, todo
 
@@ -2739,14 +2751,15 @@ def _save_figure_observation(d: Path, original: dict, observation: str, source_r
         # Preserve them, and never resurrect a deleted figure from a snapshot.
         current["observation"] = observation
         current["observation_language"] = language
+        current.pop("observation_source_revision", None)
         save_figures(d, figures)
         return current, figures
 
 
-async def _read_figures_events(settings: dict, d: Path, force: bool, *, all_figures: bool = False, language: str = "zh-CN", tolerate_failure: bool = False):
+async def _read_figures_events(settings: dict, d: Path, force: bool, *, all_figures: bool = False, language: str = "zh-CN", tolerate_failure: bool = False, verified_docs=None):
     """Async generator: {'type':'progress'} per figure, then {'type':'result', figures}."""
     with storage_lock:
-        figures, todo = _figures_to_read(d, settings, force, all_figures=all_figures, language=language)
+        figures, todo = _figures_to_read(d, settings, force, all_figures=all_figures, language=language, verified_docs=verified_docs)
         revisions = read_meta(d).get("document_revisions", {})
     if not todo:
         yield {"type": "result", "figures": figures}
@@ -2756,7 +2769,9 @@ async def _read_figures_events(settings: dict, d: Path, force: bool, *, all_figu
     async def one(fig: dict):
         async with sem:
             try:
-                return fig["id"], await _read_one_figure(settings, d, fig, language=language)
+                current_input = (rr.current_figure_inputs(fig, verified_docs[fig.get("document_id", "main")][0])
+                                 if verified_docs is not None else fig)
+                return fig["id"], await _read_one_figure(settings, d, current_input, language=language)
             except (UpstreamError, OSError, httpx.HTTPError):
                 if not tolerate_failure:
                     raise
@@ -2866,7 +2881,10 @@ def report_overview(paper_id: str):
         meta = read_meta(d)
         coverage = meta.get('notes_figure_coverage')
         if coverage:
-            live = {f['id']: rr.figure_identity(f, meta) for f in load_figures(d)}
+            inventory = load_figures(d)
+            docs = rr.verified_figure_documents(d, meta, inventory)
+            live = {f['id']: rr.figure_identity(f, meta) for f in inventory
+                    if f.get('document_id','main') in docs and not crop_source_changed(f,meta.get('document_revisions',{}))}
             coverage = {**coverage, 'figures': [{**f, 'available': live.get(f['id']) == f['identity']
                 and (d / 'figures' / (f['id'] + '.png')).is_file()} for f in coverage['figures']]}
         return {'coverage': coverage, 'reviews': meta.get('claim_reviews', []), 'notes_revision': meta['notes_revision']}
@@ -2876,6 +2894,8 @@ class ReviewLocator(BaseModel):
     document_id: str = Field(pattern=r'^(main|[0-9a-f]{32})$')
     page: int = Field(ge=1, le=600)
     source_revision: str = Field(pattern=r'^[0-9a-f]{64}$')
+    figure_id: str = Field(default='', max_length=32)
+    bbox: list[float] | None = Field(default=None, min_length=4, max_length=4)
 
 
 @app.post('/api/papers/{paper_id}/report-review/locate')
@@ -2887,6 +2907,15 @@ def locate_review_source(paper_id: str, body: ReviewLocator):
         if body.page > pages:
             raise HTTPException(409, '引用页已变化。')
         validate_source_snapshot(d,meta,[body.model_dump()])
+        if body.figure_id:
+            fig = next((f for f in load_figures(d) if f['id'] == body.figure_id), None)
+            if (not fig or fig.get('document_id','main') != body.document_id or fig.get('page') != body.page
+                    or fig.get('bbox') != body.bbox or not (d/'figures'/(fig['id']+'.png')).is_file()
+                    or meta.get('document_revisions',{}).get(body.document_id) != body.source_revision
+                    or crop_source_changed(fig,meta.get('document_revisions',{}))):
+                raise HTTPException(409, '所选图表已更新，请重新核对。')
+            figure = rr.current_figure_inputs(fig, body.source_revision)
+            return {**body.model_dump(), 'observation': figure.get('observation',''), 'caption': figure.get('caption','')}
         return body
 
 
@@ -2927,7 +2956,8 @@ def apply_claim_review(paper_id: str, body: rr.Decision):
             if item['kind'] == 'figure':
                 fig = live.get(item['figure_id'])
                 if (not fig or not (d/'figures'/(fig['id']+'.png')).is_file()
-                        or (fig.get('caption') or '') != item['quote'] or fig.get('bbox') != item['bbox']
+                        or (rr.current_figure_inputs(fig, item['source_revision']).get('caption') or '') != item['quote']
+                        or fig.get('bbox') != item['bbox']
                         or fig.get('page') != item['page'] or fig.get('document_id','main') != item['document_id']):
                     raise HTTPException(409, '所选图表已更新，请重新核对。')
         rr.apply(current,body,preview['sources'])
@@ -2982,9 +3012,10 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1,
             inventory = load_figures(d)
             failed_figures = set()
             figures_for_prompt: list[dict] = []
+            docs = await asyncio.to_thread(rr.verified_figure_documents, d, meta, inventory) if use_figures else {}
             if use_figures:
                 if settings.get("vision_model") and mode != "quick":
-                    async for ev in _read_figures_events(settings, d, force=False, language=language, tolerate_failure=True):
+                    async for ev in _read_figures_events(settings, d, force=False, language=language, tolerate_failure=True, verified_docs=docs):
                         if ev["type"] == "progress":
                             if ev.get("failed"):
                                 failed_figures.add(ev["figure"])
@@ -2995,9 +3026,12 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1,
                             figures_for_prompt = [f for f in inventory if not f.get("parent")]
                 else:
                     figures_for_prompt = [f for f in inventory if not f.get("parent")]
-            figures_for_prompt = [({**f, 'observation':''} if f['id'] in failed_figures else f)
-                                  for f in figures_for_prompt if not crop_source_changed(f,meta.get('document_revisions',{}))]
-            coverage = rr.figure_coverage(meta, inventory, figures_for_prompt, failed_figures, generation)
+            figures_for_prompt = [rr.current_figure_inputs(f, docs[f.get('document_id','main')][0])
+                                  for f in figures_for_prompt if f.get('document_id','main') in docs
+                                  and not crop_source_changed(f,meta.get('document_revisions',{}))]
+            for fig in figures_for_prompt:
+                if fig['id'] in failed_figures:
+                    fig['observation'] = ''
             body_text, final_sources = source_input, original_sources
             if len(source_input) > budget:
                 yield _sse({'type': 'stage', 'stage': 'condense', 'message': '正在分段整理全文，保留原文出处…'})
@@ -3021,6 +3055,11 @@ async def read_paper(paper_id: str, mode: str = "deep", use_figures: int = 1,
                 with storage_lock:
                     validate_source_snapshot(d, read_meta(d), final_sources)
                     snapshot = ns.save_snapshot(d, generation, meta, final_sources)
+            if figures_for_prompt:
+                # Condensation and vision calls can outlive the PDF version selected at the start.
+                final_docs = await asyncio.to_thread(rr.verified_figure_documents, d, meta, figures_for_prompt)
+                figures_for_prompt = [f for f in figures_for_prompt if f.get('document_id','main') in final_docs]
+            coverage = rr.figure_coverage(meta, inventory, figures_for_prompt, failed_figures, generation)
             messages = build_messages(body_text, mode, meta_for_prompt, figures=figures_for_prompt,
                                       direction=settings.get("research_direction", ""), language=language)
             yield _sse({"type": "stage", "stage": "write", "message": f"{settings['model']} 正在撰写{MODE_NAMES[mode]}笔记…"})

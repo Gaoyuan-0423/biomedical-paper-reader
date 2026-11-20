@@ -142,3 +142,30 @@ class FigureDeckTests(unittest.TestCase):
                 return '{}'
             with patch.object(main,'chat_once',side_effect=late):
                 self.assertEqual(self.client.post(endpoint,json=body).status_code,409)
+
+    def test_carried_over_notes_and_caption_stay_historical_after_same_figure_revision_changes(self):
+        pid = self.paper('Replaced')
+        ref = self.favorite(pid)
+        path = '/api/papers/' + pid + '/figures/' + ref['id']
+        caption, notes = 'Historical panel on an older PDF.', '旧版本的逐图笔记。'
+        self.assertEqual(self.client.patch(path,json={'caption':caption,'observation':notes}).status_code,200)
+        before = self.slide(ref,'Reviewed slide')
+        directory = main.paper_dir(pid)
+        figures = main.load_figures(directory)
+        old = next(f for f in figures if f['id']==ref['id'])
+        old.update(caption_source_revision='a'*64, observation_source_revision='a'*64)
+        main.save_figures(directory,figures)
+
+        preview = self.preview(ref).json()
+        self.assertEqual((preview['caption'],preview['observation'],preview['observation_language']),('','',''))
+        self.assertNotEqual(preview['revision'],before['revision'])
+        self.assertEqual(self.client.post('/api/figure-decks/all/pptx',json={'slides':[before]}).status_code,409)
+        configured = {'api_key':'test','model':'model','base_url':'https://example.test/v1'}
+        with patch.object(main,'load_settings',return_value=configured), patch.object(main,'chat_once',new_callable=AsyncMock,return_value='{}') as model:
+            response = self.client.post('/api/figure-decks/all/draft',json={**ref,'revision':preview['revision'],'fields':['notes']})
+            self.assertEqual(response.status_code,200,response.text)
+            user_prompt = model.await_args.args[3][1]['content']
+            self.assertNotIn(caption,user_prompt)
+            self.assertNotIn(notes,user_prompt)
+        stored = next(f for f in main.load_figures(directory) if f['id']==ref['id'])
+        self.assertEqual((stored['caption'],stored['observation']),(caption,notes))

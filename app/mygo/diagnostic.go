@@ -473,6 +473,10 @@ func exerciseService(service *serviceProcess, report map[string]any, gui bool) e
 	if !bytes.Contains(data, []byte(id)) {
 		return errors.New("native PDF parsing/search failed")
 	}
+	if err = exerciseFigureDeck(client, service.ready.URL, id, figureID); err != nil {
+		return fmt.Errorf("packaged PowerPoint export: %w", err)
+	}
+	report["figure_deck_tested"] = true
 	if gui {
 		if err = runWindow(service, true); err != nil {
 			return err

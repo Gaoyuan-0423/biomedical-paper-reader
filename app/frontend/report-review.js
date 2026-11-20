@@ -42,6 +42,7 @@
     补入漏提取的图: 'Capture a missing figure',
     '报告生成时送入模型的图表材料。补读后可重新生成报告。':
       'Figure material supplied when generating this report. Regenerate the report to include later readings.',
+    '请在「编辑」中重新选中原句，以确定需要修改的位置。': 'Select the sentence in Edit to identify the exact source position.',
     '先在报告预览或编辑框选中一句话。': 'Select a sentence in the report preview or editor first.',
     '保存当前笔记后再复核。': 'Save the current note before reviewing it.',
     复核已保存: 'Review saved',
@@ -186,7 +187,53 @@
       details.append(card);
     }
   }
+  // A visible string can occur in another paragraph, link target or hidden
+  // Markdown comment. Probe the actual sanitized rendering at each literal
+  // match and require both boundaries to appear exactly in the selected block.
+  function matchPreviewPosition(raw, original, before, after, renderedBlock) {
+    if (!original || renderedBlock(raw) !== before + original + after) return null;
+    let open = '\uE000', close = '\uE001';
+    while (raw.includes(open) || (before + original + after).includes(open)) open += '\uE000';
+    while (raw.includes(close) || (before + original + after).includes(close)) close += '\uE001';
+    const expected = before + open + original + close + after;
+    let match = null, attempts = 0;
+    for (let i = raw.indexOf(original); i !== -1; i = raw.indexOf(original, i + 1)) {
+      if (++attempts > 12) return null;
+      const probe = raw.slice(0,i) + open + original + close + raw.slice(i+original.length);
+      if (renderedBlock(probe) === expected) {
+        if (match !== null) return null;
+        match = Array.from(raw.slice(0,i)).length;
+      }
+    }
+    return match;
+  }
+
+  function previewSelection(preview, editorText, range) {
+    const blocks = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote';
+    const nearest = node => (node.nodeType === 1 ? node : node.parentElement)?.closest(blocks);
+    const block = nearest(range.startContainer);
+    if (!block || !preview.contains(block) || block !== nearest(range.endContainer) || !global.BioMarkdown)
+      return {unmapped:true};
+    const original = range.toString(), left = range.cloneRange(), right = range.cloneRange();
+    left.selectNodeContents(block); left.setEnd(range.startContainer,range.startOffset);
+    right.selectNodeContents(block); right.setStart(range.endContainer,range.endOffset);
+    const index = Array.from(preview.querySelectorAll(blocks)).indexOf(block);
+    const renderedBlock = markdown => {
+      // Template contents are inert, including any locally referenced figures.
+      const template = document.createElement('template');
+      template.innerHTML = global.BioMarkdown.parse(markdown);
+      const parsed = template.content.querySelectorAll(blocks)[index];
+      return parsed?.tagName === block.tagName ? parsed.textContent : null;
+    };
+    const start = matchPreviewPosition(editorText,original,left.toString(),right.toString(),renderedBlock);
+    return start === null ? {unmapped:true} : {original,start};
+  }
+
   async function review(paper, selection) {
+    if (selection?.unmapped) {
+      hooks.toast(t('请在「编辑」中重新选中原句，以确定需要修改的位置。'), 'error');
+      return;
+    }
     if (!selection?.original) {
       if (session?.form && current(session) && session.rev === paper.notes_revision) {
         dialog.showModal();
@@ -315,9 +362,15 @@
             );
             if (f.available)
               line.append(
-                button('补读这张图', () => {
-                  close();
-                  hooks.read(s.id, f.id);
+                button('补读这张图', async () => {
+                  try {
+                    await hooks.locate(s.id,{...f,figure_id:f.id,bbox:f.identity[3],source_revision:f.identity[5]});
+                    if (!current(s)) return;
+                    close();
+                    hooks.read(s.id, f.id);
+                  } catch (e) {
+                    issue(e);
+                  }
                 }),
               );
             else line.append(ui('small', '当前原图已变化'));
@@ -347,5 +400,5 @@
       if (session?.busy) e.preventDefault();
     });
   }
-  global.BioReportReview = {init, review, coverage};
+  global.BioReportReview = {init, review, coverage, previewSelection};
 })(window);

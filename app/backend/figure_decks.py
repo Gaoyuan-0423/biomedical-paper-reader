@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from chat_sources import file_revision
 from figure_shelf import shelf_item
 from reading_workflow import source_info
+from report_review import current_figure_inputs
 
 ID = Annotated[str, Field(pattern=r'^[0-9a-f]{32}$')]
 MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
@@ -85,11 +86,13 @@ def material(directory, meta, figure, ref, remaining):
             png.verify()
     except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
         raise HTTPException(409, '收藏图片无法读取，请重新选图。') from exc
-    source = {k: item[k] for k in ('paper_title', 'document_id', 'document_name', 'label', 'page', 'caption')}
+    current = current_figure_inputs(figure, item['source_revision'])
+    source = {k: item[k] for k in ('paper_title', 'document_id', 'document_name', 'label', 'page')}
+    source['caption'] = current.get('caption') or ''
     if item['document_id'] == 'main':
         source['document_name'] = meta.get('filename') or 'paper.pdf'
-    source['observation'] = figure.get('observation') or ''
-    source['observation_language'] = figure.get('observation_language') or ''
+    source['observation'] = current.get('observation') or ''
+    source['observation_language'] = (current.get('observation_language') or '') if source['observation'] else ''
     pdf, _, _ = source_info(directory, meta, item['document_id'])
     return dict(source=source, image=image, dimensions=dimensions, pdf=pdf,
                 doc_revision=item['source_revision'], ref=ref)

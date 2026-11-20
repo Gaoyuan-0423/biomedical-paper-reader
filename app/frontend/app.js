@@ -1912,12 +1912,12 @@
     const editor = $('editor');
     if (state.tab === 'edit') {
       const original = editor.value.slice(editor.selectionStart, editor.selectionEnd);
-      return original ? {original, occurrence:editor.value.slice(0,editor.selectionStart).split(original).length-1} : null;
+      return original ? {original, start:Array.from(editor.value.slice(0,editor.selectionStart)).length} : null;
     }
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount || !$('preview').contains(sel.anchorNode) || !$('preview').contains(sel.focusNode)) return null;
-    const original = sel.toString().trim();
-    return original ? {original} : null;
+    if (!sel.toString().trim()) return null;
+    return window.BioReportReview.previewSelection($('preview'),editor.value,sel.getRangeAt(0));
   }
 
   async function openReportReview(coverage) {
@@ -2092,6 +2092,7 @@
       if (updated?.id !== fid || typeof updated.observation !== 'string') throw new Error(tr('读图结果格式无效，请重试。'));
       // A read request owns only its observation; caption/geometry are edited elsewhere.
       fig.observation = updated.observation;
+      if (updated.observation_source_revision) fig.observation_source_revision = updated.observation_source_revision;
       if (['en', 'zh-CN'].includes(updated.observation_language)) fig.observation_language = updated.observation_language;
       renderFigures();
       toast(() => tr('观察已更新到卡片（生成笔记时会一并使用）'), 'ok');
@@ -2105,13 +2106,21 @@
     }
   }
 
-  function startFigureEvidence(id, figure) {
-    if (!figure || state.current?.id !== id || !canLeaveResearch() || cropSourceChanged(figure)) return;
+  async function startFigureEvidence(id, figure) {
+    const paper = state.current;
+    if (!figure || paper?.id !== id || !canLeaveResearch() || cropSourceChanged(figure)) return;
     const doc = figure.document_id || 'main';
-    switchTab('evidence');
-    window.BioEvidence?.start({document_id:doc, page:figure.page, figure_id:figure.id,
-      claim:(figure.observation || '').slice(0,4000), quote:(figure.caption || '').slice(0,12000),
-      expected_source_revision:state.current.document_revisions?.[doc] || 'legacy'});
+    const revision = paper.document_revisions?.[doc];
+    if (!revision || revision === 'legacy') { toast(tr('当前原图已变化'),'error'); return; }
+    try {
+      const live = await api.jsonBody('POST', paperPath(id,'/report-review/locate'),
+        {document_id:doc,page:figure.page,source_revision:revision,figure_id:figure.id,bbox:figure.bbox});
+      if (state.current !== paper || !state.figures.some(f => f.id === figure.id) || !canLeaveResearch()) return;
+      switchTab('evidence');
+      window.BioEvidence?.start({document_id:doc, page:live.page, figure_id:live.figure_id,
+        claim:(live.observation || '').slice(0,4000), quote:(live.caption || '').slice(0,12000),
+        expected_source_revision:revision});
+    } catch (e) { if (state.current === paper) toast(e.message, 'error'); }
   }
 
   function openLightbox(fid, trigger) {
@@ -3233,7 +3242,8 @@
         renderPreview(); renderHead(); updateNoteActions();
       },
       locate: (id,src) => api.jsonBody('POST',paperPath(id,'/report-review/locate'),
-        {document_id:src.document_id, page:src.page, source_revision:src.source_revision}),
+        {document_id:src.document_id, page:src.page, source_revision:src.source_revision,
+         ...(src.figure_id ? {figure_id:src.figure_id,bbox:src.bbox} : {})}),
       jump: (id,src) => state.current?.id===id && jumpChatSource({paper_id:id,...src},'preview'),
       read: (id,fid) => {
         if(state.current?.id!==id || state.generating) return;

@@ -27,6 +27,7 @@ class Selection(BaseModel):
     original: str = Field(min_length=1, max_length=4000)
     notes_revision: int = Field(ge=0)
     occurrence: int | None = Field(default=None, ge=0)
+    start: int | None = Field(default=None, ge=0)
 
 
 class Decision(Selection):
@@ -45,6 +46,10 @@ def selected_position(meta, selection):
     fragment = selection.original
     if not fragment.strip():
         raise HTTPException(422, "请先选中报告里的一句话。")
+    if selection.start is not None:
+        if not text.startswith(fragment, selection.start):
+            raise HTTPException(409, "选中的原句已变化。")
+        return selection.start
     count = text.count(fragment)
     if not count or (selection.occurrence is None and count != 1):
         raise HTTPException(409, "请在「编辑」中重新选中原句，以确定需要修改的位置。")
@@ -56,6 +61,31 @@ def selected_position(meta, selection):
         pos = text.find(fragment, start)
         start = pos + len(fragment)
     return pos
+
+
+def verified_figure_documents(directory, meta, figures):
+    """Older extracted pixels are only usable when their PDF version is known."""
+    verified = {}
+    for doc in {f.get("document_id", "main") for f in figures}:
+        expected = meta.get("document_revisions", {}).get(doc)
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            continue
+        try:
+            path, _, name = document_source(directory, meta, doc)
+            if file_revision(path) == expected:
+                verified[doc] = (expected, (meta.get("filename") or name) if doc == "main" else name)
+        except HTTPException:
+            continue
+    return verified
+
+
+def current_figure_inputs(figure, revision):
+    """Keep historic text on disk, supply only text bound to this document."""
+    current = dict(figure)
+    for field in ("observation", "caption"):
+        if not revision or revision == "legacy" or figure.get(field + "_source_revision", revision) != revision:
+            current[field] = ""
+    return current
 
 
 def figure_identity(fig, meta):
@@ -135,8 +165,11 @@ def review_material(directory, meta, selection, figures):
     # An adjacent citation is relevant to this sentence. Never assign every
     # citation in a long report to every selected claim.
     end = pos + len(selection.original)
-    before_break = re.split(r"[。！？.!?\n](?!\d)", notes[end : end + 180], maxsplit=1)[0]
-    near = notes[pos:end] + before_break
+    # Only an immediately adjacent string of citation/figure links can belong
+    # to this selection. Prose that follows it may cite a different claim.
+    marker = rf"(?:{note_sources.LINK.pattern}|!\[[^\]\n]*\]\(figure:[a-z]\d+\))"
+    adjacent = re.match(rf"(?:[ \t.,;:!?，。；：！？、（）()]*{marker})*", notes[end : end + 2000])
+    near = notes[pos:end] + adjacent.group()
     cited = {(snapshot, sid) for _, snapshot, sid in note_sources.visible_links(near)}
     entries = []
     try:
@@ -185,7 +218,7 @@ def review_material(directory, meta, selection, figures):
                 picked.append({**item, "key": key})
                 seen.add(key)
     figures_ranked = []
-    revisions = {}
+    revisions = verified_figure_documents(directory, meta, figures)
     for fig in figures:
         fid = fig["id"]
         if (
@@ -196,18 +229,9 @@ def review_material(directory, meta, selection, figures):
             continue
         doc = fig.get("document_id", "main")
         if doc not in revisions:
-            try:
-                path, _, name = document_source(directory, meta, doc)
-                revisions[doc] = (
-                    file_revision(path),
-                    (meta.get("filename") or name) if doc == "main" else name,
-                )
-            except HTTPException:
-                revisions[doc] = None
-        if not revisions[doc]:
             continue
         rev, name = revisions[doc]
-        caption = fig.get("caption") or ""
+        caption = current_figure_inputs(fig, rev).get("caption") or ""
         item = {
             "kind": "figure",
             "groups": ["figure"],
