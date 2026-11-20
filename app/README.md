@@ -11,7 +11,7 @@ PDF 导入 → 双栏阅读 → 图片自动提取 → 精读/速读双模式笔
 
 ## 快速开始
 
-桌面用户可直接下载 [v0.16.0 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.16.0)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
+桌面用户可直接下载 [v0.16.1 macOS / Windows 安装包](https://github.com/Gaoyuan-0423/biomedical-paper-reader/releases/tag/v0.16.1)：Apple 芯片 Mac 打开 DMG，将 `BioReader.app` 拖入应用程序；Windows 10 / 11 x64 使用安装 EXE，或完整解压便携 ZIP 后打开 `BioReader.exe`，不要单独移动 exe。Windows 需安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。安装、更新、数据位置与构建步骤见[桌面版说明](DESKTOP.md)；两平台按相同版本更新，文献库仍各自保存在本机。
 
 以下为源码启动方式：
 

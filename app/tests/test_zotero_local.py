@@ -2,6 +2,7 @@
 import hashlib
 from pathlib import Path
 import sqlite3
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -78,12 +79,22 @@ class LocalMigration(unittest.TestCase):
         return self.client.post('/api/zotero-local/'+obj['preview']+'/import',json={'item_id':1,**selection})
 
     def raw_fingerprints(self):
-        return {p.name:(p.stat().st_mtime_ns, hashlib.sha256(p.read_bytes()).hexdigest())
-                for p in self.profile.glob('zotero.sqlite*')}
+        result = {}
+        for path in self.profile.glob('zotero.sqlite*'):
+            info = path.stat()
+            # Windows byte-locks parts of the live WAL index. The importer
+            # never copies that index. Check its presence and metadata only.
+            signature = (info.st_size, info.st_mtime_ns)
+            if path.name != 'zotero.sqlite-shm':
+                signature += (hashlib.sha256(path.read_bytes()).hexdigest(),)
+            result[path.name] = signature
+        return result
 
     def test_wal_source_and_selected_children(self):
         before=self.raw_fingerprints()
+        self.assertIn('zotero.sqlite',before)
         self.assertIn('zotero.sqlite-wal',before)
+        self.assertIn('zotero.sqlite-shm',before)
         obj=self.open()
         self.assertEqual([i['title'] for i in obj['items']],['Local WAL paper','Group paper'])
         first=obj['items'][0]
@@ -114,6 +125,21 @@ class LocalMigration(unittest.TestCase):
         self.assertEqual(len(main.read_meta(main.paper_dir(pid))['zotero_local_pdf_sources']),2)
         self.assertEqual(len(main.list_meta()),1)
         self.assertEqual(self.raw_fingerprints(),before)
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows mandatory file locking')
+    def test_windows_locked_database_can_be_retried_after_release(self):
+        import msvcrt
+        source = self.profile / 'zotero.sqlite'
+        with source.open('r+b', buffering=0) as occupied:
+            msvcrt.locking(occupied.fileno(), msvcrt.LK_NBLCK, 1)
+            try:
+                response = self.client.post('/api/zotero-local/preview', json={'path': str(source), 'library_id': self.scope})
+                self.assertEqual(response.status_code, 409, response.text)
+                self.assertIn('退出 Zotero', response.json()['detail'])
+            finally:
+                occupied.seek(0)
+                msvcrt.locking(occupied.fileno(), msvcrt.LK_UNLCK, 1)
+        self.assertEqual(self.open()['items'][0]['title'], 'Local WAL paper')
 
     def test_existing_doi_preserves_notes_and_main(self):
         res=self.client.post('/api/papers',files={'file':('existing.pdf',fixture_pdf(marker='Existing'))})

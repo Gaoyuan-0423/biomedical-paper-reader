@@ -1,5 +1,7 @@
 # v0.16.0 工程验收
 
+此处保留原构建标签的本地工程记录。v0.16.0 停留在发布草稿，随后 Windows 原生验收在 Zotero 测试读取 SQLite 共享内存时失败。[Windows 验收](https://github.com/Gaoyuan-0423/biomedical-paper-reader/actions/runs/44747754562/job/136327416797) · [v0.16.1 记录](../2026-11-20-v0.16.1/README.md)
+
 本版涉及跨篇比较、报告结论复核、报告生成时的读图记录、三处阅读快捷操作、PubMed 补查、组会 PPTX 和本机 Zotero 迁移。全库检索用生成的 PDF 对照原实现、标准库优化与 Rust 原型的完整请求。[App 验证记录](../../../app/tests/README.md) · [基准复跑方法](../../benchmarks/README.md)
 
 本轮记录工程行为及响应时间。研究者真实核对耗时、候选值修改率和引文对科学结论的支持程度尚待实读评测。阅读规则文件的哈希记录在 [manifest.json](manifest.json)。

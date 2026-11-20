@@ -6,6 +6,7 @@ import re
 import shutil
 import sqlite3
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -144,6 +145,8 @@ def open_session(data, body):
         return token
     except BaseException as exc:
         temporary.cleanup()
+        if sys.platform == 'win32' and (isinstance(exc, PermissionError) or getattr(exc, 'winerror', None) in (32, 33)):
+            raise HTTPException(409, 'Windows 无法复制 Zotero 文库。请退出 Zotero 后重试，若仍失败请检查文库读取权限和临时目录写入权限。') from exc
         if isinstance(exc, (OSError, sqlite3.Error)):
             raise HTTPException(422, '无法读取 Zotero 数据文件，请检查是否选中完整资料目录。') from exc
         raise
