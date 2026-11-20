@@ -3,6 +3,7 @@ import csv
 import io
 import unicodedata
 
+from sample_provenance import field_source_lines
 from paper_resources import resource_accessions
 
 
@@ -18,7 +19,7 @@ CSV_FIELDS = (
     ('sample_count', '论文实际样本量'), ('sample_details', '样品／材料原始说明'),
     ('conditions', '影响使用的条件'), ('notes', '备注'), ('source_origin', '整理来源'),
     ('source_name', '原文文件'), ('document_id', '原文文件 ID'), ('page', 'PDF 页码'),
-    ('quote', '原文摘录'), ('source_state', '原文可用情况'),
+    ('quote', '原文摘录'), ('source_state', '原文可用情况'), ('sample_sources', '样品字段出处'),
 )
 _KINDS = {'dataset': '数据集', 'code': '代码', 'other': '其他资源'}
 _ROLES = {'generated': '本文产生', 'reused': '复用已有资源', 'implementation': '代码实现', 'unknown': '未记录'}
@@ -62,6 +63,7 @@ def resource_csv(entries):
     writer.writerow([label for _, label in CSV_FIELDS])
     for record in entries:
         row = dict(record)
+        row['sample_sources'] = '\n'.join(field_source_lines(record))
         notes = str(record.get('notes') or '')
         automatic = bool(record.get('auto_extraction')) or notes in _AUTO_NOTICES or notes.startswith(_OLD_SNIPPET)
         row['source_origin'] = '精读笔记自动整理' if automatic else '资源记录'

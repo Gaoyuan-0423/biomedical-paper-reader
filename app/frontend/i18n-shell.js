@@ -1,6 +1,15 @@
 (function (global) {
   'use strict';
   global.BioI18n.register({
+    '补充附件': 'Supplementary files', '下载选中附件': 'Download selected files',
+    '按 DOI 或 PMID 导入': 'Import by DOI or PMID', '论文编号或含编号的链接': 'Identifiers or links containing a DOI or PMID',
+    '一次最多 50 项，可用换行或空格分隔。': 'Enter up to 50 items, separated by spaces or line breaks.',
+    '加入所选文献': 'Add selected papers', '预览条目': 'Preview records',
+    'PubMed 检索': 'PubMed searches', '查找全文': 'Find full text', '补齐全文': 'Missing PDFs',
+    '课题库': 'Projects', '课题文献库': 'Project libraries', '当前课题库': 'Current library',
+    '新建课题库': 'New library', '课题库工具': 'Library tools', '文献归集': 'Papers',
+    '跨篇比较': 'Compare papers', '收藏图表': 'Saved figures',
+    '记为字段出处': 'Use as a field source',
     '外观与字号': 'Appearance and text size',
     '即时预览并自动保存；不改变 PDF、原始图片或导出样式。': 'Preview instantly and save automatically. PDFs, original images and export styles stay unchanged.',
     '外观模式': 'Appearance mode',

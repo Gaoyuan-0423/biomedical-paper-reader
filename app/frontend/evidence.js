@@ -30,7 +30,7 @@
 
   function formHTML() {
     const docs = documents(), doc = docs.find(d => d.id === draft.document_id);
-    const availableFigures = figures.filter(f => (f.document_id || 'main') === draft.document_id);
+    const availableFigures = figures.filter(f => (f.document_id || 'main') === draft.document_id && (f.id === draft.figure_id || !hooks.cropSourceChanged?.(f)));
     const disabled = busy ? ' disabled' : '';
     return '<form class="evidence-form" id="evidence-form">' +
       '<div class="evidence-form-heading"><strong>' + (draft.id ? ui("编辑证据") : ui("记录一条关键证据")) + '</strong></div>' +
@@ -40,14 +40,19 @@
       (!doc ? "<option value=\"\" data-i18n=\"请选择来源文件\">请选择来源文件</option>" : '') + docs.map(d => '<option value="' + esc(d.id) + '"' + (d.id === draft.document_id ? ' selected' : '') + (d.id === 'main' ? ' data-i18n="正文"' : '') + '>' + esc(d.name) + '</option>').join('') +
       "</select></label><label>" + ui("PDF 页码") + "<input data-evidence-field=\"page\" type=\"number\" required min=\"1\" max=\"" + esc(doc?.pages || 600) + '" value="' + esc(draft.page) + '"' + disabled + '></label></div>' +
       "<label>" + ui("关联图表（可选）") + "<select data-evidence-field=\"figure_id\"" + disabled + "><option value=\"\" data-i18n=\"仅定位到页面\">仅定位到页面</option>" +
-      availableFigures.map(f => '<option value="' + esc(f.id) + '"' + (f.id === draft.figure_id ? ' selected' : '') + ' data-i18n="{label} · 第 {page} 页" data-i18n-params="' + esc(JSON.stringify({ label: f.label || f.id, page: f.page })) + '">' + esc(t('{label} · 第 {page} 页', { label: f.label || f.id, page: f.page })) + '</option>').join('') + '</select></label>' +
+      availableFigures.map(f => '<option value="' + esc(f.id) + '"' + (hooks.cropSourceChanged?.(f) ? ' disabled' : '') + (f.id === draft.figure_id ? ' selected' : '') + ' data-i18n="{label} · 第 {page} 页" data-i18n-params="' + esc(JSON.stringify({ label: f.label || f.id, page: f.page })) + '">' + esc(t('{label} · 第 {page} 页', { label: f.label || f.id, page: f.page })) + '</option>').join('') + '</select></label>' +
       "<p class=\"hint\">" + ui("页码按当前 PDF 文件从 1 开始计数。保存后为“待核查”，查看原文后再标记结果。") + "</p>" +
       (error ? '<p class="evidence-error" role="alert">' + messageHTML(error) + '</p>' : '') +
       '<div class="evidence-form-actions"><button type="submit" class="btn btn-primary"' + disabled + '>' + (busy ? ui("正在保存…") : ui("保存证据")) + '</button><button type="button" class="btn btn-ghost" data-evidence-action="cancel"' + disabled + ">" + ui("取消") + "</button></div></form>";
   }
 
+  function linkedCropChanged(record) {
+    return record.figure_id && hooks.cropSourceChanged?.(figures.find(f => f.id === record.figure_id));
+  }
+
   function cardHTML(record) {
-    const available = record.source_available !== false;
+    const changedCrop = linkedCropChanged(record);
+    const available = record.source_available !== false && !changedCrop;
     const status = ((!available || record.source_changed) && record.status === 'verified') ? 'pending' : (STATUS[record.status] ? record.status : 'pending');
     const disabled = busy || draft ? ' disabled' : '';
     return '<article class="evidence-card"><div class="evidence-card-heading"><span class="evidence-status evidence-status-' + status + '">' + ui(STATUS[status]) + '</span>' +
@@ -56,7 +61,7 @@
       (record.quote ? '<blockquote>' + esc(record.quote) + '</blockquote>' : '') +
       '<p class="evidence-source">' + sourceHTML(record) + ui(' · PDF 第 {page} 页', { page: record.page }) +
       (record.figure_id ? ' · ' + esc(figures.find(f => f.id === record.figure_id)?.label || record.figure_id) : '') + '</p>' +
-      (!available ? "<p class=\"evidence-warning\">" + ui("来源已移除或页码已失效，请编辑并重新选择来源。") + "</p>" : record.source_changed ? "<p class=\"evidence-warning\">" + ui("来源文件已更新，请重新查看原文并核查这条证据。") + "</p>" : '') +
+      (changedCrop ? '<p class="evidence-warning">' + ui("此裁图来自旧版 PDF，请在当前原文重新取图。") + '</p>' : !available ? "<p class=\"evidence-warning\">" + ui("来源已移除或页码已失效，请编辑并重新选择来源。") + "</p>" : record.source_changed ? "<p class=\"evidence-warning\">" + ui("来源文件已更新，请重新查看原文并核查这条证据。") + "</p>" : '') +
       '<div class="evidence-card-actions"><button type="button" class="btn" data-evidence-action="jump" data-evidence-id="' + esc(record.id) + '"' + (!available || busy ? ' disabled' : '') + ">" + ui("查看原文") + "</button>" +
       "<label class=\"evidence-verdict-label\"><span class=\"sr-only\">" + ui("核查结果") + "</span><select aria-label=\"核查结果\" data-i18n-aria-label=\"核查结果\" data-evidence-status=\"" + esc(record.id) + '"' + disabled + '>' +
       Object.entries(STATUS).map(([key, label]) => '<option value="' + key + '"' + (key === status ? ' selected' : '') + (key === 'verified' && !available ? ' disabled' : '') + ' data-i18n="' + esc(label) + '">' + esc(t(label)) + '</option>').join('') + '</select></label>' +
@@ -106,6 +111,10 @@
     const doc = documents().find(d => d.id === initial.document_id) || documents()[0];
     const figure = figures.find(f => f.id === initial.figure_id && (f.document_id || 'main') === doc.id);
     draft = { id: initial.id || '', claim: initial.claim || '', quote: initial.quote || '', document_id: doc.id, page: initial.page || 1, figure_id: figure ? figure.id : '' };
+    if (initial.expected_source_revision) {
+      draft.expected_source_revision = initial.expected_source_revision;
+      if (initial.selection_bbox) draft.selection_bbox = initial.selection_bbox;
+    }
     error = ''; render(); panel.querySelector('#evidence-claim')?.focus();
   }
 
@@ -148,12 +157,17 @@
     await mutate(draft.id ? 'PATCH' : 'POST', draft.id, {
       claim: draft.claim.trim(), quote: draft.quote.trim(), document_id: doc.id, page,
       figure_id: draft.figure_id, status: 'pending',
+      ...(draft.expected_source_revision ? { expected_source_revision: draft.expected_source_revision, selection_bbox: draft.selection_bbox || null } : {}),
     });
   }
 
   function input(event) {
     const key = event.target.dataset.evidenceField;
     if (!draft || busy || !['claim', 'quote', 'document_id', 'page', 'figure_id'].includes(key)) return;
+    if (key !== 'claim' && String(draft[key]) !== event.target.value) {
+      delete draft.selection_bbox;
+      if (key === 'document_id') delete draft.expected_source_revision;
+    }
     draft[key] = event.target.value;
   }
 
@@ -161,7 +175,7 @@
     const target = event.target;
     if (target.dataset.evidenceStatus && !busy && !draft) {
       const record = records.find(r => r.id === target.dataset.evidenceStatus);
-      if (!record || !STATUS[target.value] || (target.value === 'verified' && record.source_available === false)) { render(); return; }
+      if (!record || !STATUS[target.value] || (target.value === 'verified' && (record.source_available === false || linkedCropChanged(record)))) { render(); return; }
       await mutate('PATCH', record.id, { status: target.value }); return;
     }
     input(event);
@@ -188,8 +202,8 @@
     if (action === 'edit') { start(record); return; }
     if (action === 'delete') {
       if (window.confirm(t("删除这条证据记录？原文与笔记不会删除。"))) await mutate('DELETE', record.id);
-    } else if (action === 'jump' && record.source_available !== false) {
-      try { await hooks.jump(record.document_id, record.page); }
+    } else if (action === 'jump' && record.source_available !== false && !linkedCropChanged(record)) {
+      try { await hooks.jump(record.document_id, record.page, ...(record.selection_bbox && !record.source_changed ? [record.selection_bbox] : [])); }
       catch (err) { hooks.toast?.(t("无法定位原文：") + err.message, 'error'); }
     }
   }

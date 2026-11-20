@@ -642,6 +642,12 @@ def extract_captions(pdf_source) -> list[dict]:
     return captions
 
 
+def crop_source_changed(figure: dict, revisions: dict) -> bool:
+    """A legacy unmarked crop remains usable until its PDF is replaced."""
+    return (figure.get("source") == "manual" and "crop_source_revision" in figure
+            and figure["crop_source_revision"] != revisions.get(figure.get("document_id", "main"), "legacy"))
+
+
 @_serialized_pdfium
 def crop_figure(pdf_path: Path, figures_dir: Path, page_number: int, bbox, fid: str) -> dict:
     """Manual crop in PDF points for one page; the caller assigns id/label/caption.
@@ -675,7 +681,12 @@ def _figure_records(path: Path) -> list[dict]:
         if (not isinstance(record, dict) or not isinstance(record.get("id"), str)
                 or not re.fullmatch(r"[a-z]\d{3,6}", record["id"]) or record["id"] in seen
                 or any(record.get(field) is not None and not isinstance(record[field], str)
-                       for field in ("caption", "observation"))):
+                       for field in ("caption", "observation"))
+                or ("favorite" in record and type(record["favorite"]) is not bool)
+                or ("tags" in record and (not isinstance(record["tags"], list)
+                    or any(not isinstance(tag, str) for tag in record["tags"])))
+                or (record.get("favorite") and (not isinstance(record.get("shelf_key"), str)
+                    or not re.fullmatch(r"[0-9a-f]{32}", record["shelf_key"])))):
             raise ValueError("invalid figure record")
         seen.add(record["id"])
     return records

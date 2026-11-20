@@ -10,7 +10,7 @@
   const dirty = () => state.query.trim() !== state.searched || state.scope !== state.searchedScope;
   function render() {
     if (!panel || !state.visible) return;
-    panel.innerHTML = "<p class=\"hint\">" + ui("检索全库论文正文、补充 PDF 和已保存笔记，不受侧栏标签或星标筛选影响。首次读取旧 PDF 可能需要稍等；不调用 AI。") + "</p>" +
+    panel.innerHTML = "<p class=\"hint\">" + ui(state.libraryId && state.libraryId !== 'all' ? "在当前课题库的正文、补充 PDF 和已保存笔记中检索。" : "检索全库论文正文、补充 PDF 和已保存笔记，不受侧栏标签或星标筛选影响。首次读取旧 PDF 可能需要稍等；不调用 AI。") + "</p>" +
       "<form id=\"library-search-form\" class=\"library-search-form\"><label class=\"sr-only\" for=\"library-search-query\">" + ui("搜索正文与笔记") + "</label><input id=\"library-search-query\" type=\"search\" minlength=\"2\" maxlength=\"200\" placeholder=\"输入关键词或一句原文\" data-i18n-placeholder=\"输入关键词或一句原文\" value=\"" + esc(state.query) + '"' + (state.opening ? ' disabled' : '') + "><label class=\"sr-only\" for=\"library-search-scope\">" + ui("搜索范围") + "</label><select id=\"library-search-scope\"" + (state.opening ? ' disabled' : '') + '>' + [['all', '正文与笔记'], ['pdf', '仅正文与补充'], ['notes', '仅已保存笔记']].map(([value, name]) => '<option value="' + value + '"' + (state.scope === value ? ' selected' : '') + ' data-i18n="' + esc(name) + '">' + esc(t(name)) + '</option>').join('') + '</select><button class="btn btn-primary" type="submit"' + (state.opening ? ' disabled' : '') + '>' + (state.loading ? ui("重新搜索") : ui("搜索")) + '</button></form>' +
       (state.error ? '<p class="library-search-error" role="alert">' + messageHTML(state.error) + '</p>' : '') +
       (state.loading ? "<p class=\"library-search-status\" role=\"status\">" + ui("正在检索本机材料…") + "</p>" : '') +
@@ -27,7 +27,7 @@
     if (!more) { state.items = []; state.more = false; state.offset = 0; state.warnings = []; state.warningCount = 0; }
     state.loading = true; state.error = ''; render();
     try {
-      const result = await hooks.request('GET', '/api/library/search?q=' + encodeURIComponent(query) + '&scope=' + scope + '&offset=' + offset + '&limit=20');
+      const result = await hooks.request('GET', '/api/library/search?q=' + encodeURIComponent(query) + '&scope=' + scope + '&offset=' + offset + '&limit=20' + (state.libraryId && state.libraryId !== 'all' ? '&library_id=' + encodeURIComponent(state.libraryId) : ''));
       if (!state.visible || version !== state.version || state.query.trim() !== query || state.scope !== scope) return;
       if (!Array.isArray(result.items) || !Number.isInteger(result.next_offset) || result.next_offset < offset + result.items.length) throw Error(t("搜索结果不完整，请重试。"));
       state.items = state.items.concat(result.items); state.more = !!result.has_more; state.offset = result.next_offset;
@@ -48,7 +48,11 @@
     } catch (error) { if (state.visible && version === state.version) state.error = message("无法打开来源：" + "{detail}", { detail: error.message }); }
     finally { if (state.visible && version === state.version) { state.opening = false; render(); } }
   }
-  function open(initialQuery = '') {
+  function open(initialQuery = '', libraryId = 'all') {
+    if (state.libraryId !== libraryId || libraryId !== 'all') {
+      state.items = []; state.searched = ''; state.more = false; state.offset = 0; state.warnings = []; state.warningCount = 0;
+    }
+    state.libraryId = libraryId;
     state.visible = true; state.version++; state.loading = false; state.opening = false; state.error = '';
     if (initialQuery && initialQuery !== state.query) { state.query = String(initialQuery).slice(0, 200); state.items = []; state.searched = ''; state.more = false; state.offset = 0; state.warnings = []; }
     hooks.showModal('library-search-modal'); render(); panel.querySelector('#library-search-query')?.focus();

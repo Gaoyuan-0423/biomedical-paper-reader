@@ -170,13 +170,17 @@
   async function importItem() {
     if (state.importing || state.searching || state.loading || !state.preview || state.success) return;
     const body = { preview_id: state.preview.preview_id, attachment_key: state.attachment };
+    const targetScope = hooks.activeScope?.();
     state.importing = true; state.error = ''; render();
     try {
       const result = await hooks.request('POST', '/api/zotero/import', body);
       if (!result.paper?.id) throw new Error(t("导入结果缺少文献，请刷新文献库检查。"));
       state.success = result;
-      hooks.onImported(result.paper);
-      if (!state.visible) hooks.toast(t(result.message || "Zotero 文献已导入，可在文献库打开。"), 'ok');
+      const warning = await hooks.onImported(result.paper, targetScope);
+      if (typeof warning === 'string' && warning) {
+        state.error = warning;
+        if (!state.visible) hooks.toast(warning, 'error');
+      } else if (!state.visible) hooks.toast(t(result.message || "Zotero 文献已导入，可在文献库打开。"), 'ok');
     } catch (error) {
       state.error = message("导入失败：" + "{detail}", { detail: error.message });
       if (error.status === 409) state.preview = null;

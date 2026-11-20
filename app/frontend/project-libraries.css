@@ -1,0 +1,26 @@
+.project-scope-row, .project-controls, .project-sections, .project-form-actions { display: flex; gap: 8px; align-items: center; }
+.project-scope-row { margin: 8px 0; }
+.project-scope-row select, .project-controls select { flex: 1; }
+.project-modal { width: min(940px, 96vw); max-height: min(88vh, 900px); display: flex; flex-direction: column; }
+.project-controls, .project-sections { padding: 8px 20px; flex-wrap: wrap; }
+.project-sections { border-bottom: 1px solid var(--border); }
+.project-sections button[aria-pressed="true"] { color: var(--primary-ink); border-color: var(--primary-border); background: var(--primary-soft); }
+.project-body { min-height: 0; overflow: auto; }
+.project-status { margin: 5px 20px; color: var(--muted); }
+.project-form { display: grid; gap: 12px; }
+.project-form label.project-field { display: grid; gap: 4px; font-weight: 600; }
+.project-form .project-form-actions { flex-wrap: wrap; }
+.project-form .project-form-actions button:last-child:not(:first-child) { margin-left: auto; }
+.project-checklist { display: grid; max-height: 36vh; overflow: auto; border-block: 1px solid var(--border); }
+.project-checklist label, .project-library-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; }
+.project-checklist input { flex: none; }
+.project-checklist span, .project-library-row strong, .project-library-row p { overflow-wrap: anywhere; }
+.project-library-row { justify-content: space-between; border-bottom: 1px solid var(--border); }
+.project-library-row p { color: var(--muted); margin: 4px 0; white-space: pre-wrap; }
+.project-library-row button { flex-shrink: 0; }
+
+.download-checklist { display: grid; gap: 8px; }
+.download-item { padding: 9px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.download-item label, .download-item small { display: block; }
+.download-item small { margin: 4px 0 0; color: var(--muted); }
+.download-item input, .project-form-actions label input { margin-right: 8px; }

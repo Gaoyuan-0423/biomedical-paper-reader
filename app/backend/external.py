@@ -1,6 +1,6 @@
 """Metadata lookups borrowed from the CiteBox feature set: CrossRef (DOI → record)
-and Semantic Scholar (references / citations). Only two fixed public hosts are
-ever contacted, each re-checked with the same guard the LLM client uses."""
+and Semantic Scholar (references / citations). Each request is checked
+against its fixed public host and the URL guard shared with the LLM client."""
 
 from __future__ import annotations
 
@@ -31,7 +31,10 @@ def normalize_doi(raw: str) -> str:
     m = DOI_RE.search(text)
     if not m:
         raise LookupError_("不是有效的 DOI（形如 10.1038/s41586-024-xxxxx）")
-    return m.group().rstrip(".,;)")
+    doi = m.group().rstrip(".,;")
+    while doi.endswith(")") and doi.count(")") > doi.count("("):
+        doi = doi[:-1]
+    return doi
 
 
 async def _get_json(url: str, allowed_host: str, headers: dict | None = None) -> dict:

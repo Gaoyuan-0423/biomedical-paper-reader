@@ -43,7 +43,7 @@ function harness(options = {}) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/i18n-app.js'), 'utf8'), context);
   }
   vm.runInContext(source.replace("  document.addEventListener('DOMContentLoaded', init);",
-    '  globalThis.app = { refreshUI, renderStatusPill, renderHead, requestText, finishInput, renderFigures, openLightbox, syncFigureReader, editFigureCaption, readSingleFigure, readFigures, chatContext, toast, jumpNoteReference, prepareDesktopClose, appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
+    '  globalThis.app = { refreshUI, renderStatusPill, renderHead, requestText, finishInput, renderFigures, openLightbox, syncFigureReader, editFigureCaption, readSingleFigure, readFigures, chatContext, toast, jumpNoteReference, prepareDesktopClose, appendChatNote, setReadingMode, switchTab, state, api, addTag, removeTag, autoTags, extractResources, renderHeadTags, selectedPdfContext, clearPdfSelection, askPdfSelection, jumpChatSource, uploadFiles, openLibrarySearchResult, setCropping, updateChatContext, attachPdfFile, enrichCurrent, updateNoteActions, visiblePapers, renderList, clearLibraryFilters, openTask, saveWorkflow, refreshWorkflow, renderWorkflow, scheduleSave, flushSave, openPaper, fetchFigures, generateNotes, renderPages, clearPdf, rerenderPdf, exportWord, illustrateNotes, changeSupplements, exportMarkdown, loadPdf, goToPage, paintVisiblePages, currentPage, rememberReadingPosition, flushReadingPositions, switchDocument, showFigureSource, reextractFigures, submitCrop };'), context);
   const app = context.app;
   app.state.current = { id: A, title: 'Synthetic paper', notes: '', tags: [] };
   $('head-tags').dataset.paperId = A;
@@ -1720,4 +1720,46 @@ test('partial generated notes retain their captured language through failed save
 test('native close waits for appearance persistence but does not trap the user after a preference failure', async () => {
   const h=harness(),pending=deferred();let settled=false;h.context.window.BioAppearance={flush:()=>pending.promise};
   const closing=h.prepareDesktopClose().then(value=>{settled=true;return value;});await new Promise(setImmediate);assert.equal(settled,false);pending.resolve(false);assert.equal(await closing,true);
+});
+
+test('capture PDF selection as draft evidence keeps the supplement, selected page and normalized location', async () => {
+  const h = harness(); pdfFixture(h, 3);
+  h.state.current.has_file = true; h.state.documentId = B; h.state.pdfContext.documentId = B;
+  h.state.current.supplements = [{ id: B, filename: 'Supplement.pdf', pages: 3 }];
+  h.state.current.document_revisions = { [B]: 'stored-revision' };
+  await h.renderPages(0, 1);
+  const { wrapper, range } = pdfSelectionFixture(h, 2);
+  wrapper.getBoundingClientRect = () => ({ left: 10, top: 20, width: 100, height: 200 });
+  range.getBoundingClientRect = () => ({ left: 20, top: 40, right: 80, bottom: 120 });
+  h.state.pdfSelection = h.selectedPdfContext();
+  let draft;
+  h.context.window.BioEvidence = { canLeave: () => true, open() {}, start: data => { draft = JSON.parse(JSON.stringify(data)); } };
+  assert.equal(await h.askPdfSelection('evidence'), true);
+  assert.deepEqual(draft, { quote: 'Selected source paragraph', document_id: B, page: 2,
+    selection_bbox: [.1, .1, .7, .5], expected_source_revision: 'stored-revision' });
+  assert.equal(h.state.tab, 'evidence');
+  assert.equal(h.state.pdfSelection, null);
+});
+
+test('a partial PDF import reports failure to join the selected project after a later success', async () => {
+  const h = harness();
+  h.context.window.BioProjects = {
+    activeId: () => B, scoped: papers => papers,
+    attachImported: async (_scope, id) => id === C ? 'project membership failed' : '',
+  };
+  h.state.papers = [];
+  h.api.upload = async file => ({ id: file.name === 'first.pdf' ? C : A, title: file.name, tags: [] });
+  await h.uploadFiles([{name:'first.pdf'}, {name:'second.pdf'}]);
+  assert.match(h.$('toast').textContent, /first.pdf.*project membership failed/);
+  assert.equal(h.state.papers.length, 2);
+});
+
+test('an old manual crop remains in the gallery but cannot navigate into a replaced PDF', async () => {
+  const h = harness();
+  h.state.current.document_revisions = {main: 'new-hash'};
+  h.state.figures = [{id:'m001', label:'Panel', source:'manual', page:1, crop_source_revision:'old-hash'}];
+  h.renderFigures();
+  assert.match(h.$('fig-grid').innerHTML, /data-source-fig="m001" disabled/);
+  assert.match(h.$('fig-grid').innerHTML, /data-zoom="m001"/);
+  assert.equal(await h.showFigureSource('m001'), false);
 });
