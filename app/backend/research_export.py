@@ -6,6 +6,8 @@ import html
 import re
 from urllib.parse import quote, urlsplit
 
+from sample_provenance import field_source_lines
+
 
 _STATUS = {'pending': '待核查', 'verified': '已核查', 'rejected': '不支持该判断'}
 _KINDS = {'dataset': '数据集', 'code': '代码', 'other': '其他资源'}
@@ -136,7 +138,10 @@ def append_research_appendix(notes, evidence, resources):
             if record.get('url'):
                 link = _safe_url(record['url'])
                 sections.append('- 链接：' + ('[打开资源](' + link + ')' if link else '未导出（仅支持有效的 HTTP/HTTPS 地址）'))
-            sections.extend(_record_details(record, include_status=False))
+            if record.get('document_id') or record.get('quote') or not record.get('field_sources'):
+                sections.extend(_record_details(record, include_status=False))
+            if sources := field_source_lines(record):
+                sections.extend(_literal_block('样品字段出处', '\n'.join(sources)))
             notes_value = record.get('notes') or ''
             if isinstance(notes_value, str) and (notes_value.startswith(_LEGACY_RESOURCE_NOTICE) or notes_value in _RESOURCE_NOTICES):
                 sections.extend(['', '- 整理来源：精读笔记自动整理。'])

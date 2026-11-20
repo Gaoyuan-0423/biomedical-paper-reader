@@ -1,0 +1,37 @@
+.cmp-board { display:grid; gap:14px; }
+.cmp-board label { display:grid; gap:5px; }
+.cmp-board select,.cmp-board textarea,.cmp-board input[type=number] { border:1px solid var(--border); border-radius:var(--radius); color:var(--text); background:var(--panel); padding:7px; min-width:0; }
+.cmp-board textarea { width:100%; resize:vertical; }
+.cmp-toolbar,.cmp-footer,.cmp-line,.cmp-ref-actions { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+.cmp-toolbar { align-items:flex-end; }
+.cmp-toolbar label { flex:1 1 220px; min-width:0; }
+.cmp-toolbar label select { width:100%; }
+.cmp-fields { display:grid; gap:14px; padding:0; margin:0; min-width:0; border:0; }
+.cmp-selection summary { cursor:pointer; color:var(--primary-ink); }
+.cmp-papers { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr)); gap:6px 14px; max-height:230px; overflow-y:auto; padding:9px 0; }
+.cmp-papers label { display:flex; align-items:flex-start; overflow-wrap:anywhere; }
+.cmp-papers input { margin-top:3px; }
+.cmp-table-wrap { overflow-x:auto; }
+.cmp-table { border-collapse:collapse; width:100%; text-align:left; table-layout:fixed; }
+.cmp-table th,.cmp-table td { padding:9px; border:1px solid var(--border); vertical-align:top; overflow-wrap:anywhere; }
+.cmp-table thead th { background:var(--surface-subtle); color:var(--muted); }
+.cmp-table thead th:first-child { width:22%; }
+.cmp-table thead th:last-child { width:27%; }
+.cmp-table td>textarea { margin-top:8px; }
+.cmp-table td>select { width:100%; }
+.cmp-table .cmp-line { margin-top:6px; }
+.cmp-line select { flex:1; min-width:80px; }
+.cmp-line input[type=number] { width:4.5em; }
+.cmp-accessions { display:block; margin-top:5px; font-size:.87em; font-weight:normal; color:var(--muted); }
+.cmp-ref { margin-bottom:8px; }
+.cmp-ref blockquote { margin:5px 0; padding-left:8px; border-left:2px solid var(--border-strong); max-height:120px; overflow:auto; font-size:.93em; white-space:pre-wrap; }
+.cmp-ref-actions .btn { padding:3px 5px; min-height:26px; }
+.cmp-warning { color:var(--warn-text); }
+.cmp-error { color:var(--danger); }
+@media(max-width:720px) {
+  .cmp-table,.cmp-table tbody,.cmp-table tr,.cmp-table td,.cmp-table th[scope=row] { display:block; width:100%; }
+  .cmp-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .cmp-table tbody tr { margin-bottom:10px; }
+  .cmp-table th[scope=row] { background:var(--surface-subtle); }
+  .cmp-table td { border-top:0; }
+}

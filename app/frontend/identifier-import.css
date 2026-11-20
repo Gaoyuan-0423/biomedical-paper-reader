@@ -1,0 +1,7 @@
+.identifier-import-modal { width: min(680px, 95vw); }
+#identifier-target { margin: 0 0 12px; }
+#identifier-rows { display: grid; gap: 4px; }
+.identifier-row { display: flex; align-items: start; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.identifier-row label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.identifier-row small { display: block; color: var(--muted); margin-top: 3px; }
+#identifier-status { color: var(--muted); }

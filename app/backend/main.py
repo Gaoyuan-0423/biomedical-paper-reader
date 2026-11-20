@@ -35,15 +35,16 @@ from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
 from external import LookupError_, fetch_crossref, fetch_related, normalize_doi
-from figures import FigureStorageError, crop_figure, load_figures, parse_pdf, save_figures
+from figures import FigureStorageError, crop_figure, crop_source_changed, load_figures, parse_pdf, save_figures
 from caption_migration import upgrade_captions
 from note_assets import illustrate_notes, markdown_bundle
 from reading_state import read_positions, save_position
 from reading_workflow import (DERIVED_FIELDS, PAPER_SCHEMA_VERSION, SidecarError, annotate, atomic_json, defaults,
                       evidence_lock, load_evidence, materials_changed, public_evidence, source_info, storage_lock)
-from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourcePatch, ensure_unique,
+from paper_resources import (RESOURCE_DERIVED_FIELDS, ResourceIn, ResourceCreate, ResourceUpdate, ensure_unique,
                              load_resources, normalize_resource, public_resource, public_resources,
                              related_resources, resource_summary, source_revision, validate_source)
+from sample_provenance import SampleField, apply_field_sources, public_field_source
 from research_export import append_research_appendix
 from resource_catalog import filter_resources, resource_csv, accession_text
 from resource_extraction import extract_resources, plan_resource_update
@@ -56,7 +57,14 @@ from paper_chat import (CHAT_TIMEOUT, MAX_OUTPUT, ChatIn, active_requests, chat_
 import zotero_import as zi
 from zotero_mcp import ZoteroMCPClient, MCPError
 from library_search import search_library
+import paper_comparisons as comparisons
+import figure_shelf as fs
 import note_sources as ns
+import identifier_import as ids
+import pmc_materials as pmc
+import oa_fulltext as oa
+import saved_pubmed as sp
+import project_libraries as pl
 import ui_preferences as ui
 from llm import (
     CompletionError,
@@ -389,6 +397,7 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
             mapping[fig["id"]] = fid
             item = dict(fig, id=fid, document_id=document_id, document_name="正文" if document_id == "main" else filename)
             if old:
+                item.update({key: old[key] for key in ("favorite", "tags", "shelf_key", "shelf_source_revision") if key in old})
                 item["observation"] = old.get("observation", "")
                 if old.get("observation_language") in ("zh-CN", "en"):
                     item["observation_language"] = old["observation_language"]
@@ -402,8 +411,13 @@ def store_document(d: Path, content: bytes, filename: str, document_id: str):
         (d / "figures").mkdir(exist_ok=True)
         for original in parsed["figures"]:
             shutil.copy2(stage / "figures" / f"{original['id']}.png", d / "figures" / f"{mapping[original['id']]}.png")
-        # Manual crops are not overwritten by automatic extraction.
-        figures = others + fresh + [f for f in own if f.get("source") == "manual"]
+        # Manual crops keep their original source even when the PDF is replaced.
+        manual = [f for f in own if f.get("source") == "manual"]
+        if any("crop_source_revision" not in f for f in manual) and (d / "meta.json").is_file():
+            prior_revision = _raw_meta(d).get("document_revisions", {}).get(document_id, "legacy")
+            for item in manual:
+                item.setdefault("crop_source_revision", prior_revision)
+        figures = others + fresh + manual
         text = "\n\n".join(f"[Page {page['number']}]\n{page['text']}" for page in parsed["pages"])
         shutil.copy2(source, destination)
         destination.with_suffix('.txt').write_text(text, "utf-8")
@@ -532,6 +546,8 @@ class PaperPatch(BaseModel):
 
 
 class EvidenceIn(BaseModel):
+    expected_source_revision: Optional[str] = Field(default=None, max_length=100)
+    selection_bbox: Optional[tuple[float, float, float, float]] = None
     claim: str = Field(min_length=1, max_length=5000)
     quote: str = Field(default='', max_length=12000)
     document_id: str = 'main'
@@ -567,6 +583,10 @@ class CropIn(BaseModel):
 
 
 class FigurePatch(BaseModel):
+    expected_figure_source: Optional[tuple[str, int, list[float]]] = None
+    favorite: Optional[bool] = None
+    tags: Optional[list[str]] = None
+    expected_source_revision: Optional[str] = Field(default=None, max_length=100)
     label: Optional[str] = None
     caption: Optional[str] = None
     observation: Optional[str] = None
@@ -585,6 +605,8 @@ def validate_evidence(d: Path, meta: dict, record: dict) -> None:
         fig = next((f for f in load_figures(d) if f['id'] == fid), None)
         if not fig or fig.get('document_id', 'main') != record['document_id'] or fig['page'] != record['page']:
             raise HTTPException(422, '图片不属于所选文件和页码')
+        if crop_source_changed(fig, meta.get('document_revisions', {})):
+            raise HTTPException(409, '此裁图来自旧版 PDF，请在当前原文重新取图。')
 
 
 @app.get('/api/papers/{paper_id}/evidence')
@@ -599,7 +621,14 @@ def add_evidence(paper_id: str, body: EvidenceIn):
     d = paper_dir(paper_id)
     with evidence_lock:
         meta = read_meta(d)
-        record = body.model_dump()
+        record = body.model_dump(exclude_none=True)
+        expected = record.pop('expected_source_revision', None)
+        if expected is not None and expected != meta['document_revisions'].get(record['document_id'], 'legacy'):
+            raise HTTPException(409, '原文已更新，请重新选取摘录。')
+        if 'selection_bbox' in record:
+            x0, y0, x1, y1 = record['selection_bbox']
+            if not expected or not record['quote'].strip() or not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):
+                raise HTTPException(422, '原文选区坐标无效')
         validate_evidence(d, meta, record)
         record.update(id=uuid.uuid4().hex, claim=record['claim'].strip(), created_at=_now(), updated_at=_now(),
                       source_revision=meta['document_revisions'].get(record['document_id'], 'legacy'))
@@ -621,6 +650,10 @@ def patch_evidence(paper_id: str, evidence_id: str, body: EvidencePatch):
         updates = body.model_dump(exclude_none=True)
         content_changed = any(k in updates and updates[k] != record.get(k) for k in ('claim', 'quote', 'document_id', 'page', 'figure_id'))
         changed_source = any(k in updates and updates[k] != record.get(k) for k in ('document_id', 'page', 'figure_id'))
+        if changed_source or ('quote' in updates and updates['quote'] != record.get('quote')):
+            record.pop('selection_bbox', None)
+        if record.get('selection_bbox') and record.get('source_revision') != meta['document_revisions'].get(record['document_id'], 'legacy'):
+            record.pop('selection_bbox', None)
         record.update(updates)
         if content_changed and 'status' not in updates:
             record['status'] = 'pending'
@@ -650,6 +683,63 @@ def delete_evidence(paper_id: str, evidence_id: str):
     return {'ok': True}
 
 
+# ---------- project comparisons ----------
+
+def comparison_material(paper_id: str):
+    directory = paper_dir(paper_id)
+    return comparisons.material(directory, read_meta(directory))
+
+
+@app.get('/api/comparisons/{library_id}')
+def list_comparisons(library_id: str):
+    with storage_lock:
+        project_paper_ids(library_id)
+        return comparisons.summaries(DATA_DIR, library_id)
+
+
+@app.get('/api/comparisons/{library_id}/material/{paper_id}')
+def get_comparison_material(library_id: str, paper_id: str):
+    with storage_lock:
+        if paper_id not in project_paper_ids(library_id):
+            raise HTTPException(404, '论文不在当前课题库。')
+        return comparison_material(paper_id)
+
+
+@app.get('/api/comparisons/{library_id}/material/{paper_id}/source')
+def verify_comparison_source(library_id: str, paper_id: str, key: str = Query(min_length=1, max_length=160)):
+    def resolve():
+        material = get_comparison_material(library_id, paper_id)
+        source = comparisons.resolve_source(key, material)
+        if not source:
+            raise HTTPException(409, '所选证据或原文已变更，请刷新材料后重新选择。')
+        doc = next(d for d in material['documents'] if d['id'] == source['document_id'])
+        return source, doc
+
+    with storage_lock:
+        source, doc = resolve()
+        directory = paper_dir(paper_id)
+        pdf = document_path(directory, doc['id'])
+    if comparisons.file_revision(pdf) != doc['revision']:
+        raise HTTPException(409, 'PDF 内容与所选来源版本不符。')
+    with storage_lock:
+        source, doc = resolve()
+        return {**source, 'metadata_revision': doc['metadata_revision']}
+
+
+@app.get('/api/comparisons/{library_id}/{comparison_id}')
+def get_comparison(library_id: str, comparison_id: str):
+    with storage_lock:
+        project_paper_ids(library_id)
+        return comparisons.load(comparisons.record_path(DATA_DIR, library_id, comparison_id))
+
+
+@app.put('/api/comparisons/{library_id}/{comparison_id}')
+def save_comparison(library_id: str, comparison_id: str, body: comparisons.ComparisonIn):
+    with storage_lock:
+        return comparisons.save(DATA_DIR, library_id, comparison_id, body, project_paper_ids(library_id),
+                                comparison_material)
+
+
 # ---------- data and code resources ----------
 
 @app.get('/api/papers/{paper_id}/resources')
@@ -668,11 +758,12 @@ def get_paper_resources(paper_id: str, q: str = Query(default='', max_length=500
 
 
 @app.post('/api/papers/{paper_id}/resources')
-def add_paper_resource(paper_id: str, body: ResourceIn):
+def add_paper_resource(paper_id: str, body: ResourceCreate):
     with storage_lock:
         d = paper_dir(paper_id)
         meta = read_meta(d)
-        record = normalize_resource(body.model_dump())
+        record = normalize_resource(body.model_dump(exclude={'field_source_changes'}))
+        apply_field_sources(d, meta, record, body.field_source_changes)
         validate_source(d, meta, record)
         records = load_resources(d)
         ensure_unique(records, record)
@@ -728,7 +819,7 @@ def extract_paper_resources(paper_id: str):
 
 
 @app.patch('/api/papers/{paper_id}/resources/{resource_id}')
-def patch_paper_resource(paper_id: str, resource_id: str, body: ResourcePatch):
+def patch_paper_resource(paper_id: str, resource_id: str, body: ResourceUpdate):
     with storage_lock:
         d = paper_dir(paper_id)
         meta = read_meta(d)
@@ -737,10 +828,11 @@ def patch_paper_resource(paper_id: str, resource_id: str, body: ResourcePatch):
         if index is None:
             raise HTTPException(404, '资源记录不存在')
         old = records[index]
-        updates = body.model_dump(exclude_unset=True)
+        updates = body.model_dump(exclude_unset=True, exclude={'field_source_changes'})
         record = normalize_resource({**old, **updates})
+        apply_field_sources(d, meta, record, body.field_source_changes)
         content_changed = any(record.get(k) != old.get(k) for k in ResourceIn.model_fields if k != 'status')
-        if content_changed or 'status' in updates:
+        if content_changed or body.field_source_changes or 'status' in updates:
             record.pop('auto_extraction', None)
         source_changed = any(record[k] != old[k] for k in ('document_id', 'page'))
         if source_changed or updates.get('status') == 'verified':
@@ -751,6 +843,20 @@ def patch_paper_resource(paper_id: str, resource_id: str, body: ResourcePatch):
         records[index] = record
         atomic_json(d / 'resources.json', records)
         return public_resource(d, meta, record)
+
+
+@app.get('/api/papers/{paper_id}/resources/{resource_id}/field-sources/{field}')
+def locate_resource_field(paper_id: str, resource_id: str, field: SampleField):
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        meta = read_meta(directory)
+        record = next((r for r in load_resources(directory) if r['id'] == resource_id), None)
+        if not record or field not in record.get('field_sources', {}):
+            raise HTTPException(404, '样品字段出处不存在')
+        source = public_field_source(directory, meta, record['field_sources'][field], record[field], verify_bytes=True)
+        if source['state'] != 'located':
+            raise HTTPException(409, '字段值或原文已变化，或指定页未找到摘录，请重新核对')
+        return source
 
 
 @app.delete('/api/papers/{paper_id}/resources/{resource_id}')
@@ -765,8 +871,14 @@ def delete_paper_resource(paper_id: str, resource_id: str):
         return {'ok': True}
 
 
-def _resource_entries(paper_id: str = ''):
-    directories = [paper_dir(paper_id)] if paper_id else (sorted(PAPERS_DIR.iterdir()) if PAPERS_DIR.is_dir() else [])
+def _resource_entries(paper_id: str = '', library_id: str = 'all'):
+    if library_id != 'all':
+        members = project_paper_ids(library_id)
+        if paper_id and paper_id not in members:
+            raise HTTPException(404, '论文不在当前课题库。')
+        directories = [paper_dir(paper_id)] if paper_id else [PAPERS_DIR / pid for pid in sorted(members)]
+    else:
+        directories = [paper_dir(paper_id)] if paper_id else (sorted(PAPERS_DIR.iterdir()) if PAPERS_DIR.is_dir() else [])
     entries = []
     for directory in directories:
         if (directory / 'meta.json').is_file():
@@ -780,18 +892,18 @@ def _resource_entries(paper_id: str = ''):
 
 
 @app.get('/api/resources')
-def get_library_resources(q: str = Query(default='', max_length=500),
+def get_library_resources(q: str = Query(default='', max_length=500), library_id: str = 'all',
                           organism: str = Query(default='', max_length=1000),
                           tissue: str = Query(default='', max_length=1000),
                           disease: str = Query(default='', max_length=1000),
                           modality: str = Query(default='', max_length=1000),
                           platform: str = Query(default='', max_length=1000)):
     with storage_lock:
-        return filter_resources(_resource_entries(), q, organism, tissue, disease, modality, platform)
+        return filter_resources(_resource_entries(library_id=library_id), q, organism, tissue, disease, modality, platform)
 
 
 @app.get('/api/resources/export')
-def export_library_resources(format: Literal['csv', 'accessions'], paper_id: str = '',
+def export_library_resources(format: Literal['csv', 'accessions'], paper_id: str = '', library_id: str = 'all',
                              q: str = Query(default='', max_length=500),
                              organism: str = Query(default='', max_length=1000),
                              tissue: str = Query(default='', max_length=1000),
@@ -799,7 +911,7 @@ def export_library_resources(format: Literal['csv', 'accessions'], paper_id: str
                              modality: str = Query(default='', max_length=1000),
                              platform: str = Query(default='', max_length=1000)):
     with storage_lock:
-        entries = filter_resources(_resource_entries(paper_id), q, organism, tissue, disease, modality, platform)
+        entries = filter_resources(_resource_entries(paper_id, library_id), q, organism, tissue, disease, modality, platform)
     content = resource_csv(entries) if format == 'csv' else accession_text(entries)
     filename = 'bioreader-resources.csv' if format == 'csv' else 'bioreader-accessions.txt'
     return Response(content=content, media_type='text/csv; charset=utf-8' if format == 'csv' else 'text/plain; charset=utf-8',
@@ -1051,14 +1163,94 @@ async def import_zotero_item(body: zi.ZoteroImportIn):
 
 # ---------- papers ----------
 
+def project_paper_ids(library_id):
+    if library_id == 'all':
+        candidates = (d.name for d in PAPERS_DIR.iterdir()) if PAPERS_DIR.is_dir() else ()
+    else:
+        candidates = pl.active_project(DATA_DIR, library_id).paper_ids
+    return {pid for pid in candidates if re.fullmatch(r'[0-9a-f]{32}', pid)
+            and (PAPERS_DIR / pid / 'meta.json').is_file() and not _future_schema(PAPERS_DIR / pid)}
+
+
+def check_search_scope(library_id):
+    if library_id != 'all':
+        pl.active_project(DATA_DIR, library_id)
+
+
+@app.get('/api/pubmed-searches/{library_id}')
+def list_saved_pubmed(library_id: str):
+    with storage_lock:
+        check_search_scope(library_id)
+        return [sp.view(sp.read(path)) for path in sorted(sp.directory(DATA_DIR, library_id).glob('*.json'))]
+
+
+@app.post('/api/pubmed-searches/{library_id}')
+def save_pubmed_query(library_id: str, body: sp.SearchIn):
+    with storage_lock:
+        check_search_scope(library_id)
+        return sp.create(DATA_DIR, library_id, body.query)
+
+
+@app.post('/api/pubmed-searches/{library_id}/{key}/refresh')
+async def refresh_pubmed_query(library_id: str, key: str):
+    with storage_lock:
+        check_search_scope(library_id)
+        path = sp.path_for(DATA_DIR, library_id, key)
+        query = sp.read(path)['query']
+    total, pmids = await sp.search(query)
+    with storage_lock:
+        check_search_scope(library_id)
+        return sp.record_result(path, total, pmids)
+
+
+@app.post('/api/pubmed-searches/{library_id}/{key}/seen')
+def mark_pubmed_seen(library_id: str, key: str, body: sp.SeenIn):
+    with storage_lock:
+        check_search_scope(library_id)
+        return sp.mark_seen(sp.path_for(DATA_DIR, library_id, key), body.result_id)
+
+
+@app.get('/api/project-libraries')
+def get_projects():
+    with storage_lock:
+        return pl.projects(DATA_DIR)
+
+
+@app.post('/api/project-libraries')
+def create_project_library(body: pl.ProjectCreate, request_id: Optional[str] = Query(default=None, pattern=r'^[0-9a-f]{32}$')):
+    with storage_lock:
+        for pid in set(body.paper_ids):
+            paper_dir(pid)
+        return pl.create(DATA_DIR, body, request_id)
+
+
+@app.put('/api/project-libraries/{library_id}')
+def update_project_library(library_id: str, body: pl.ProjectEdit):
+    with storage_lock:
+        record = pl.read(DATA_DIR, library_id)
+        for pid in set(body.add):
+            paper_dir(pid)
+        return pl.edit(DATA_DIR, record, body)
+
+
+@app.put('/api/project-libraries/{library_id}/papers/{paper_id}')
+def join_project_library(library_id: str, paper_id: str):
+    with storage_lock:
+        paper_dir(paper_id)
+        return pl.add_paper(DATA_DIR, library_id, paper_id)
+
+
 @app.get('/api/library/search')
 def search_saved_library(q: str = Query(min_length=2, max_length=200),
-                         scope: Literal['all', 'pdf', 'notes'] = 'all',
+                         scope: Literal['all', 'pdf', 'notes'] = 'all', library_id: str = 'all',
                          offset: int = Query(default=0, ge=0, le=100000),
                          limit: int = Query(default=20, ge=1, le=20)):
     entries, warnings = [], []
     with storage_lock:
+        members = None if library_id == 'all' else set(pl.active_project(DATA_DIR, library_id).paper_ids)
         for directory in sorted(PAPERS_DIR.iterdir()) if PAPERS_DIR.is_dir() else []:
+            if members is not None and directory.name not in members:
+                continue
             if not re.fullmatch(r'[0-9a-f]{32}', directory.name) or not (directory / 'meta.json').is_file():
                 continue
             if _future_schema(directory):
@@ -1136,22 +1328,67 @@ async def import_doi(body: DoiIn):
         for existing in list_trash():
             if (existing.get("doi") or "").lower() == doi:
                 raise HTTPException(409, f"回收站中已有该 DOI：{existing['title']}；请先恢复或彻底删除后再导入")
-        paper_id, d = new_paper_dir()
+        return create_identifier_paper(record)
+
+
+def create_identifier_paper(record):
+    paper_id, directory = new_paper_dir()
+    try:
         meta = blank_meta(paper_id)
-        meta.update({
-            "title": record["title"] or doi,
-            "authors": record["authors"],
-            "year": record["year"],
-            "doi": record["doi"],
-            "journal": record["journal"],
-            "abstract": record["abstract"],
-            "url": record["url"],
-            "source": "doi",
-            "filename": "",
-        })
-        (d / "text.txt").write_text(record["abstract"], "utf-8")
-        write_meta(d, meta)
-    return meta
+        for field in ('doi', 'pmid', 'title', 'authors', 'year', 'journal', 'abstract', 'url'):
+            if record.get(field):
+                meta[field] = str(record[field])
+        meta.update(source='doi' if meta.get('doi') else 'pmid', filename='')
+        meta['title'] = record.get('title') or record.get('doi') or str(record['pmid'])
+        (directory / 'text.txt').write_text(record.get('abstract') or '', 'utf-8')
+        write_meta(directory, meta)
+        return meta
+    except Exception:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
+
+
+@app.post('/api/import/identifiers/preview')
+async def preview_identifiers(body: ids.PreviewIn):
+    with storage_lock:
+        project = pl.active_project(DATA_DIR, body.library_id) if body.library_id != 'all' else None
+        index = ids.library_index(list_meta(), list_trash())
+        members = set(project.paper_ids) if project else set()
+    rows = await ids.preview(body, index, members, DATA_DIR)
+    return ids.remember(DATA_DIR, body.library_id, rows)
+
+
+@app.post('/api/import/identifiers/apply')
+def apply_identifiers(body: ids.ApplyIn):
+    library_id, selection = ids.selection(DATA_DIR, body)
+    results = []
+    with storage_lock:
+        if library_id != 'all':
+            pl.active_project(DATA_DIR, library_id)
+        index = ids.library_index(list_meta(), list_trash())
+        for row in selection:
+            status, paper = ids.local_match(index, row['record'])
+            item = {'key': row['key'], 'status': status, 'paper_id': paper.get('id', '')}
+            results.append(item)
+            if status not in ('new', 'existing'):
+                continue
+            if row['status'] == 'existing' and paper.get('id') != row['paper_id']:
+                item.update(status='changed', reason='原条目已变更，请重新预览')
+                continue
+            try:
+                if status == 'new':
+                    paper = create_identifier_paper(row['record'])
+                    item.update(status='added', paper_id=paper['id'])
+                    for alias in ids.aliases(paper):
+                        index[alias] = ('existing', paper)
+                if library_id != 'all':
+                    # Membership retries locate the existing paper even if its first join failed.
+                    pl.add_paper(DATA_DIR, library_id, paper['id'])
+            except (HTTPException, OSError) as exc:
+                reason = str(exc.detail) if isinstance(exc, HTTPException) else '写入本地文献库失败'
+                item.update(status='join_failed' if item['paper_id'] else 'failed', reason=reason)
+    return {'rows': results, 'library_id': library_id}
+
 
 
 @app.get("/api/papers/{paper_id}")
@@ -1519,6 +1756,81 @@ def purge_paper(paper_id: str):
         return {"ok": True}
 
 
+def _fulltext_target(paper_id, library_id):
+    d = paper_dir(paper_id)
+    if library_id != 'all' and paper_id not in pl.active_project(DATA_DIR, library_id).paper_ids:
+        raise HTTPException(409, '论文已移出当前课题库')
+    return d, read_meta(d)
+
+
+def _existing_fulltext(d, meta):
+    if (d / 'paper.pdf').is_file():
+        return {'outcome': 'already_present', 'message': '已有关联的正文 PDF。', 'paper': summary_of(meta)}
+    if meta.get('has_file') or meta.get('document_revisions', {}).get('main'):
+        return {'outcome': 'needs_review', 'message': '已有正文记录，但本地文件缺失，请核对后手动附加 PDF。'}
+
+
+def _attach_download(paper_id, library_id, original, result):
+    # Keep expensive parsing off the request loop and outside the storage lock.
+    content = result.pop('content')
+    with storage_lock:
+        d, meta = _fulltext_target(paper_id, library_id)
+        existing = _existing_fulltext(d, meta)
+        if existing:
+            return existing
+        previous = load_figures(d)
+        if any(f.get('document_id', 'main') == 'main' for f in previous):
+            return {'outcome': 'needs_review', 'message': '已存在正文图片记录，请核对后手动附加 PDF。'}
+    with tempfile.TemporaryDirectory(prefix='.fulltext-', dir=DATA_DIR) as temporary:
+        stage = Path(temporary)
+        if previous:
+            save_figures(stage, previous)
+        filename = (re.sub(r'[^a-zA-Z0-9._-]', '_', oa.identity(original)[0])[:120] or 'fulltext') + '.pdf'
+        prepared = ingest_pdf(stage, content, filename, blank_meta(paper_id))
+        digest = prepared['document_revisions']['main']
+        with storage_lock:
+            d, latest = _fulltext_target(paper_id, library_id)
+            existing = _existing_fulltext(d, latest)
+            if existing:
+                return existing
+            if oa.identity(latest) != oa.identity(original) or load_figures(d) != previous:
+                raise HTTPException(409, '下载期间论文信息或图片已变化，请重新获取')
+            if digest in latest.get('document_revisions', {}).values():
+                return {'outcome': 'needs_review', 'message': '候选 PDF 与已附加的补充材料相同，请核对。'}
+            for key in ('filename', 'has_file', 'pages', 'text_chars', 'figures_count', 'parse_warnings'):
+                latest[key] = prepared[key]
+            for key in ('title', 'authors', 'year', 'doi'):
+                if not latest.get(key):
+                    latest[key] = prepared[key]
+            materials_changed(latest, 'main', digest)
+            latest['fulltext_source'] = {**result['source'], 'retrieved_at': _now(), 'sha256': digest}
+            write_meta(stage, latest)
+            oa.publish(stage, d)
+            result['paper'] = summary_of(read_meta(d))
+            return result
+
+
+@app.post('/api/papers/{paper_id}/fetch-fulltext')
+async def fetch_open_fulltext(paper_id: str, library_id: str = 'all'):
+    with storage_lock:
+        d, meta = _fulltext_target(paper_id, library_id)
+        existing = _existing_fulltext(d, meta)
+        if existing:
+            return existing
+    try:
+        result = await asyncio.wait_for(oa.obtain(meta, MAX_UPLOAD_BYTES), timeout=120)
+        if result['outcome'] != 'downloaded':
+            return result
+        return await asyncio.to_thread(_attach_download, paper_id, library_id, meta, result)
+    except asyncio.TimeoutError:
+        return {'outcome': 'failed', 'message': '获取正文超时，请稍后重试。'}
+    except FigureStorageError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (OSError, ValueError) as exc:
+        logging.getLogger(__name__).warning('Full-text import failed for %s: %s', paper_id, type(exc).__name__)
+        return {'outcome': 'failed', 'message': '正文保存或解析失败，请检查磁盘后重试。'}
+
+
 @app.post("/api/papers/{paper_id}/file")
 async def attach_file(paper_id: str, file: UploadFile = File(...)):
     """Attach (or replace) the PDF of an existing entry, e.g. one imported by DOI."""
@@ -1532,21 +1844,29 @@ async def attach_file(paper_id: str, file: UploadFile = File(...)):
             meta = ingest_pdf(d, content, filename, meta)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(400, f"PDF 解析失败：{exc}") from exc
+        if meta.get('fulltext_source', {}).get('sha256') != meta['document_revisions']['main']:
+            meta.pop('fulltext_source', None)
         write_meta(d, meta)
         return meta
 
 
-@app.post("/api/papers/{paper_id}/supplements")
-async def add_supplement(paper_id: str, file: UploadFile = File(...)):
-    d = paper_dir(paper_id)
-    filename = Path(file.filename or "supplement.pdf").name
-    content = await file.read()
+def _save_supplement_pdf(d, content, filename, remote=None):
     _validate_pdf_upload(filename, content)
     digest = hashlib.sha256(content).hexdigest()
     with storage_lock:
         meta = read_meta(d)
-        if any(f.get("sha256") == digest for f in meta["supplements"]):
-            raise HTTPException(409, "该补充 PDF 已添加")
+        existing = next((f for f in meta["supplements"] if f.get("sha256") == digest), None)
+        if existing:
+            if not remote:
+                raise HTTPException(409, "该补充 PDF 已添加")
+            if not existing.get('source_url'):
+                existing.update(remote)
+            elif existing.get('candidate_id') != remote['candidate_id']:
+                aliases = existing.setdefault('candidate_aliases', [])
+                if remote['candidate_id'] not in aliases:
+                    aliases.append(remote['candidate_id'])
+            write_meta(d, meta)
+            return meta
         if (d / "paper.pdf").is_file() and hashlib.sha256((d / "paper.pdf").read_bytes()).hexdigest() == digest:
             raise HTTPException(409, "该 PDF 已是正文，不必重复添加")
         sid = uuid.uuid4().hex
@@ -1556,10 +1876,104 @@ async def add_supplement(paper_id: str, file: UploadFile = File(...)):
             raise HTTPException(400, f"补充 PDF 解析失败：{exc}") from exc
         meta["supplements"].append({"id": sid, "filename": filename, "pages": len(parsed["pages"]),
                                     "sha256": digest, "warnings": parsed.get("warnings", [])})
+        if remote:
+            meta["supplements"][-1].update(remote)
         meta["figures_count"] = len(figures)
         materials_changed(meta, sid, digest)
         write_meta(d, meta)
         return meta
+
+
+@app.post("/api/papers/{paper_id}/supplements")
+async def add_supplement(paper_id: str, file: UploadFile = File(...)):
+    d = paper_dir(paper_id)
+    filename = Path(file.filename or "supplement.pdf").name
+    content = await file.read()
+    return _save_supplement_pdf(d, content, filename)
+
+
+@app.get('/api/papers/{paper_id}/supplement-candidates')
+async def discover_remote_supplements(paper_id: str):
+    with storage_lock:
+        original = read_meta(paper_dir(paper_id))
+    try:
+        rows = await asyncio.wait_for(pmc.discover(original), timeout=75)
+    except (pmc.PMCError, asyncio.TimeoutError) as exc:
+        raise HTTPException(502, str(exc) or 'PMC 查询超时') from exc
+    with storage_lock:
+        meta = read_meta(paper_dir(paper_id))
+        if pmc.identity(meta) != pmc.identity(original):
+            raise HTTPException(409, '论文编号已变化，请重新查找')
+        pmc.cache_candidates(paper_id, meta, rows)
+    return {'candidates': rows}
+
+
+def _saved_remote(meta, key):
+    return next((r for r in [*meta.get('supplements', []), *meta.get('supplement_files', [])]
+                 if r.get('candidate_id') == key or key in r.get('candidate_aliases', [])), None)
+
+
+@app.post('/api/papers/{paper_id}/supplement-candidates/{key}')
+async def acquire_remote_supplement(paper_id: str, key: str):
+    with storage_lock:
+        meta = read_meta(paper_dir(paper_id))
+        if _saved_remote(meta, key):
+            return meta
+        row = pmc.candidate(paper_id, meta, key)
+        if not row:
+            raise HTTPException(409, '补充材料清单已过期，请重新查找')
+    try:
+        content = await pmc.checked_object(row['source_url'], row['md5'], pmc.ATTACHMENT_LIMIT)
+        pmc.validate_file(row['filename'], content)
+    except pmc.PMCError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+    def save():
+        with storage_lock:
+            d = paper_dir(paper_id)
+            fresh = read_meta(d)
+            if pmc.identity(fresh) != pmc.identity(meta):
+                raise HTTPException(409, '论文编号已变化，请重新查找')
+            if _saved_remote(fresh, key):
+                return fresh
+            origin = {'candidate_id': key, 'source_url': row['source_url'], 'article_version': row['article_version'],
+                      'source_label': row['label'], 'source_provider': 'PMC'}
+            if row['mime'] == 'application/pdf':
+                return _save_supplement_pdf(d, content, row['filename'], origin)
+            digest = hashlib.sha256(content).hexdigest()
+            folder = d / 'supplement-files'
+            folder.mkdir(exist_ok=True)
+            path = folder / digest
+            if not path.is_file():
+                with tempfile.NamedTemporaryFile(dir=folder, delete=False) as output:
+                    tmp = Path(output.name)
+                    try:
+                        output.write(content)
+                        output.close()
+                        tmp.replace(path)
+                    finally:
+                        tmp.unlink(missing_ok=True)
+            rec = {**origin, 'id': key, 'filename': row['filename'], 'mime': row['mime'], 'size': len(content), 'sha256': digest}
+            fresh.setdefault('supplement_files', []).append(rec)
+            write_meta(d, fresh)
+            return fresh
+    return await asyncio.to_thread(save)
+
+
+@app.get('/api/papers/{paper_id}/supplement-files/{key}')
+def get_remote_supplement_file(paper_id: str, key: str):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        rec = next((item for item in meta.get('supplement_files', []) if item.get('id') == key), None)
+        if not rec or not re.fullmatch(r'[0-9a-f]{64}', str(rec.get('sha256') or '')):
+            raise HTTPException(404, '补充附件不存在')
+        path = d / 'supplement-files' / rec['sha256']
+        if not path.is_file():
+            raise HTTPException(404, '补充附件不存在')
+        mime = pmc.MIMES.get(Path(rec['filename']).suffix.lower(), 'application/octet-stream')
+        return FileResponse(path, media_type=mime, filename=rec['filename'],
+                            headers={'X-Content-Type-Options': 'nosniff'})
 
 
 @app.delete("/api/papers/{paper_id}/supplements/{document_id}")
@@ -1755,6 +2169,48 @@ def reextract_figures(paper_id: str, document_id: str = "main"):
         return {"figures": figures, "warnings": parsed.get("warnings", [])}
 
 
+@app.post("/api/figure-shelf/query")
+def query_figure_shelf(body: fs.ShelfQuery):
+    paper_ids = list(dict.fromkeys(body.paper_ids))
+    if any(not re.fullmatch(r"[0-9a-f]{32}", pid) for pid in paper_ids):
+        raise HTTPException(422, "无效的文献 ID")
+    words = fs.tag_key(body.query).split()
+    rows, total, skipped = [], 0, 0
+    for pid in paper_ids:
+        try:
+            with storage_lock:
+                directory = paper_dir(pid)
+                meta = _raw_meta(directory)
+                if not isinstance(meta, dict):
+                    raise ValueError("invalid paper metadata")
+                for figure in load_figures(directory):
+                    if not figure.get("favorite") or not figure.get("shelf_key"):
+                        continue
+                    item = fs.shelf_item(directory, meta, figure)
+                    if not fs.matches(item, words):
+                        continue
+                    if body.offset <= total < body.offset + body.limit:
+                        rows.append(item)
+                    total += 1
+        except (HTTPException, OSError, ValueError, TypeError, KeyError, FigureStorageError):
+            skipped += 1
+    return {"figures": rows, "total": total, "skipped": skipped}
+
+
+@app.get("/api/papers/{paper_id}/figures/{fid}/shelf-source")
+def saved_figure_source(paper_id: str, fid: str, key: str):
+    with storage_lock:
+        directory = paper_dir(paper_id)
+        figure = next((f for f in load_figures(directory) if f["id"] == fid and f.get("favorite")
+                       and key and f.get("shelf_key") == key), None)
+        if not figure:
+            raise HTTPException(404, "图表已移除或取消收藏，请刷新。")
+        item = fs.shelf_item(directory, read_meta(directory), figure)
+        if not item["source_available"]:
+            raise HTTPException(409, "收藏图表的来源已变更或移除。")
+        return item
+
+
 @app.post("/api/papers/{paper_id}/figures/crop")
 def crop_manual_figure(paper_id: str, body: CropIn):
     with storage_lock:
@@ -1772,6 +2228,7 @@ def crop_manual_figure(paper_id: str, body: CropIn):
         fig["caption"] = (body.caption or "").strip()
         fig["observation"] = ""
         fig["document_id"] = body.document_id
+        fig["crop_source_revision"] = read_meta(d).get("document_revisions", {}).get(body.document_id, "legacy")
         fig["document_name"] = "正文" if body.document_id == "main" else next(f["filename"] for f in read_meta(d)["supplements"] if f["id"] == body.document_id)
         figures.append(fig)
         save_figures(d, figures)
@@ -1786,6 +2243,26 @@ def patch_figure(paper_id: str, fid: str, body: FigurePatch):
         figures = load_figures(d)
         for f in figures:
             if f["id"] == fid:
+                if body.favorite is not None or body.tags is not None:
+                    doc = f.get("document_id", "main")
+                    if body.expected_figure_source and body.expected_figure_source != (doc, f.get("page"), f.get("bbox", [])):
+                        raise HTTPException(409, "原图已更新，请重新打开图表。")
+                    revisions = read_meta(d).get("document_revisions", {})
+                    revision = revisions.get(doc, "legacy")
+                    if body.expected_source_revision is not None and body.expected_source_revision != revision:
+                        raise HTTPException(409, "原文已更新，请重新打开图表。")
+                    if body.tags is not None:
+                        try:
+                            f["tags"] = fs.figure_tags(body.tags)
+                        except ValueError as exc:
+                            raise HTTPException(422, str(exc)) from exc
+                    if body.favorite is not None:
+                        if body.favorite and not f.get("favorite"):
+                            if crop_source_changed(f, revisions):
+                                raise HTTPException(409, "此裁图来自旧版 PDF，请在当前原文重新取图。")
+                            f["shelf_key"] = uuid.uuid4().hex
+                            f["shelf_source_revision"] = revision
+                        f["favorite"] = body.favorite
                 if body.label is not None and body.label.strip():
                     f["label"] = body.label.strip()[:60]
                 if body.caption is not None:

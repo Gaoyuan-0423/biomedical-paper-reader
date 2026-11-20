@@ -8,6 +8,8 @@
   const KINDS = { dataset: '数据集', code: '代码', other: '其他资源' };
   const ROLES = { generated: '本文产生', reused: '复用已有资源', implementation: '代码实现', unknown: '待确认' };
   const SAMPLE_FIELDS = { organism: '物种', tissue: '组织／部位', disease: '疾病／研究背景', modality: '技术类型', platform: '平台', sample_groups: '实验分组', sample_count: '论文实际样本量' };
+  const SOURCE_STATES = { located: '指定页找到摘录', unmatched: '指定页未找到摘录', changed: '来源文件已更新', missing: '来源已移除或页码失效', unavailable: '来源文件暂时无法读取', value_changed: '字段值已修改' };
+  let selectedSource = null;
   const FILTER_FIELDS = ['organism', 'tissue', 'disease', 'modality', 'platform'];
   let hooks, panel, paper = null, records = [], mode = 'current', query = '', draft = null;
   let filters = {}, filtersOpen = false, applied = null, exporting = false, exportError = '';
@@ -20,7 +22,11 @@
   const current = token => token === epoch;
   const key = record => (record.paper_id || paper?.id || '') + ':' + record.id;
   const options = (items, selected) => Object.entries(items).map(([value, label]) => '<option value="' + esc(value) + '"' + (selected === value ? ' selected' : '') + ' data-i18n="' + esc(label) + '">' + esc(t(label)) + '</option>').join('');
-  function criteria() { return { q: query.trim(), ...Object.fromEntries(FILTER_FIELDS.map(name => [name, String(filters[name] || '').trim()])) }; }
+  function projectId() {
+    const active = window.BioProjects?.activeId?.();
+    return active && active !== 'all' ? active : '';
+  }
+  function criteria() { return { q: query.trim(), library_id: mode === 'all' ? projectId() : '', ...Object.fromEntries(FILTER_FIELDS.map(name => [name, String(filters[name] || '').trim()])) }; }
   function pendingCriteria() { const next = criteria(); return !applied || Object.keys(next).some(name => next[name] !== applied[name]); }
   function queryString(values) { return Object.entries(values).filter(([name, value]) => name === 'q' || value).map(([name, value]) => name + '=' + encodeURIComponent(value)).join('&'); }
   function exportDisabled() { return loading || busy || !!draft || exporting || !!error || pendingCriteria() || !records.length; }
@@ -105,6 +111,33 @@
   function textarea(name, label, value, limit) {
     return '<label>' + ui(label) + '<textarea data-resource-field="' + name + '" maxlength="' + limit + '" rows="3"' + (busy ? ' disabled' : '') + '>' + esc(value) + '</textarea></label>';
   }
+  function fieldSourceForm(docs, disabled) {
+    const field = draft.sourceField, saved = draft.savedSources[field];
+    const source = draft.sourceEdits[field] === undefined ? saved : draft.sourceEdits[field];
+    const selection = selectedSource?.paper_id === paper?.id ? selectedSource : null;
+    const control = name => ' data-sample-source="' + name + '"' + disabled;
+    const documentId = source?.document_id || '';
+    const document = docs.find(d => d.id === documentId);
+    const missing = documentId && !document;
+    return '<details class="resource-field-sources"' + (draft.sourcesOpen ? ' open' : '') + '><summary>' + ui('样品字段出处') + '</summary><div class="resource-details-body">' +
+      '<label>' + ui('样品字段') + '<select' + control('field') + '>' + options(SAMPLE_FIELDS, field) + '</select></label>' +
+      (selection ? '<button type="button" class="btn" data-resource-action="use-selected-source"' + disabled + '>' + ui('使用刚才选中的原文') + '</button>' : '') +
+      '<div class="resource-source-fields"><label>' + ui('原文来源（可选）') + '<select' + control('document_id') + '><option value="">' + esc(t('不关联原文')) + '</option>' +
+      (missing ? '<option value="' + esc(documentId) + '" selected>' + esc(source.source_name || t('来源已移除或页码失效')) + '</option>' : '') +
+      docs.map(d => '<option value="' + esc(d.id) + '"' + (d.id === documentId ? ' selected' : '') + '>' + esc(d.name) + '</option>').join('') + '</select></label>' +
+      '<label>' + ui('PDF 页码') + '<input type="number" min="1" max="' + (document?.pages || 600) + '" value="' + esc(source?.page) + '"' + control('page') + '></label></div>' +
+      '<label>' + ui('原文摘录') + '<textarea maxlength="6000" rows="2"' + control('quote') + '>' + esc(source?.quote) + '</textarea></label>' +
+      (source ? '<button type="button" class="btn btn-ghost" data-resource-action="remove-field-source"' + disabled + '>' + ui('移除该字段出处') + '</button>' : '') +
+      (saved && draft.sourceEdits[field] === undefined ? '<button type="button" class="btn btn-ghost" data-resource-action="recheck-field-source"' + disabled + '>' + ui('重新匹配当前字段与原文') + '</button>' : '') +
+      '</div></details>';
+  }
+  function changeFieldSource(name, value) {
+    const field = draft.sourceField;
+    const before = draft.sourceEdits[field] === undefined ? draft.savedSources[field] : draft.sourceEdits[field];
+    draft.sourceEdits[field] = { document_id: before?.document_id || '', page: before?.page ?? '', quote: before?.quote || '', [name]: value };
+    if (name === 'document_id') draft.sourceEdits[field].page = value ? 1 : '';
+    draft.sourcesOpen = true;
+  }
   function formHTML() {
     const disabled = busy ? ' disabled' : '', docs = documents(), doc = docs.find(d => d.id === draft.document_id);
     return '<form class="resource-form" id="resource-form"><strong>' + (draft.id ? ui("编辑资源") : ui("添加数据或代码")) + '</strong>' +
@@ -112,6 +145,7 @@
       '<div class="resource-fields">' + textarea('purpose', '用途', draft.purpose, 12000) + textarea('identifiers', '编号／链接（同组可填多个）', draft.identifiers, 12000) + '</div>' +
       '<div class="resource-fields">' + textarea('conditions', '影响使用的条件', draft.conditions, 12000) + textarea('sample_details', '样品／材料（论文实际使用情况）', draft.sample_details, 12000) + '</div>' +
       "<fieldset class=\"resource-sample-form\"><legend>" + ui("样品信息") + "</legend><p class=\"hint\">" + ui("填写论文实际使用的样品；多项可用分号分开。样本量可写“肿瘤 56 例；对照 19 例”，不使用 GEO 收录总数代填。") + "</p><div class=\"resource-sample-fields\">" + Object.entries(SAMPLE_FIELDS).map(([name, label]) => textField(name, label, draft[name], 1000)).join('') + '</div></fieldset>' +
+      fieldSourceForm(docs, disabled) +
       '<details class="resource-details"' + (draft.detailsOpen ? ' open' : '') + "><summary>" + ui("分类、兼容编号与原文依据") + "</summary><div class=\"resource-details-body\">" +
       "<div class=\"resource-fields\"><label>" + ui("资源类型") + "<select data-resource-field=\"kind\"" + disabled + '>' + options(KINDS, draft.kind) + "</select></label><label>" + ui("与本文的关系") + "<select data-resource-field=\"role\"" + disabled + '>' + options(ROLES, draft.role) + '</select></label></div>' +
       '<div class="resource-fields">' + textField('repository', '仓库（如 GEO、GitHub）', draft.repository, 200) + textField('accession', '仓库编号（可选）', draft.accession, 300) + '</div>' +
@@ -127,10 +161,21 @@
     return ID.test(id || '') ? '<button type="button" class="resource-paper-link" data-resource-action="paper" data-resource-paper="' + id + '" title="' + esc(title) + '">' + (title ? esc(title) : ui("查看关联论文")) + '</button>' : esc(title || '');
   }
   function sampleHTML(record) {
-    const values = Object.entries(SAMPLE_FIELDS).filter(([name]) => String(record[name] || '').trim());
+    const values = Object.keys(SAMPLE_FIELDS).filter(name => record[name] || record.field_sources?.[name]);
     const raw = String(record.sample_details || '').trim();
+    const sources = record.field_sources || {};
+    const sourceHTML = name => {
+      const source = sources[name];
+      if (!source) return '';
+      const label = SOURCE_STATES[source.state];
+      if (!label) return '';
+      const jump = source.state === 'located' ? '<button type="button" class="btn btn-ghost" data-resource-action="jump-field" data-resource-key="' + esc(key(record)) + '" data-resource-sample="' + esc(name) + '">' + ui('查看原文') + '</button>' : '';
+      return '<details class="resource-sample-notes"><summary>' + ui(label) + '</summary><p>' + (source.document_id === 'main' ? ui('正文') : esc(source.source_name)) + ui(' · PDF 第 {page} 页', { page: source.page }) + '</p>' +
+        (source.value !== record[name] ? '<p>' + ui('关联时的字段值') + ' · ' + esc(source.value) + '</p>' : '') +
+        '<blockquote>' + esc(source.quote) + '</blockquote>' + jump + '</details>';
+    };
     if (!values.length) return cellText(raw, '论文实际使用样品未记录');
-    return '<dl class="resource-sample-values">' + values.map(([name, label]) => '<div><dt>' + ui(label) + '</dt><dd>' + cellText(record[name]) + '</dd></div>').join('') + '</dl>' +
+    return '<dl class="resource-sample-values">' + values.map(name => '<div><dt>' + ui(SAMPLE_FIELDS[name]) + '</dt><dd>' + cellText(record[name]) + sourceHTML(name) + '</dd></div>').join('') + '</dl>' +
       (raw ? "<details class=\"resource-sample-notes\"><summary>" + ui("材料补充与原始说明") + "</summary>" + cellText(raw) + '</details>' : '');
   }
   function geoHTML(record) {
@@ -188,18 +233,18 @@
       '<div class="resource-toolbar-actions"><button class="btn" type="button" data-resource-action="extract" aria-busy="' + extracting + "\" title=\"仅整理已保存且材料未变更的完整精读笔记中的明确资源\" data-i18n-title=\"仅整理已保存且材料未变更的完整精读笔记中的明确资源\"" + (!paper || mode !== 'current' || loading || busy || draft || exporting || !extractable() ? ' disabled' : '') + '>' + (extracting ? ui("正在整理…") : ui("从精读笔记整理")) + '</button>' +
       '<button class="btn btn-primary" type="button" data-resource-action="add"' + (!paper || mode !== 'current' || loading || busy || draft || exporting ? ' disabled' : '') + ">" + ui("添加资源") + "</button></div></div>" +
       (paper && mode === 'current' ? '<p class="hint resource-extract-hint">' + (extractable() ? ui("整理笔记中的资源、用途、使用条件与样品，可随时编辑补充。") : ui("完整精读笔记保存且材料未变更时，可在这里整理资源、用途、使用条件与样品。")) + '</p>' : '') +
-      "<div class=\"resource-modes\" role=\"group\" aria-label=\"资源范围\" data-i18n-aria-label=\"资源范围\"><button class=\"btn" + (mode === 'current' ? ' active' : '') + '" type="button" data-resource-mode="current" aria-pressed="' + (mode === 'current') + '"' + (!paper ? ' disabled' : disabled) + ">" + ui("当前论文") + "</button><button class=\"btn" + (mode === 'all' ? ' active' : '') + '" type="button" data-resource-mode="all" aria-pressed="' + (mode === 'all') + '"' + disabled + ">" + ui("全部论文") + "</button></div>" +
+      "<div class=\"resource-modes\" role=\"group\" aria-label=\"资源范围\" data-i18n-aria-label=\"资源范围\"><button class=\"btn" + (mode === 'current' ? ' active' : '') + '" type="button" data-resource-mode="current" aria-pressed="' + (mode === 'current') + '"' + (!paper ? ' disabled' : disabled) + ">" + ui("当前论文") + "</button><button class=\"btn" + (mode === 'all' ? ' active' : '') + '" type="button" data-resource-mode="all" aria-pressed="' + (mode === 'all') + '"' + disabled + ">" + (projectId() ? ui("当前课题库") : ui("全部论文")) + "</button></div>" +
       "<form class=\"resource-search\" id=\"resource-search\"><div class=\"resource-search-row\"><input data-resource-query type=\"search\" aria-label=\"搜索数据与复现\" data-i18n-aria-label=\"搜索数据与复现\" placeholder=\"搜索编号、样品、用途…\" data-i18n-placeholder=\"搜索编号、样品、用途…\" value=\"" + esc(query) + '" maxlength="500"' + disabled + '><button class="btn" type="submit"' + disabled + ">" + ui("搜索") + "</button></div>" +
       '<details class="resource-filters"' + (filtersOpen ? ' open' : '') + "><summary>" + ui("按样品信息筛选") + (filterCount ? ' · ' + ui('{count} 项', { count: filterCount }) : '') + '</summary><div class="resource-filter-fields">' + FILTER_FIELDS.map(name => '<label>' + ui(SAMPLE_FIELDS[name]) + '<input data-resource-filter="' + name + "\" type=\"search\" maxlength=\"1000\" placeholder=\"包含关键词\" data-i18n-placeholder=\"包含关键词\" value=\"" + esc(filters[name] || '') + '"' + disabled + '></label>').join('') + "</div><div class=\"resource-filter-actions\"><span class=\"hint\">" + ui("同时满足填写的条件；空白字段不参与筛选。") + "</span><button class=\"btn\" type=\"submit\"" + disabled + ">" + ui("应用筛选") + "</button></div></details>" +
       "<div class=\"resource-results-actions\"><span class=\"resource-export-label\">" + ui("导出当前结果") + "</span><button class=\"btn\" type=\"button\" data-resource-action=\"export-csv\"" + (exportDisabled() ? ' disabled' : '') + ">" + ui("资源表 CSV") + "</button><button class=\"btn\" type=\"button\" data-resource-action=\"export-accessions\"" + (exportDisabled() ? ' disabled' : '') + ">" + ui("编号清单") + "</button><button class=\"btn btn-ghost\" type=\"button\" data-resource-action=\"reset-filters\"" + disabled + ">" + ui("清除筛选") + "</button></div>" +
       '<p class="hint resource-search-pending" data-resource-search-pending' + (loading || !applied || !pendingCriteria() ? ' hidden' : '') + ">" + ui("条件尚未应用，请点击搜索或应用筛选后再导出。") + "</p>" +
       (exporting ? "<p class=\"hint\" role=\"status\">" + ui("正在导出当前结果…") + "</p>" : '') + (exportError ? '<p class="resource-error" role="alert">' + messageHTML(exportError) + '</p>' : '') + '</form>' +
-      (!paper ? "<p class=\"hint\">" + ui("在全库中搜索资源；打开一篇论文后可添加与编辑它的资源。") + "</p>" : '') +
+      (!paper ? "<p class=\"hint\">" + (projectId() ? ui("在当前课题库中搜索资源。") : ui("在全库中搜索资源；打开一篇论文后可添加与编辑它的资源。")) + "</p>" : '') +
       (draft ? formHTML() : '') + (!draft && error ? '<p class="resource-error" role="alert">' + messageHTML(error) + " <button class=\"btn btn-ghost\" type=\"button\" data-resource-action=\"reload\">" + ui("重试") + "</button></p>" : '') +
       (loading ? "<p class=\"resource-empty\" role=\"status\">" + ui("正在读取资源…") + "</p>" : visible.length ? '<p class="resource-count">' + ui('{count} 条资源记录', { count: visible.length }) + "<span>" + ui("宽表可横向滚动") + "</span></p><div class=\"resource-table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"数据与复现资源表\" data-i18n-aria-label=\"数据与复现资源表\"><table class=\"resource-table\"><thead><tr><th scope=\"col\">" + ui("资源") + "</th><th scope=\"col\">" + ui("用途") + "</th><th scope=\"col\">" + ui("编号／链接") + "</th><th scope=\"col\">" + ui("影响使用的条件") + "</th><th scope=\"col\">" + ui("样品／材料") + "</th><th scope=\"col\">" + ui("操作") + "</th></tr></thead><tbody>" + visible.map(rowHTML).join('') + '</tbody></table></div>' : '<p class="resource-empty">' + (query || filterCount ? ui("没有找到匹配资源。可尝试仓库编号或不同关键词。") : ui("暂无资源记录。阅读论文时，将数据仓库、代码和原文依据保存在这里。")) + '</p>');
   }
   async function load(nextCriteria = criteria()) {
-    const token = ++epoch, requested = { ...nextCriteria };
+    const token = ++epoch, requested = { ...nextCriteria, library_id: mode === 'all' ? projectId() : '' };
     loading = true; error = ''; exportError = ''; render();
     try {
       const result = await hooks.request('GET', mode === 'all' || !paper ? '/api/resources?' + queryString(requested) :
@@ -231,7 +276,7 @@
     await load(applied || criteria());
   }
   function clear() {
-    ++epoch; paper = null; records = []; query = ''; mode = 'all'; draft = null; busy = false; loading = false; extracting = false; opened = false; refreshPending = false; error = '';
+    ++epoch; selectedSource = null; paper = null; records = []; query = ''; mode = 'all'; draft = null; busy = false; loading = false; extracting = false; opened = false; refreshPending = false; error = '';
     filters = {}; applied = null; filtersOpen = false; exporting = false; exportError = '';
     geoCache = {}; geoBusy = new Set(); geoErrors = {}; geoExpanded = new Set();
     if (panel) panel.innerHTML = '';
@@ -241,6 +286,13 @@
     opened = true; draft = null; mode = 'all'; query = ''; filters = {}; applied = null;
     await load();
     return true;
+  }
+  async function scopeChanged() {
+    if (!opened) return;
+    if (mode !== 'all') { render(); return; }
+    if (exporting) { refreshPending = true; return; }
+    records = [];
+    await load(applied || criteria());
   }
   async function refreshAfterExtraction(paperId) {
     if (!opened || (mode !== 'all' && paper?.id !== paperId)) return;
@@ -268,7 +320,7 @@
   function start(record = {}) {
     if (!paper || mode !== 'current' || busy || loading || draft || exporting) return;
     const doc = documents().find(d => d.id === record.document_id);
-    draft = { id: record.id || '', title: record.title || '', kind: record.kind || 'dataset', role: record.role || 'unknown',
+    draft = { sourceField: 'sample_count', savedSources: record.field_sources || {}, sourceEdits: {}, sourcesOpen: selectedSource?.paper_id === paper.id, id: record.id || '', title: record.title || '', kind: record.kind || 'dataset', role: record.role || 'unknown',
       purpose: record.purpose || '', identifiers: record.identifiers || '', conditions: record.conditions || '', sample_details: record.sample_details || '',
       repository: record.repository || '', accession: record.accession || '', url: record.url || '', organism: record.organism || '', tissue: record.tissue || '',
       modality: record.modality || '', disease: record.disease || '', platform: record.platform || '', sample_groups: record.sample_groups || '', sample_count: record.sample_count || '',
@@ -299,6 +351,11 @@
     }
   }
   function input(event) {
+    const sourceControl = event.target.dataset.sampleSource;
+    if (draft && !busy && ['document_id', 'page', 'quote'].includes(sourceControl)) {
+      changeFieldSource(sourceControl, event.target.value);
+      return;
+    }
     const filter = event.target.dataset.resourceFilter;
     if (FILTER_FIELDS.includes(filter)) {
       if (!busy && !draft && !exporting) { filters[filter] = event.target.value; syncExportState(); }
@@ -324,11 +381,26 @@
     const body = {};
     for (const name of [...CONTENT_FIELDS, 'kind', 'role', 'document_id']) body[name] = draft[name].trim();
     body.page = page;
+    const edits = {};
+    for (const [field, source] of Object.entries(draft.sourceEdits)) {
+      if (source === null) { edits[field] = null; continue; }
+      const doc = documents().find(d => d.id === source.document_id), number = Number(source.page);
+      if (!draft[field].trim() || !source.quote.trim() || !doc || !Number.isInteger(number) || number < 1 || number > doc.pages) {
+        draft.sourcesOpen = true; draft.sourceField = field; error = message('请补全样品字段值、原文文件、页码和摘录，或移除该字段出处。'); render(); return;
+      }
+      edits[field] = { document_id: doc.id, page: number, quote: source.quote.trim() };
+      if (source.revision) edits[field].expected_revision = source.revision;
+    }
+    if (Object.keys(edits).length) body.field_source_changes = edits;
     await mutate(draft.id ? 'PATCH' : 'POST', draft.id, body);
   }
   async function change(event) {
     const element = event.target;
     input(event);
+    if (draft && !busy && element.dataset.sampleSource === 'field' && Object.hasOwn(SAMPLE_FIELDS, element.value)) {
+      draft.sourceField = element.value; draft.sourcesOpen = true; render(); return;
+    }
+    if (draft && !busy && element.dataset.sampleSource === 'document_id') { render(); return; }
     if (draft && !busy && element.dataset.resourceField === 'document_id') {
       draft.page = draft.document_id ? 1 : null; draft.detailsOpen = true; render();
     }
@@ -345,6 +417,16 @@
     if (!button || button.disabled || busy || exporting) return;
     const action = button.dataset.resourceAction;
     if (action === 'export-csv' || action === 'export-accessions') { await exportResults(action === 'export-csv' ? 'csv' : 'accessions'); return; }
+    if (draft && action === 'use-selected-source' && selectedSource?.paper_id === paper?.id) {
+      draft.sourceEdits[draft.sourceField] = { document_id: selectedSource.document_id, page: selectedSource.page, quote: selectedSource.selection, revision: selectedSource.revision };
+      draft.sourcesOpen = true; render(); return;
+    }
+    if (draft && action === 'remove-field-source') {
+      draft.sourceEdits[draft.sourceField] = null; draft.sourcesOpen = true; render(); return;
+    }
+    if (draft && action === 'recheck-field-source' && draft.savedSources[draft.sourceField]) {
+      draft.sourceEdits[draft.sourceField] = { ...draft.savedSources[draft.sourceField] }; draft.sourcesOpen = true; render(); return;
+    }
     if (action === 'reset-filters') { if (!draft) { query = ''; filters = {}; await load(); } return; }
     if (action === 'cancel') { draft = null; error = ''; render(); if (refreshPending) { refreshPending = false; await load(applied || criteria()); } return; }
     if (action === 'add') { start(); return; }
@@ -357,6 +439,16 @@
     }
     const record = records.find(r => key(r) === button.dataset.resourceKey);
     if (!record) return;
+    if (action === 'jump-field' && canLeave()) {
+      const field = button.dataset.resourceSample, owner = record.paper_id || paper?.id;
+      if (!Object.hasOwn(SAMPLE_FIELDS, field) || record.field_sources?.[field]?.state !== 'located') return;
+      try {
+        if (owner !== paper?.id && await hooks.openPaper(owner) === false) return;
+        const source = await hooks.request('GET', path(owner, record.id) + '/field-sources/' + field);
+        if (paper?.id === owner && source?.state === 'located') await hooks.jump(source.document_id, source.page);
+      } catch (err) { hooks.toast?.(t('无法定位原文：') + err.message, 'error'); }
+      return;
+    }
     if (action === 'geo') { await fetchGeo(record, button.dataset.resourceAccession); return; }
     if (action === 'edit') { start(record); return; }
     if (action === 'delete' && mode === 'current' && !draft) {
@@ -406,7 +498,7 @@
     if (exporting) { hooks.toast?.(t("正在导出资源，请稍后再切换。"), 'error'); return false; }
     if (extracting) { hooks.toast?.(t("正在整理资源，请稍后再切换。"), 'error'); return false; }
     if (busy) { hooks.toast?.(t("正在保存资源，请稍后再切换。"), 'error'); return false; }
-    if (draft && (draft.id || [...CONTENT_FIELDS, 'document_id'].some(k => String(draft[k] || '').trim()) || draft.kind !== 'dataset' || draft.role !== 'unknown')) {
+    if (draft && (draft.id || Object.keys(draft.sourceEdits).length || [...CONTENT_FIELDS, 'document_id'].some(k => String(draft[k] || '').trim()) || draft.kind !== 'dataset' || draft.role !== 'unknown')) {
       hooks.toast?.(t("资源尚未保存，请先在「数据与复现」页保存或取消编辑。"), 'error'); return false;
     }
     return true;
@@ -420,6 +512,7 @@
     panel.addEventListener('click', click); panel.addEventListener('submit', submit);
     panel.addEventListener('toggle', event => {
       if (event.target.isConnected === false) return;
+      if (draft && event.target.classList.contains('resource-field-sources')) draft.sourcesOpen = event.target.open;
       if (draft && event.target.classList.contains('resource-details')) draft.detailsOpen = event.target.open;
       if (event.target.classList.contains('resource-filters')) filtersOpen = event.target.open;
       const geoKey = event.target.dataset.geoKey;
@@ -427,5 +520,9 @@
     }, true);
     render();
   }
-  window.BioResources = { init, open, clear, canLeave, showAll, refreshAfterExtraction };
+  function rememberSelection(context) {
+    selectedSource = { ...context };
+    if (draft && paper?.id === context.paper_id) { draft.sourcesOpen = true; render(); }
+  }
+  window.BioResources = { rememberSelection, init, open, scopeChanged, clear, canLeave, showAll, refreshAfterExtraction };
 })();

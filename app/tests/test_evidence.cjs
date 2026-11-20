@@ -173,3 +173,15 @@ test('evidence text and filenames render as text instead of markup', async () =>
   assert.match(h.panel.innerHTML, /&lt;script&gt;/);
   assert.match(h.panel.innerHTML, /&lt;img/);
 });
+
+test('old crop evidence retains its narrative but cannot be verified or followed to the new PDF', async () => {
+  const h = harness();
+  h.hooks.cropSourceChanged = figure => figure?.crop_source_revision === 'old';
+  h.hooks.request = async method => { assert.equal(method, 'GET'); return [evidence({figure_id:'m001', status:'verified'})]; };
+  await h.ui.open(paper(A), [{id:'m001', document_id:S, page:3, label:'Manual panel', crop_source_revision:'old'}]);
+  assert.match(h.panel.innerHTML, /Original passage/);
+  assert.match(h.panel.innerHTML, /此裁图来自旧版 PDF/);
+  assert.match(h.panel.innerHTML, /value="verified" disabled/);
+  await h.click('jump', E); await h.status(E, 'verified');
+  assert.equal(h.jumps.length, 0);
+});

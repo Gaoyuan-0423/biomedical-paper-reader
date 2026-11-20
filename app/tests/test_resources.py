@@ -91,6 +91,79 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual([legacy[field] for field in ('disease', 'platform', 'sample_groups', 'sample_count')], [''] * 4)
         self.assertEqual(path.read_bytes(), before)
 
+    def test_sample_sources_are_local_to_the_field_file_page_and_saved_value(self):
+        supplement = self.supplement()
+        one = {'document_id': 'main', 'page': 1, 'quote': 'MAIN synthetic paper for source isolation.'}
+        two = dict(one, document_id=supplement['id'])
+        row = self.add(sample_count='8 donors', sample_groups='two groups', field_source_changes={
+            'sample_count': one, 'sample_groups': two})
+        url = self.url + '/resources/' + row['id']
+        sources = row['field_sources']
+        self.assertEqual(sources['sample_count']['state'], 'located')
+        self.assertEqual(sources['sample_groups']['state'], 'unmatched')
+        self.assertEqual(sources['sample_groups']['source_name'], 'supp.pdf')
+        self.assertEqual(self.client.get(url + '/field-sources/sample_count').status_code, 200)
+        self.assertEqual(self.client.get(url + '/field-sources/sample_groups').status_code, 409)
+        self.assertEqual(self.client.patch(url, json={'notes': 'edited manually'}).json()['field_sources'], sources)
+        changed = self.client.patch(url, json={'sample_count': '11 donors'}).json()
+        self.assertEqual(changed['field_sources']['sample_count']['state'], 'value_changed')
+        self.assertEqual(changed['field_sources']['sample_count']['value'], '8 donors')
+        self.assertEqual(self.client.get(url + '/field-sources/sample_count').status_code, 409)
+        self.client.post(self.url + '/file', files={'file': ('replacement.pdf', fixture_pdf(marker='REPLACED'))})
+        self.client.delete(self.url + '/supplements/' + supplement['id'])
+        sources = self.client.get(self.url + '/resources').json()[0]['field_sources']
+        self.assertEqual(sources['sample_count']['state'], 'changed')
+        self.assertEqual(sources['sample_groups']['state'], 'missing')
+        self.assertEqual(sources['sample_groups']['quote'], one['quote'])
+        report = self.client.post(self.url + '/notes/export-preview', json={'notes': 'Draft'}).json()['notes']
+        self.assertIn('来源文件已更新', report)
+        self.assertIn('8 donors', report)
+        csv_text = self.client.get('/api/resources/export', params={'format': 'csv'}).content.decode('utf-8-sig')
+        self.assertIn('样品字段出处', csv_text)
+        self.assertIn('supp.pdf', csv_text)
+        self.assertIn('来源已移除或页码失效', csv_text)
+        clear = self.client.patch(url, json={'field_source_changes': {'sample_count': None}}).json()
+        self.assertNotIn('sample_count', clear['field_sources'])
+        self.assertEqual(clear['sample_count'], '11 donors')
+        self.assertIn('sample_groups', clear['field_sources'])
+
+    def test_invalid_sample_sources_reject_atomically_and_detached_fields_stay_manual(self):
+        row = self.add(sample_count='12')
+        url = self.url + '/resources/' + row['id']
+        source = {'document_id': 'main', 'page': 1, 'quote': 'MAIN synthetic paper'}
+        before = (self.directory / 'resources.json').read_bytes()
+        for changes, status in [({'sample_count': dict(source, page=2)}, 422),
+                                ({'platform': source}, 422), ({'unknown': source}, 422),
+                                ({'sample_count': dict(source, quote='  ')}, 422),
+                                ({'sample_count': dict(source, expected_revision='0' * 64)}, 409)]:
+            with self.subTest(changes=changes):
+                result = self.client.patch(url, json={'notes': 'unsaved', 'field_source_changes': changes})
+                self.assertEqual(result.status_code, status, result.text)
+                self.assertEqual((self.directory / 'resources.json').read_bytes(), before)
+        self.assertEqual(self.client.get(self.url + '/resources').json()[0]['field_sources'], {})
+
+    def test_named_project_limits_resource_results_relations_and_filtered_exports(self):
+        self.add(sample_count='8', organism='human')
+        other = self.client.post('/api/papers', files={'file': ('other.pdf', fixture_pdf(marker='OTHER'))}).json()['id']
+        for accession in ('GSE123', 'GSE99998'):
+            self.client.post(f'/api/papers/{other}/resources', json={
+                'title': 'Outside cohort', 'accession': accession, 'organism': 'human'}).raise_for_status()
+        project = self.client.post('/api/project-libraries', json={'name': 'Eight donors', 'paper_ids': [self.paper['id']]})
+        project.raise_for_status()
+        scope = {'library_id': project.json()['id'], 'organism': 'human'}
+        rows = self.client.get('/api/resources', params=scope).json()
+        self.assertEqual([(r['paper_id'], r['related_papers']) for r in rows], [(self.paper['id'], [])])
+        for fmt in ('csv', 'accessions'):
+            content = self.client.get('/api/resources/export', params={**scope, 'format': fmt}).content.decode('utf-8-sig')
+            self.assertIn('GSE123', content)
+            self.assertNotIn('GSE99998', content)
+            self.assertNotIn('Outside cohort', content)
+        self.assertEqual(self.client.get('/api/resources/export', params={
+            **scope, 'format': 'accessions', 'paper_id': other}).status_code, 404)
+        self.assertEqual(self.client.get('/api/resources', params={**scope, 'library_id': 'z' * 32}).status_code, 404)
+        self.assertEqual(len(self.client.get('/api/resources').json()), 3)
+        self.assertEqual(self.client.get('/api/resources', params={**scope, 'organism': 'mouse'}).json(), [])
+
     def test_identifier_normalization_duplicates_and_edit_conflicts(self):
         first = self.add(repository='', accession=' gse123 ')
         self.assertEqual(first['repository'], 'GEO')

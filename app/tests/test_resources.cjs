@@ -24,10 +24,11 @@ function harness() {
   };
   const context = vm.createContext({ window: { confirm: () => true }, document: { getElementById: () => panel }, URL, console });
   vm.runInContext(source, context); const ui = context.window.BioResources; ui.init(hooks);
-  return { ui, hooks, panel, calls, messages, changes, navigation, downloads,
+  return { ui, hooks, panel, window: context.window, calls, messages, changes, navigation, downloads,
     click(action, data = {}) { return handlers.click({ target: { closest: selector => selector === '[data-resource-action]' ? { dataset: { resourceAction: action, ...data } } : null } }); },
     mode(value) { return handlers.click({ target: { closest: selector => selector === '[data-resource-mode]' ? { dataset: { resourceMode: value } } : null } }); },
     input(field, value) { return handlers.input({ target: { dataset: { resourceField: field }, value } }); },
+    sourceControl(name, value) { return handlers.change({ target: { dataset: { sampleSource: name }, value } }); },
     field(field, value) { return handlers.change({ target: { dataset: { resourceField: field }, value } }); },
     query(value) { return handlers.input({ target: { dataset: {}, value, matches: selector => selector === '#resource-search input' } }); },
     filter(name, value) { return handlers.input({ target: { dataset: { resourceFilter: name }, value, matches: selector => selector === '#resource-search input' } }); },
@@ -452,4 +453,62 @@ test('editing filters during a pending read cannot export results under the new 
   h.hooks.request = async () => [record({ platform: 'BD', paper_id: B })];
   await h.submit('resource-search'); await h.click('export-csv');
   assert.equal(new URL('http://local' + h.downloads[0][0]).searchParams.get('platform'), 'BD');
+});
+
+test('selected supplementary text belongs only to the chosen sample field and paper', async () => {
+  const h = harness(); await h.ui.open(paper());
+  h.ui.rememberSelection({ paper_id: A, document_id: S, page: 3, selection: 'Eight matched pairs.', revision: 'd'.repeat(64) });
+  await h.click('add'); h.input('title', 'Tumour cohort'); h.input('identifiers', 'Cohort A');
+  h.input('sample_count', '8 pairs'); h.input('platform', 'array');
+  await h.click('use-selected-source');
+  await h.sourceControl('field', 'platform');
+  await h.sourceControl('document_id', 'main'); await h.sourceControl('page', '2');
+  await h.sourceControl('quote', 'The array was used.');
+  await h.submit();
+  const body = h.calls.find(c => c.method === 'POST').body;
+  assert.deepEqual(JSON.parse(JSON.stringify(body.field_source_changes)), {
+    sample_count: { document_id: S, page: 3, quote: 'Eight matched pairs.', expected_revision: 'd'.repeat(64) },
+    platform: { document_id: 'main', page: 2, quote: 'The array was used.' }
+  });
+  await h.ui.open(paper(B)); await h.click('add');
+  assert.doesNotMatch(h.panel.innerHTML, /使用刚才选中的原文/);
+});
+
+test('unmatched and stale sample excerpts remain visible without source jumps', async () => {
+  const h = harness(), source = { document_id: S, page: 2, source_name: 'Supp.pdf', value: '8 cases', quote: '<8 cases>' };
+  const row = record({ sample_count: '10 cases', platform: 'array', field_sources: {
+    sample_count: { ...source, state: 'value_changed' }, platform: { ...source, value: 'array', state: 'unmatched' }
+  } });
+  h.hooks.request = async () => [row];
+  await h.ui.open(paper());
+  assert.match(h.panel.innerHTML, /字段值已修改/); assert.match(h.panel.innerHTML, /指定页未找到摘录/);
+  assert.match(h.panel.innerHTML, /&lt;8 cases&gt;/); assert.doesNotMatch(h.panel.innerHTML, /data-resource-action="jump-field"/);
+  await h.click('jump-field', { resourceKey: A + ':' + R, resourceSample: 'sample_count' });
+  assert.equal(h.navigation.length, 0);
+  await h.click('edit', { resourceKey: A + ':' + R }); await h.click('remove-field-source');
+  h.hooks.request = async (method, url, body) => { h.calls.push({ method, url, body }); return row; };
+  await h.submit();
+  assert.equal(h.calls.at(-1).body.field_source_changes.sample_count, null);
+  assert.equal(Object.hasOwn(h.calls.at(-1).body.field_source_changes, 'platform'), false);
+});
+
+test('named project resource results and downloads track the active project and applied filters', async () => {
+  const h = harness(), lib1 = '4'.repeat(32), lib2 = '5'.repeat(32);
+  let active = lib1;
+  h.window.BioProjects = { activeId: () => active };
+  h.hooks.request = async (method, url) => { h.calls.push({ method, url }); return [record({ paper_id: A })]; };
+  await h.ui.open(null);
+  assert.equal(new URL(h.calls.at(-1).url, 'https://example.test').searchParams.get('library_id'), lib1);
+  assert.match(h.panel.innerHTML, /当前课题库/);
+  h.filter('organism', 'human'); await h.submit('resource-search');
+  await h.click('export-csv');
+  let url = new URL(h.downloads.at(-1)[0], 'https://example.test');
+  assert.equal(url.searchParams.get('library_id'), lib1); assert.equal(url.searchParams.get('organism'), 'human');
+  active = lib2; await h.click('export-accessions');
+  assert.equal(h.downloads.length, 1);
+  await h.ui.scopeChanged(); await h.click('export-accessions');
+  url = new URL(h.downloads.at(-1)[0], 'https://example.test');
+  assert.equal(url.searchParams.get('library_id'), lib2); assert.equal(url.searchParams.get('organism'), 'human');
+  active = 'all'; await h.ui.scopeChanged();
+  assert.ok(!h.calls.at(-1).url.includes('library_id'));
 });

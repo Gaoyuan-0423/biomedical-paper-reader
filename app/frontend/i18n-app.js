@@ -222,7 +222,7 @@
     "从文献库选择一篇论文，或导入新的 PDF。原文、图表与思考，在这里并排展开。": "Choose a paper from your library or import a PDF. Read the source alongside its figures and your notes.",
     "文献信息已就绪": "Paper details are ready",
     "为这篇文献附加原文": "Attach the source PDF",
-    "已保存标题与文献信息。附加 PDF 后，即可对照原文、提取图表并生成阅读笔记。": "The title and metadata are saved. Attach a PDF to read the source, extract figures and generate notes.",
+    "可以查找公开全文，也可以从本机附加 PDF。取得正文后，即可阅读原文、提取图表并生成笔记。": "Find open full text or attach a local PDF. Then read the paper, extract figures and generate notes.",
     "正在准备原文": "Preparing the source",
     "正在打开论文": "Opening the paper",
     "正在加载 PDF，较大的文件可能需要一点时间。": "Loading the PDF. Larger files may take a moment.",

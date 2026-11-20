@@ -94,3 +94,17 @@ test('malformed pagination reports failure instead of losing the existing page',
   h.hooks.request = async () => ({ items: [item('Invalid next')], next_offset: 0 }); await h.click('more');
   assert.match(h.html(), /搜索结果不完整/); assert.match(h.html(), /Synthetic paper/); assert.doesNotMatch(h.html(), /Invalid next/);
 });
+
+test('a named project scopes search and its hits never carry over to another project', async () => {
+  const h = harness(), a = 'a'.repeat(32), b = 'b'.repeat(32);
+  h.ui.open('matching phrase', a);
+  await h.search();
+  assert.match(h.calls[0].url, new RegExp('library_id=' + a));
+  assert.match(h.html(), /Synthetic paper/);
+  h.ui.close();
+  h.ui.open('matching phrase', b);
+  assert.doesNotMatch(h.html(), /Synthetic paper/);
+  assert.match(h.html(), /在当前课题库的正文/);
+  await h.search();
+  assert.match(h.calls[1].url, new RegExp('library_id=' + b));
+});

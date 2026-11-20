@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
+from sample_provenance import FieldChanges, public_field_sources, validate_saved
 from reading_workflow import load_record_list, source_info
 
 
@@ -60,6 +61,14 @@ class ResourcePatch(BaseModel):
     quote: Optional[str] = Field(default=None, max_length=12000)
 
 
+class ResourceCreate(ResourceIn):
+    field_source_changes: FieldChanges = Field(default_factory=dict)
+
+
+class ResourceUpdate(ResourcePatch):
+    field_source_changes: FieldChanges = Field(default_factory=dict)
+
+
 RESOURCE_DERIVED_FIELDS = ('resources_count', 'resources_pending')
 SAMPLE_FIELDS = ('organism', 'tissue', 'disease', 'modality', 'platform', 'sample_groups', 'sample_count')
 NEW_SAMPLE_FIELDS = ('disease', 'platform', 'sample_groups', 'sample_count')
@@ -85,6 +94,8 @@ def load_resources(directory):
         for field in ('source_revision', 'created_at', 'updated_at'):
             if field in record and not isinstance(record[field], str):
                 raise ValueError('invalid string field')
+        if 'field_sources' in record:
+            validate_saved(record['field_sources'])
         fields = ResourceIn.model_validate(record).model_dump()
         return normalize_resource({**record, **fields})
     return load_record_list(directory, 'resources', validate)
@@ -264,7 +275,7 @@ def public_resource(directory, meta, record):
         changed = available and record.get('source_revision', 'legacy') != source_revision(meta, record)
     # Status is retained only for old clients and migration protection. Resource
     # use no longer requires verification; provenance availability is independent.
-    return {**record, 'source_available': available, 'source_changed': changed, 'source_name': name}
+    return {**record, 'field_sources': public_field_sources(directory, meta, record), 'source_available': available, 'source_changed': changed, 'source_name': name}
 
 
 def public_resources(directory, meta):

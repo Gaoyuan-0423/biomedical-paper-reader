@@ -9,9 +9,12 @@
   <link rel="stylesheet" href="vendor/github.min.css">
   <link rel="stylesheet" href="styles.css?v=20261106-v0130">
   <link rel="stylesheet" href="evidence.css?v=20261106-v0130">
+  <link rel="stylesheet" href="comparisons.css">
   <link rel="stylesheet" href="resources.css?v=20261106-v0130">
   <link rel="stylesheet" href="chat.css?v=20261106-v0130">
   <link rel="stylesheet" href="zotero.css?v=20261106-v0130">
+  <link rel="stylesheet" href="project-libraries.css">
+  <link rel="stylesheet" href="identifier-import.css">
   <link rel="stylesheet" href="library-search.css?v=20261106-v0130">
   <link rel="stylesheet" href="reading-nav.css?v=20261106-v0130">
   <link rel="stylesheet" href="figure-reader.css?v=20261106-v0130">
@@ -50,9 +53,13 @@
     <aside class="sidebar" id="sidebar" aria-label="文献库" data-i18n-aria-label="文献库">
       <div class="sidebar-head">
         <div class="section-heading"><h1><span data-i18n="我的文献库">我的文献库</span></h1><span class="library-total" id="library-total">0</span></div>
+        <div class="project-scope-row">
+          <select id="project-scope" aria-label="当前课题库" data-i18n-aria-label="当前课题库"><option value="all" data-i18n="全部文献">全部文献</option></select>
+          <button class="btn" id="open-projects" type="button"><span data-i18n="课题库">课题库</span></button>
+        </div>
         <div class="import-row">
           <label class="btn btn-primary upload-btn" for="file-input" tabindex="0" role="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></label>
-          <button id="btn-doi-import" class="btn" title="通过 DOI 导入文献信息" data-i18n-title="通过 DOI 导入文献信息"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg>DOI</button>
+          <button id="btn-doi-import" class="btn" title="按 DOI 或 PMID 导入" data-i18n-title="按 DOI 或 PMID 导入"><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg>DOI / PMID</button>
         </div>
         <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
         <input type="file" id="attach-input" accept="application/pdf,.pdf" hidden>
@@ -98,6 +105,7 @@
         <div class="document-toolbar" id="document-toolbar" hidden>
           <select id="document-select" aria-label="阅读文件" data-i18n-aria-label="阅读文件"></select>
           <button id="btn-supplement" class="btn btn-ghost"><span data-i18n="添加补充 PDF">添加补充 PDF</span></button>
+          <button id="btn-find-supplements" class="btn btn-ghost" type="button"><span data-i18n="补充附件">补充附件</span></button>
           <button id="btn-remove-supplement" class="btn btn-ghost" hidden><span data-i18n="移除补充">移除补充</span></button>
         </div>
         <div id="reading-navigation" hidden></div>
@@ -108,7 +116,8 @@
             <span class="empty-eyebrow"><span data-i18n="你的下一次发现，从这里开始">你的下一次发现，从这里开始</span></span>
             <h2 class="empty-title"><span data-i18n="留一点时间，读懂一篇好论文">留一点时间，读懂一篇好论文</span></h2>
             <p class="empty-copy" id="pdf-empty-text"><span data-i18n="从文献库选择一篇论文，或导入新的 PDF。">从文献库选择一篇论文，或导入新的 PDF。</span><br><span data-i18n="原文、图表与思考，在这里并排展开。">原文、图表与思考，在这里并排展开。</span></p>
-            <div class="empty-actions"><button id="btn-empty-import" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></button><button id="btn-empty-doi" class="btn btn-ghost"><span data-i18n="通过 DOI 导入">通过 DOI 导入</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button></div>
+            <div class="empty-actions"><button id="btn-empty-import" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="导入 PDF">导入 PDF</span></button><button id="btn-empty-doi" class="btn btn-ghost"><span data-i18n="按 DOI 或 PMID 导入">按 DOI 或 PMID 导入</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button></div>
+            <button id="find-fulltext" class="btn btn-primary" hidden><span data-i18n="查找全文">查找全文</span></button>
             <button id="btn-attach-pdf" class="btn btn-primary" hidden><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg><span data-i18n="附加 PDF 文件">附加 PDF 文件</span></button>
             <div class="welcome-footnote"><span data-i18n="原文对照">原文对照</span><span>·</span><span data-i18n="图表精读">图表精读</span><span>·</span><span data-i18n="笔记沉淀">笔记沉淀</span></div>
           </div>
@@ -159,7 +168,7 @@
       </section>
     </main>
   </div>
-  <div id="pdf-selection-tools" class="pdf-selection-tools" role="toolbar" aria-label="选中原文的操作" hidden data-i18n-aria-label="选中原文的操作"><button type="button" class="btn btn-ghost" data-selection-action="explain"><span data-i18n="解释">解释</span></button><button type="button" class="btn btn-ghost" data-selection-action="translate"><span data-i18n="翻译">翻译</span></button><button type="button" class="btn btn-ghost" data-selection-action="ask"><span data-i18n="追问">追问</span></button></div>
+  <div id="pdf-selection-tools" class="pdf-selection-tools" role="toolbar" aria-label="选中原文的操作" hidden data-i18n-aria-label="选中原文的操作"><button type="button" class="btn btn-ghost" data-selection-action="explain"><span data-i18n="解释">解释</span></button><button type="button" class="btn btn-ghost" data-selection-action="translate"><span data-i18n="翻译">翻译</span></button><button type="button" class="btn btn-ghost" data-selection-action="ask"><span data-i18n="追问">追问</span></button><button type="button" class="btn btn-ghost" data-selection-action="evidence"><span data-i18n="记证据">记证据</span></button><button type="button" class="btn btn-ghost" data-selection-action="field-source"><span data-i18n="记为字段出处">记为字段出处</span></button></div>
   <div class="modal-backdrop" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="modal modal-wide">
       <div class="modal-head">
@@ -238,6 +247,42 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="fulltext-modal" role="dialog" aria-modal="true" aria-labelledby="fulltext-title" hidden>
+    <div class="modal"><div class="modal-head"><h3 id="fulltext-title" data-i18n="查找全文">查找全文</h3>
+      <button class="btn" type="button" id="fulltext-close" data-i18n="关闭">关闭</button></div><div class="modal-body" id="fulltext-single"></div></div>
+  </div>
+  <div id="remote-supplement-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="remote-supplement-title" hidden>
+    <div class="modal">
+      <div class="modal-head"><h3 id="remote-supplement-title" data-i18n="补充附件">补充附件</h3><button id="remote-supplement-close" class="btn" type="button" data-i18n="关闭">关闭</button></div>
+      <div id="remote-supplement-body" class="modal-body"></div>
+      <div class="modal-foot"><span id="remote-supplement-status" role="status"></span><button id="remote-supplement-save" class="btn btn-primary" type="button" data-i18n="下载选中附件">下载选中附件</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-title" hidden>
+    <div class="modal project-modal">
+      <div class="modal-head">
+        <h3 id="project-title" data-i18n="课题文献库">课题文献库</h3>
+        <button class="btn btn-icon btn-ghost" id="project-close" type="button" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
+      </div>
+      <div class="project-controls">
+        <select id="project-switch" aria-label="当前课题库" data-i18n-aria-label="当前课题库"></select>
+        <button class="btn" id="project-new" type="button" data-i18n="新建课题库">新建课题库</button>
+      </div>
+      <nav class="project-sections" aria-label="课题库工具" data-i18n-aria-label="课题库工具">
+        <button class="btn" type="button" data-project-tab="papers" data-i18n="文献归集">文献归集</button>
+        <button class="btn" type="button" data-project-tab="compare" data-i18n="跨篇比较">跨篇比较</button>
+        <button class="btn" type="button" data-project-tab="pubmed" data-i18n="PubMed 检索">PubMed 检索</button>
+        <button class="btn" type="button" data-project-tab="downloads" data-i18n="补齐全文">补齐全文</button>
+        <button class="btn" type="button" data-project-tab="figures" data-i18n="收藏图表">收藏图表</button>
+      </nav>
+      <p id="project-status" class="project-status" role="status" hidden></p>
+      <div class="modal-body project-body">
+        <div id="project-papers"></div><div id="project-compare" hidden></div><div id="project-pubmed" hidden></div><div id="project-downloads" hidden></div><div id="project-figures" hidden></div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="library-search-modal" role="dialog" aria-modal="true" aria-labelledby="library-search-title" hidden>
     <div class="modal library-search-modal">
       <div class="modal-head"><div><span class="modal-eyebrow"><span data-i18n="本地文献库">本地文献库</span></span><h3 id="library-search-title"><span data-i18n="搜索正文与笔记">搜索正文与笔记</span></h3></div><button type="button" class="btn btn-icon btn-ghost" data-library-search-action="close" aria-label="关闭全文搜索" data-i18n-aria-label="关闭全文搜索"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
@@ -255,22 +300,25 @@
   </div>
 
   <div class="modal-backdrop" id="doi-modal" role="dialog" aria-modal="true" aria-labelledby="doi-title" hidden>
-    <div class="modal">
+    <div class="modal identifier-import-modal">
       <div class="modal-head">
-        <div><span class="modal-eyebrow"><span data-i18n="添加到文献库">添加到文献库</span></span><h3 id="doi-title"><span data-i18n="通过 DOI 导入文献">通过 DOI 导入文献</span></h3></div>
+        <h3 id="doi-title" data-i18n="按 DOI 或 PMID 导入">按 DOI 或 PMID 导入</h3>
         <button class="btn btn-icon btn-ghost" id="doi-close" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
       </div>
       <div class="modal-body">
-        <label class="field">
-          <span><span data-i18n="DOI 或 doi.org 链接">DOI 或 doi.org 链接</span></span>
-          <input id="doi-input" type="text" placeholder="10.1136/gutjnl-2024-333617" autocomplete="off">
-          <small><span data-i18n="从 CrossRef 拉取标题、作者、期刊、年份、摘要建立条目；随后可在中间面板「附加 PDF」。">从 CrossRef 拉取标题、作者、期刊、年份、摘要建立条目；随后可在中间面板「附加 PDF」。</span></small>
+        <p id="identifier-target" class="hint"></p>
+        <label class="field"><span data-i18n="论文编号或含编号的链接">论文编号或含编号的链接</span>
+          <textarea id="doi-input" rows="3" maxlength="20000" placeholder="10.1234/example&#10;PMID: 12345678"></textarea>
+          <small data-i18n="一次最多 50 项，可用换行或空格分隔。">一次最多 50 项，可用换行或空格分隔。</small>
         </label>
+        <p id="identifier-status" role="status"></p>
+        <div id="identifier-rows"></div>
       </div>
       <div class="modal-foot">
+        <button class="btn" id="doi-cancel" data-i18n="关闭">关闭</button>
         <div class="spacer"></div>
-        <button class="btn" id="doi-cancel"><span data-i18n="取消">取消</span></button>
-        <button class="btn btn-primary" id="doi-submit"><span data-i18n="导入">导入</span></button>
+        <button class="btn" id="doi-preview" data-i18n="预览条目">预览条目</button>
+        <button class="btn btn-primary" id="doi-submit" data-i18n="加入所选文献" disabled>加入所选文献</button>
       </div>
     </div>
   </div>
@@ -308,9 +356,16 @@
   <script src="safe-markdown.js?v=20261105-v0120"></script>
   <script src="export.js"></script>
   <script src="evidence.js?v=20261105-v0110"></script>
+  <script src="comparisons.js"></script>
+  <script src="remote-supplements.js"></script>
   <script src="resources.js?v=20261105-v0110"></script>
+  <script src="figure-shelf.js"></script>
   <script src="chat.js?v=20261105-v0110"></script>
   <script src="zotero.js?v=20261105-v0110"></script>
+  <script src="saved-pubmed.js"></script>
+  <script src="fulltext-downloads.js"></script>
+  <script src="identifier-import.js"></script>
+  <script src="project-libraries.js"></script>
   <script src="library-search.js?v=20261105-v0110"></script>
   <script src="reading-nav.js?v=20261105-v0110"></script>
   <script src="note-sources.js?v=20261105-v0110"></script>
