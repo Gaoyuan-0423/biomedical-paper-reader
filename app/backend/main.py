@@ -61,6 +61,7 @@ import paper_comparisons as comparisons
 import figure_shelf as fs
 import note_sources as ns
 import identifier_import as ids
+import article_links
 import pmc_materials as pmc
 import oa_fulltext as oa
 import saved_pubmed as sp
@@ -1331,14 +1332,26 @@ async def import_doi(body: DoiIn):
         return create_identifier_paper(record)
 
 
+def remember_import_url(meta, record):
+    link = record.get('_link') or {}
+    if not link.get('article_url') or meta.get('import_url'):
+        return False
+    meta['import_url'] = record.get('import_url') or link['article_url']
+    meta['article_url'] = link['article_url']
+    if link.get('sha256'):
+        meta['import_pdf_sha256'] = link['sha256']
+    return True
+
+
 def create_identifier_paper(record):
     paper_id, directory = new_paper_dir()
     try:
         meta = blank_meta(paper_id)
-        for field in ('doi', 'pmid', 'title', 'authors', 'year', 'journal', 'abstract', 'url'):
+        for field in ('doi', 'pmid', 'pmcid', 'title', 'authors', 'year', 'journal', 'abstract', 'url'):
             if record.get(field):
                 meta[field] = str(record[field])
-        meta.update(source='doi' if meta.get('doi') else 'pmid', filename='')
+        from_link = remember_import_url(meta, record)
+        meta['source'] = 'url' if from_link else ('doi' if meta.get('doi') else 'pmid')
         meta['title'] = record.get('title') or record.get('doi') or str(record['pmid'])
         (directory / 'text.txt').write_text(record.get('abstract') or '', 'utf-8')
         write_meta(directory, meta)
@@ -1358,13 +1371,10 @@ async def preview_identifiers(body: ids.PreviewIn):
     return ids.remember(DATA_DIR, body.library_id, rows)
 
 
-@app.post('/api/import/identifiers/apply')
-def apply_identifiers(body: ids.ApplyIn):
-    library_id, selection = ids.selection(DATA_DIR, body)
+def apply_identifier_records(library_id, selection):
     results = []
     with storage_lock:
-        if library_id != 'all':
-            pl.active_project(DATA_DIR, library_id)
+        project = pl.active_project(DATA_DIR, library_id) if library_id != 'all' else None
         index = ids.library_index(list_meta(), list_trash())
         for row in selection:
             status, paper = ids.local_match(index, row['record'])
@@ -1372,7 +1382,9 @@ def apply_identifiers(body: ids.ApplyIn):
             results.append(item)
             if status not in ('new', 'existing'):
                 continue
-            if row['status'] == 'existing' and paper.get('id') != row['paper_id']:
+            target = row.get('_applied_paper_id') or row.get('paper_id')
+            if ((target and target != paper.get('id')) or
+                    (row.get('_joined_project') and project and target not in project.paper_ids)):
                 item.update(status='changed', reason='原条目已变更，请重新预览')
                 continue
             try:
@@ -1381,14 +1393,38 @@ def apply_identifiers(body: ids.ApplyIn):
                     item.update(status='added', paper_id=paper['id'])
                     for alias in ids.aliases(paper):
                         index[alias] = ('existing', paper)
+                # A retry must keep the originally chosen record, even after permanent deletion.
+                row['_applied_paper_id'] = paper['id']
                 if library_id != 'all':
-                    # Membership retries locate the existing paper even if its first join failed.
-                    pl.add_paper(DATA_DIR, library_id, paper['id'])
+                    project = pl.add_paper(DATA_DIR, library_id, paper['id'])
+                    row['_joined_project'] = True
+                if status == 'existing' and row['record'].get('_link') and not paper.get('import_url'):
+                    directory = paper_dir(paper['id'])
+                    saved = read_meta(directory)
+                    if remember_import_url(saved, row['record']):
+                        write_meta(directory, saved)
+                        for alias in ids.aliases(saved):
+                            index[alias] = ('existing', saved)
             except (HTTPException, OSError) as exc:
                 reason = str(exc.detail) if isinstance(exc, HTTPException) else '写入本地文献库失败'
                 item.update(status='join_failed' if item['paper_id'] else 'failed', reason=reason)
-    return {'rows': results, 'library_id': library_id}
+    return results
 
+
+@app.post('/api/import/identifiers/apply')
+async def apply_identifiers(body: ids.ApplyIn):
+    library_id, selection = ids.selection(DATA_DIR, body)
+    results = await asyncio.to_thread(apply_identifier_records, library_id, selection)
+    for row, item in zip(selection, results):
+        link = row['record'].get('_link')
+        if not link or item['status'] not in ('added', 'existing'):
+            continue
+        try:
+            result = await obtain_paper_fulltext(item['paper_id'], library_id, link)
+            item['fulltext'] = {k: result[k] for k in ('outcome', 'message', 'source') if k in result}
+        except HTTPException as exc:
+            item['fulltext'] = {'outcome': 'failed', 'message': str(exc.detail)}
+    return {'rows': results, 'library_id': library_id}
 
 
 @app.get("/api/papers/{paper_id}")
@@ -1810,15 +1846,37 @@ def _attach_download(paper_id, library_id, original, result):
             return result
 
 
-@app.post('/api/papers/{paper_id}/fetch-fulltext')
-async def fetch_open_fulltext(paper_id: str, library_id: str = 'all'):
+async def obtain_link_or_open_fulltext(meta, link):
+    if not link:
+        return await oa.obtain(meta, MAX_UPLOAD_BYTES)
+    original = link
+    try:
+        if not link.get('inspected') and not link.get('pdf_url'):
+            inspected = await article_links.inspect_url(link['article_url'])
+            link = inspected['_link']
+        if original.get('sha256'):
+            link = {**link, 'sha256': original['sha256']}
+        result = await article_links.download_pdf(link, meta, MAX_UPLOAD_BYTES)
+    except article_links.ArticleLinkError as exc:
+        result = {'outcome': 'failed', 'message': str(exc)}
+    if result['outcome'] in ('downloaded', 'needs_review') or not any(oa.identity(meta)[:3]):
+        return result
+    alternate = await oa.obtain(meta, MAX_UPLOAD_BYTES)
+    if alternate['outcome'] == 'not_found' and result['outcome'] == 'failed':
+        return result
+    return alternate
+
+
+async def obtain_paper_fulltext(paper_id, library_id, link=None):
     with storage_lock:
         d, meta = _fulltext_target(paper_id, library_id)
         existing = _existing_fulltext(d, meta)
         if existing:
             return existing
     try:
-        result = await asyncio.wait_for(oa.obtain(meta, MAX_UPLOAD_BYTES), timeout=120)
+        if link is None and meta.get('import_url'):
+            link = {'article_url': meta['import_url'], 'sha256': meta.get('import_pdf_sha256')}
+        result = await asyncio.wait_for(obtain_link_or_open_fulltext(meta, link), timeout=120)
         if result['outcome'] != 'downloaded':
             return result
         return await asyncio.to_thread(_attach_download, paper_id, library_id, meta, result)
@@ -1829,6 +1887,11 @@ async def fetch_open_fulltext(paper_id: str, library_id: str = 'all'):
     except (OSError, ValueError) as exc:
         logging.getLogger(__name__).warning('Full-text import failed for %s: %s', paper_id, type(exc).__name__)
         return {'outcome': 'failed', 'message': '正文保存或解析失败，请检查磁盘后重试。'}
+
+
+@app.post('/api/papers/{paper_id}/fetch-fulltext')
+async def fetch_open_fulltext(paper_id: str, library_id: str = 'all'):
+    return await obtain_paper_fulltext(paper_id, library_id)
 
 
 @app.post("/api/papers/{paper_id}/file")
