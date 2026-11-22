@@ -2,6 +2,10 @@
 
 [中文](#中文) · [English](#english)
 
+![BioReader 功能介绍：导入、阅读、核查、比较与分享](docs/bioreader-feature-overview.png)
+
+*功能示意图，界面以实际应用为准。 / Concept illustration; the actual interface may differ.*
+
 ## 中文
 
 **单篇生物医学论文精读：看懂实验为什么做，判断证据支持到哪里，提炼可以借鉴的研究设计。**
