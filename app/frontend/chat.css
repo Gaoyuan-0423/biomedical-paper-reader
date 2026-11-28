@@ -64,8 +64,19 @@
 .chat-reading-prompts .btn { min-height: 27px; padding: 4px 7px; }
 .chat-context-pinned { display: flex; align-items: center; gap: 5px; }
 .chat-context-pinned .btn { font-size: 0.769231rem; min-height: 24px; padding: 3px 5px; }
+#table-source-modal .modal { width: min(860px, 100%); }
+#table-source-title, #table-source-location { overflow-wrap: anywhere; }
+#table-source-location { margin: 0 0 12px; }
+.table-source-scroll { max-height: 60vh; overflow: auto; }
+#table-source-grid { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+#table-source-grid th, #table-source-grid td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+#table-source-grid .table-source-hit { background: var(--primary-soft); }
+#table-source-grid [aria-current="true"] { outline: 2px solid var(--primary); outline-offset: -2px; font-weight: 700; }
 @media (max-width: 600px) {
   .chat-reading-prompts { gap: 4px; }
   .chat-reading-prompts .btn { font-size: 0.769231rem; padding: 3px 6px; }
   .chat-context { max-height: 178px; }
 }
+
+.chat-table-choices { display: grid; gap: 6px; margin: 8px 0; }
+.chat-table-choices .btn { text-align: left; white-space: normal; overflow-wrap: anywhere; }

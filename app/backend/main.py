@@ -30,6 +30,7 @@ from urllib.parse import quote as url_quote
 from fastapi import FastAPI, File, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from PIL import Image
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
@@ -54,7 +55,7 @@ from geo_metadata import GeoError, cache_fresh, fetch_geo_metadata, load_geo_cac
 from paper_resources import resource_accessions
 from chat_sources import file_revision, prepare_sources, save_parsed_blocks, validate_source_snapshot, verified_source
 from paper_chat import (CHAT_TIMEOUT, MAX_OUTPUT, ChatIn, active_requests, chat_messages,
-                        history_page, load_history, new_messages, recover_history, save_history, update_message)
+                        history_page, load_history, new_messages, recover_history, save_history, table_choice, update_message, now as chat_now)
 import zotero_import as zi
 import zotero_local as zl
 from zotero_mcp import ZoteroMCPClient, MCPError
@@ -68,10 +69,14 @@ import figure_shelf as fs
 import note_sources as ns
 import identifier_import as ids
 import article_links
+import bulk_tags
+import digest_export
 import pmc_materials as pmc
+import supplement_tables
 import oa_fulltext as oa
 import saved_pubmed as sp
 import project_libraries as pl
+import library_digest
 import ui_preferences as ui
 from llm import (
     CompletionError,
@@ -548,6 +553,7 @@ class PaperPatch(BaseModel):
     favorite: Optional[bool] = None
     notes: Optional[str] = None
     tags: Optional[list[str]] = None
+    tags_revision: Optional[int] = Field(default=None, ge=0)
     authors: Optional[str] = None
     year: Optional[str] = None
     journal: Optional[str] = None
@@ -707,10 +713,12 @@ def comparison_material(paper_id: str):
 
 
 @app.get('/api/comparisons/{library_id}')
-def list_comparisons(library_id: str):
+def list_comparisons(library_id: str, paper_id: Optional[comparisons.Id] = None):
     with storage_lock:
-        project_paper_ids(library_id)
-        return comparisons.summaries(DATA_DIR, library_id)
+        members = project_paper_ids(library_id)
+        if paper_id is not None and paper_id not in members:
+            raise HTTPException(404, '论文不在当前课题库。')
+        return comparisons.summaries(DATA_DIR, library_id, paper_id)
 
 
 @app.get('/api/comparisons/{library_id}/material/{paper_id}')
@@ -811,6 +819,62 @@ def save_comparison(library_id: str, comparison_id: str, body: comparisons.Compa
     with storage_lock:
         return comparisons.save(DATA_DIR, library_id, comparison_id, body, project_paper_ids(library_id),
                                 comparison_material, verified)
+
+
+def comparison_measurement_row(library_id, comparison_id, paper_id, required=True):
+    if paper_id not in project_paper_ids(library_id):
+        raise HTTPException(404, '论文不在当前课题库。')
+    path = comparisons.record_path(DATA_DIR, library_id, comparison_id)
+    record = comparisons.load(path)
+    return path, record, comparisons.comparison_row(record, paper_id, required)
+
+
+def verify_current_measurement_file(directory, source):
+    # Recheck identity and bytes after the unlocked parse, before adopting or navigating.
+    path = supplement_tables.table_source_path(directory, read_meta(directory), source)
+    if file_revision(path) != source['revision']:
+        raise HTTPException(409, '补充表内容已变化，请重新核对原文件。')
+
+
+@app.post('/api/comparisons/{library_id}/{comparison_id}/table-measurements')
+def adopt_comparison_measurement(library_id: str, comparison_id: str, body: comparisons.MeasurementIn):
+    with storage_lock:
+        comparison_measurement_row(library_id, comparison_id, body.paper_id, required=not body.add_paper)
+        directory = paper_dir(body.paper_id)
+        meta = read_meta(directory)
+        message = next((item for item in load_history(directory) if item['id'] == body.message_id
+                        and item['role'] == 'assistant' and item['status'] == 'completed'), None)
+        if not message or body.source_id not in message.get('cited_source_ids', []):
+            raise HTTPException(404, '当前论文的回答没有引用这个补充表数值。')
+        source = next((item for item in message['sources'] if item['id'] == body.source_id
+                       and item.get('kind') == 'table'), None)
+        if not source:
+            raise HTTPException(404, '当前论文的回答没有引用这个补充表数值。')
+    # The client supplies an address in this paper's conversation, never evidence bytes or a value.
+    supplement_tables.verified_table_source(directory, meta, source)
+    with storage_lock:
+        path, record, _ = comparison_measurement_row(library_id, comparison_id, body.paper_id, required=not body.add_paper)
+        verify_current_measurement_file(directory, source)
+        return comparisons.adopt_measurement(path, record, body, source, read_meta(directory).get('title') or body.paper_id)
+
+
+@app.get('/api/comparisons/{library_id}/{comparison_id}/table-measurements/{paper_id}/{measurement_id}/source')
+def get_comparison_measurement(library_id: str, comparison_id: str, paper_id: str, measurement_id: str):
+    with storage_lock:
+        _, _, row = comparison_measurement_row(library_id, comparison_id, paper_id)
+        item = next((m for m in row.get('table_measurements', []) if m['id'] == measurement_id), None)
+        if item is None:
+            raise HTTPException(404, '该比较行没有这个补充表数值。')
+        directory = paper_dir(paper_id)
+        source = item['source']
+        meta = read_meta(directory)
+    preview = supplement_tables.verified_table_source(directory, meta, source)
+    with storage_lock:
+        _, _, row = comparison_measurement_row(library_id, comparison_id, paper_id)
+        if not any(m['id'] == measurement_id and m['source'] == source for m in row.get('table_measurements', [])):
+            raise HTTPException(409, '当前比较的来源已变化，请重新打开。')
+        verify_current_measurement_file(directory, source)
+    return {'source': {**preview, 'paper_id': paper_id}}
 
 
 # ---------- data and code resources ----------
@@ -1349,6 +1413,83 @@ def project_paper_ids(library_id):
             and (PAPERS_DIR / pid / 'meta.json').is_file() and not _future_schema(PAPERS_DIR / pid)}
 
 
+@app.get('/api/library/{library_id}/digest')
+def get_library_digest(library_id: str):
+    with storage_lock:
+        return library_digest.build_digest(DATA_DIR, PAPERS_DIR, library_id)
+
+
+@app.get('/api/library/{library_id}/digest/figures/{paper_id}/{fid}/{view}')
+def get_digest_figure(library_id: str, paper_id: str, fid: str, view: Literal['image', 'source'], key: str):
+    with storage_lock:
+        if library_id != 'all' and paper_id not in pl.active_project(DATA_DIR, library_id).paper_ids:
+            raise HTTPException(404, '插图不在当前课题库')
+        item = library_digest.current_figure(PAPERS_DIR, paper_id, fid, key, library_id)
+        if view == 'source':
+            return item
+        if not item['image_url']:
+            raise HTTPException(404, '插图文件不存在')
+        image = (PAPERS_DIR / paper_id / 'figures' / (fid + '.png')).read_bytes()
+        return Response(image, media_type='image/png')
+
+
+@app.get('/api/library/{library_id}/digest/export')
+def export_library_digest(library_id: str):
+    name, stream = digest_export.build_export(DATA_DIR, PAPERS_DIR, library_id, FRONTEND_DIR / 'digest-export.html')
+    safe_name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', '_', name)[:80] or 'BioReader'
+    headers = {'Content-Disposition': "attachment; filename*=UTF-8''" + url_quote(safe_name + '.html', safe=''),
+               'Cache-Control': 'no-store'}
+    return StreamingResponse(iter(lambda: stream.read(256 * 1024), b''), media_type='text/html', headers=headers,
+                             background=BackgroundTask(stream.close))
+
+
+def last_tag_batch(library_id):
+    path = bulk_tags.receipt_path(DATA_DIR, library_id)
+    record = bulk_tags.receipt(path)
+    members = None
+    if record and record['phase'] == 'adding' and library_id != 'all':
+        try:
+            project = pl.read(DATA_DIR, library_id)
+            members = set(project.paper_ids) if not project.archived else set()
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            members = set()
+    bulk_tags.finish(path, record, PAPERS_DIR, TRASH_DIR, read_meta, write_meta, members)
+    return path, record
+
+
+@app.get('/api/library/{library_id}/tag-batch')
+def get_tag_batch(library_id: str):
+    with storage_lock:
+        _, record = last_tag_batch(library_id)
+        return bulk_tags.public(record)
+
+
+@app.post('/api/library/{library_id}/tag-batch')
+def add_batch_tags(library_id: str, body: bulk_tags.AddTags):
+    with storage_lock:
+        path, previous = last_tag_batch(library_id)
+        record = bulk_tags.apply(path, previous, body, project_paper_ids(library_id), PAPERS_DIR, read_meta)
+        bulk_tags.finish(path, record, PAPERS_DIR, TRASH_DIR, read_meta, write_meta)
+        changed = len(record['targets'])
+        return {'added': changed, 'existing': record['existing'], 'skipped': record['total'] - record['existing'] - changed,
+                'receipt': bulk_tags.public(record if changed else previous)}
+
+
+@app.post('/api/library/{library_id}/tag-batch/{request_id}/undo')
+def undo_batch_tags(library_id: str, request_id: str):
+    with storage_lock:
+        path, record = last_tag_batch(library_id)
+        if not record or record['id'] != request_id:
+            raise HTTPException(409, '批量标签记录已变更，请重新打开操作')
+        if record['phase'] == 'added':
+            record['phase'] = 'removing'
+            atomic_json(path, record)
+            bulk_tags.finish(path, record, PAPERS_DIR, TRASH_DIR, read_meta, write_meta)
+        return bulk_tags.public(record)
+
+
 def check_search_scope(library_id):
     if library_id != 'all':
         pl.active_project(DATA_DIR, library_id)
@@ -1473,7 +1614,7 @@ def join_project_library(library_id: str, paper_id: str):
 
 @app.get('/api/library/search')
 def search_saved_library(q: str = Query(min_length=2, max_length=200),
-                         scope: Literal['all', 'pdf', 'notes'] = 'all', library_id: str = 'all',
+                         scope: Literal['all', 'pdf', 'notes'] = 'all', library_id: str = 'all', papers_only: bool = False,
                          offset: int = Query(default=0, ge=0, le=100000),
                          limit: int = Query(default=20, ge=1, le=20)):
     entries, warnings = [], []
@@ -1500,7 +1641,7 @@ def search_saved_library(q: str = Query(min_length=2, max_length=200),
             except (OSError, ValueError, TypeError, KeyError, AttributeError):
                 warnings.append({'paper_id': directory.name, 'paper_title': '无法读取的文献',
                                  'document_id': '', 'message': '本地文献信息无法读取，该条记录未参与搜索。'})
-    result = search_library(entries, q, scope, offset, limit)
+    result = search_library(entries, q, scope, offset, limit, papers_only=papers_only)
     result['warnings'] = warnings + result.get('warnings', [])
     result['warning_count'] = len(warnings) + result.get('warning_count', 0)
     return result
@@ -1681,11 +1822,32 @@ def get_chat_source(paper_id: str, message_id: str, source_id: str):
         source = next((item for item in message['sources'] if item['id'] == source_id), None) if message else None
         if source is None:
             raise HTTPException(404, '这条回答的引用不存在')
-    # Geometry extraction can take time: never hold the library lock while reading PDF pages.
+    # Read the original attachment outside the library lock.
     result = verified_source(d, meta, source)
     with storage_lock:
         validate_source_snapshot(d, read_meta(d), [source])
     return {'source': {**result, 'paper_id': paper_id}}
+
+
+@app.post('/api/papers/{paper_id}/chat/{message_id}/table-candidates/{choice}')
+def choose_chat_table_cell(paper_id: str, message_id: str, choice: int):
+    with storage_lock:
+        d = paper_dir(paper_id)
+        meta = read_meta(d)
+        _, source = table_choice(load_history(d), message_id, choice)
+    verified = verified_source(d, meta, source)
+    with storage_lock:
+        validate_source_snapshot(d, read_meta(d), [source])
+        messages = load_history(d)
+        message, current = table_choice(messages, message_id, choice)
+        if current != source:
+            raise HTTPException(409, '候选记录已变化，请刷新对话')
+        if 'table_candidates' in message:
+            message.pop('table_candidates')
+            message.update(selected_table_candidate=choice, sources=[source], cited_source_ids=['S1'],
+                           content=supplement_tables.answer_for_cell(source), updated_at=chat_now())
+            save_history(d, messages)
+    return {'message': message, 'source': {**verified, 'paper_id': paper_id}}
 
 
 class _ChatStreamingResponse(StreamingResponse):
@@ -1712,19 +1874,31 @@ async def ask_paper_chat(paper_id: str, body: ChatIn):
         if key in active_requests:
             raise HTTPException(409, '这篇文献已有回答正在生成，请等待完成或先停止')
         settings = load_settings()
-        if not settings.get('api_key'):
-            raise HTTPException(400, '请先在设置中填写 API Key')
         meta = read_meta(d)
         recover_history(d)
         active_requests[key] = token
     try:
-        sources = await asyncio.to_thread(prepare_sources, d, meta, body)
+        table_result = None
+        candidates = []
+        if body.action == 'ask' and not body.selection:
+            table_result = await asyncio.to_thread(supplement_tables.lookup, d, meta, body.message, candidates=candidates)
+        if table_result is None:
+            if not settings.get('api_key'):
+                raise HTTPException(400, '请先在设置中填写 API Key')
+            sources = await asyncio.to_thread(prepare_sources, d, meta, body)
+        else:
+            table_answer, sources = table_result
         with storage_lock:
             latest = read_meta(d)
-            validate_source_snapshot(d, latest, sources)
+            if table_result is not None and latest.get('supplement_files', []) != meta.get('supplement_files', []):
+                raise HTTPException(409, '查询期间补充附件已变化，请重新提问')
+            validate_source_snapshot(d, latest, sources + candidates)
             history = load_history(d)
-            user, assistant = new_messages(body, sources)
-            messages = chat_messages(latest, history, body, sources)
+            user, assistant = new_messages(body, sources, table_lookup=table_result is not None)
+            if candidates:
+                assistant['table_candidates'] = candidates
+            if table_result is None:
+                messages = chat_messages(latest, history, body, sources)
             # UTF-8 plus JSON escaping can use six bytes per output character.
             save_history(d, history + [user, assistant], reserve=MAX_OUTPUT * 6 + 4096)
     except BaseException:
@@ -1754,14 +1928,21 @@ async def ask_paper_chat(paper_id: str, body: ChatIn):
                 if active_requests.get(key) == token:
                     active_requests.pop(key, None)
 
+    async def reply_chunks():
+        if table_result is not None:
+            yield table_answer
+        else:
+            async for piece in stream_chat(settings['base_url'], settings['api_key'], settings['model'], messages,
+                                           max_tokens=4096, timeout=CHAT_TIMEOUT, require_done=True):
+                yield piece
+
     async def events():
         try:
             yield _sse({'type': 'start', 'message': user, 'assistant': assistant})
             last_save = time.monotonic()
             saved_size = 0
             async with asyncio.timeout(CHAT_TIMEOUT):
-                async for piece in stream_chat(settings['base_url'], settings['api_key'], settings['model'], messages,
-                                               max_tokens=4096, timeout=CHAT_TIMEOUT, require_done=True):
+                async for piece in reply_chunks():
                     if not isinstance(piece, str) or not piece:
                         continue
                     accepted = piece[:max(0, MAX_OUTPUT - len(state['content']))]
@@ -1861,6 +2042,8 @@ def patch_paper(paper_id: str, body: PaperPatch):
         if body.notes_reviewed:
             meta["notes_material_revision"] = meta["material_revision"]
         if body.tags is not None:
+            if body.tags_revision is not None and body.tags_revision != meta['tags_revision']:
+                raise HTTPException(409, '标签已在另一项操作中更新，请刷新后重试')
             seen: list[str] = []
             for t in body.tags:
                 t = t.strip()[:40]
@@ -1869,6 +2052,12 @@ def patch_paper(paper_id: str, body: PaperPatch):
             if meta['tags'] != seen[:30]:
                 meta['tags_revision'] += 1
                 meta["tags"] = seen[:30]
+                if 'batch_tag_owners' in meta:
+                    remaining = {tag: owner for tag, owner in meta['batch_tag_owners'].items() if tag in meta['tags']}
+                    if remaining:
+                        meta['batch_tag_owners'] = remaining
+                    else:
+                        meta.pop('batch_tag_owners')
         for field in ("authors", "year", "journal"):
             value = getattr(body, field)
             if value is not None:
@@ -2181,11 +2370,52 @@ def _save_supplement_pdf(d, content, filename, remote=None):
         return meta
 
 
+def _store_supplement_file(d, meta, content, record):
+    digest = hashlib.sha256(content).hexdigest()
+    folder = d / 'supplement-files'
+    folder.mkdir(exist_ok=True)
+    path = folder / digest
+    if not path.is_file():
+        with tempfile.NamedTemporaryFile(dir=folder, delete=False) as output:
+            tmp = Path(output.name)
+            try:
+                output.write(content)
+                output.close()
+                tmp.replace(path)
+            finally:
+                tmp.unlink(missing_ok=True)
+    meta.setdefault('supplement_files', []).append({**record, 'size': len(content), 'sha256': digest})
+    write_meta(d, meta)
+    return meta
+
+
+def _save_local_table(d, content, filename):
+    try:
+        pmc.validate_file(filename, content)
+        supplement_tables.validate_upload(filename, content)
+    except (pmc.PMCError, supplement_tables.TableError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    with storage_lock:
+        meta = read_meta(d)
+        digest = hashlib.sha256(content).hexdigest()
+        if any(r.get('sha256') == digest and r.get('filename') == filename for r in meta.get('supplement_files', [])):
+            raise HTTPException(409, '该补充表已添加')
+        return _store_supplement_file(d, meta, content, {'id': uuid.uuid4().hex, 'filename': filename,
+                                        'mime': pmc.MIMES[Path(filename).suffix.lower()]})
+
+
 @app.post("/api/papers/{paper_id}/supplements")
 async def add_supplement(paper_id: str, file: UploadFile = File(...)):
     d = paper_dir(paper_id)
     filename = Path(file.filename or "supplement.pdf").name
-    content = await file.read()
+    if Path(filename).suffix.lower() in supplement_tables.EXTENSIONS:
+        if len(filename) > 255:
+            raise HTTPException(422, '文件名过长')
+        content = await file.read(supplement_tables.MAX_BYTES + 1)
+        if len(content) > supplement_tables.MAX_BYTES:
+            raise HTTPException(413, '补充表超过 20 MB 的查询上限')
+        return await asyncio.to_thread(_save_local_table, d, content, filename)
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
     return _save_supplement_pdf(d, content, filename)
 
 
@@ -2237,23 +2467,8 @@ async def acquire_remote_supplement(paper_id: str, key: str):
                       'source_label': row['label'], 'source_provider': 'PMC'}
             if row['mime'] == 'application/pdf':
                 return _save_supplement_pdf(d, content, row['filename'], origin)
-            digest = hashlib.sha256(content).hexdigest()
-            folder = d / 'supplement-files'
-            folder.mkdir(exist_ok=True)
-            path = folder / digest
-            if not path.is_file():
-                with tempfile.NamedTemporaryFile(dir=folder, delete=False) as output:
-                    tmp = Path(output.name)
-                    try:
-                        output.write(content)
-                        output.close()
-                        tmp.replace(path)
-                    finally:
-                        tmp.unlink(missing_ok=True)
-            rec = {**origin, 'id': key, 'filename': row['filename'], 'mime': row['mime'], 'size': len(content), 'sha256': digest}
-            fresh.setdefault('supplement_files', []).append(rec)
-            write_meta(d, fresh)
-            return fresh
+            return _store_supplement_file(d, fresh, content, {**origin, 'id': key,
+                                          'filename': row['filename'], 'mime': row['mime']})
     return await asyncio.to_thread(save)
 
 

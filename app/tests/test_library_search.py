@@ -36,6 +36,8 @@ class LibrarySearchTests(unittest.TestCase):
         self.assertEqual(result['warning_count'], 0)
         note = next(item for item in result['items'] if item['kind'] == 'notes')
         pdf = next(item for item in result['items'] if item['kind'] == 'pdf')
+        self.assertEqual(self.search(papers_only=True)['paper_ids'], [self.meta['id']])
+        self.assertEqual(self.search(scope='pdf', papers_only=True)['paper_ids'], [self.meta['id']])
         self.assertIsNone(note['page']); self.assertIsNone(note['source'])
         self.assertEqual(pdf['page'], 1)
         verified = chat_sources.verified_source(self.directory, self.meta, pdf['source'])
@@ -83,6 +85,7 @@ class LibrarySearchTests(unittest.TestCase):
         self.assertEqual([len(r['items']) for r in (first, second, third)], [20, 20, 5])
         self.assertEqual([r['has_more'] for r in (first, second, third)], [True, True, False])
         self.assertEqual(len({i['paper_id'] for r in (first, second, third) for i in r['items']}), 45)
+        self.assertEqual(len(search_library(entries, 'matching phrase', papers_only=True)['paper_ids']), 45)
 
     def test_existing_cache_reused_once_per_document(self):
         self.search()

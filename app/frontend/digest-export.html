@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-LOCAL_NONCE'; base-uri 'none'; form-action 'none'">
+<title><!--DIGEST_TITLE--></title>
+<style>
+:root{color-scheme:light;--ink:#1d3032;--muted:#4e6665;--line:#ccd8d3;--accent:#0c6454;--wash:#eff5f1}
+*{box-sizing:border-box}body{margin:0;background:#f7f8f4;color:var(--ink);font:16px/1.65 system-ui,sans-serif}
+header{background:#e3efe9;border-bottom:1px solid var(--line)}.wrap{max-width:1190px;margin:auto;padding:1.5rem clamp(1rem,4vw,3.5rem)}
+h1,h2,h3,h4,p{overflow-wrap:anywhere}h1{font:600 clamp(1.85rem,4vw,3rem)/1.2 Georgia,serif;margin:.25rem 0 .8rem}
+h2{margin:1.2rem 0 .8rem;font-size:1.35rem}h3{margin:.2rem 0 .35rem;font-size:1.05rem}h4{margin:.8rem 0 .25rem;color:var(--accent)}
+p{margin:.38rem 0}.meta,.status{color:var(--muted);font-size:.88rem}.stats{display:flex;gap:1.4rem;flex-wrap:wrap;margin:1rem 0 .25rem}.stats b{font-size:1.3rem;margin-right:.3rem}
+nav,.tools,.foot{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap}.tools{padding:.8rem 0}.tools input{flex:1;min-width:12rem}button,select,input{font:inherit;color:inherit;background:white;border:1px solid var(--line);padding:.45rem .78rem;border-radius:.45rem}button,select,summary{cursor:pointer}
+button[aria-pressed=true]{color:white;background:var(--accent);border-color:var(--accent)}button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #167eab;outline-offset:2px}
+.paper,.figure{border:1px solid var(--line);background:white;border-radius:.7rem;overflow:hidden}.paper{margin:0 0 .8rem;padding:1rem 1.2rem}.topics{color:var(--accent);font-size:.88rem}
+.takeaway{margin:.65rem 0;padding:.5rem .75rem;border-left:3px solid #44836f;background:var(--wash)}summary,a{color:var(--accent)}.module{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.modules{display:grid;grid-template-columns:1fr 1fr;gap:.3rem 1.6rem}.module-block{min-width:0;border-top:1px solid var(--line);margin:.6rem 0}.note{overflow-wrap:anywhere;max-width:84ch}.note table{display:block;overflow:auto}.note td,.note th{padding:.4rem;border:1px solid var(--line)}.note pre{white-space:pre-wrap}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,245px),1fr));gap:1rem}.figure{margin:0}.figure-body{padding:.75rem 1rem}.figure img{width:100%;height:170px;object-fit:contain;display:block}.image-button{display:block;width:100%;padding:.5rem;border:0;border-bottom:1px solid var(--line);border-radius:0}.foot{margin-top:.75rem}.foot a{font-size:.88rem}
+dialog{width:min(95vw,1150px);max-height:95vh;overflow:auto;border:1px solid var(--line);border-radius:.65rem}dialog::backdrop{background:#123c36aa}dialog img{display:block;max-width:100%;max-height:78vh;margin:auto}dialog button{float:right}
+[hidden]{display:none!important}@media(max-width:640px){.modules{display:block}.wrap{padding:1rem}}@media print{.tools,nav,dialog{display:none!important}.paper,.figure{break-inside:avoid}}
+</style></head><body>
+<!--DIGEST_BODY-->
+<dialog id="image-view"><button id="close-image" type="button">关闭</button><h2 id="image-title"></h2><img id="large-image" alt=""></dialog>
+<script nonce="LOCAL_NONCE">
+(() => {
+  const byId = id => document.getElementById(id);
+  const pages = {papers:byId('papers'),figures:byId('figures')};
+  const search = byId('search'), topic = byId('topics');
+  const cards = [...document.querySelectorAll('[data-entry]')];
+  const normalize = text => text.normalize('NFKC').toLocaleLowerCase();
+  const terms = new Map(cards.map(card => [card, normalize(card.textContent)]));
+  let current = 'papers', paperScope = '';
+  function show() {
+    const words = normalize(search.value.trim()).split(/\s+/).filter(Boolean);
+    let count = 0;
+    for (const [view, section] of Object.entries(pages)) section.hidden = view !== current;
+    for (const card of cards) {
+      const matches = (!paperScope || card.dataset.origin === paperScope) && (!topic.value || JSON.parse(card.dataset.topics).includes(topic.value)) && words.every(word => terms.get(card).includes(word));
+      card.hidden = !matches;
+      if (matches && card.dataset.entry === current) count++;
+    }
+    document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === current)));
+    byId('result-count').textContent = (paperScope ? byId('paper-' + paperScope).querySelector('h3').textContent + ' · ' : '') + (current === 'papers' ? count + ' 篇论文' : count + ' 张插图');
+  }
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-view], [data-paper-figures], [data-paper-link], .image-button');
+    if (!button) return;
+    if (button.dataset.view) { current = button.dataset.view; paperScope = ''; show(); }
+    else if (button.dataset.paperFigures) {
+      current = 'figures'; paperScope = button.dataset.paperFigures; search.value=''; topic.value=''; show();
+      byId('search').focus();
+    }
+    else if (button.dataset.paperLink) {
+      event.preventDefault(); current = 'papers'; paperScope = ''; search.value=''; topic.value=''; show();
+      const paper = byId(button.dataset.paperLink);
+      if (paper) { paper.focus(); paper.scrollIntoView({block:'start'}); }
+    } else {
+      const img = button.querySelector('img');
+      byId('large-image').src = img.src; byId('large-image').alt = img.alt;
+      byId('image-title').textContent = img.alt; byId('image-view').showModal();
+    }
+  });
+  byId('close-image').onclick = () => byId('image-view').close();
+  byId('image-view').onclose = () => byId('large-image').removeAttribute('src');
+  search.addEventListener('input', show); topic.addEventListener('change', show);
+  show();
+})();
+</script></body></html>

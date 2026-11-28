@@ -740,6 +740,19 @@ test('adding material prevents a paper switch until parsing completes', async ()
   assert.equal(h.state.documentId, C); assert.equal(h.state.materialBusy, false);
 });
 
+test('adding a supplementary spreadsheet preserves the active PDF or a table-only paper', async () => {
+  for (const active of ['main', C]) {
+    const h = harness();
+    h.state.documentId = active;
+    h.api.supplement = async () => ({id: A, supplements: active === 'main' ? [] : [{id: C, filename: 'supp.pdf'}],
+      supplement_files: [{id: B, filename: 'Table S2.xlsx'}]});
+    await h.changeSupplements([{name: 'Table S2.xlsx'}], false);
+    assert.equal(h.state.documentId, active);
+    assert.equal(h.state.current.supplement_files[0].id, B);
+    assert.match(h.$('toast').textContent, /论文问答/);
+  }
+});
+
 test('automatic illustrations do not overwrite an edit made during the request', async () => {
   const h = harness(), response = deferred();
   h.$('editor').value = 'original'; h.api.illustrate = () => response.promise;
@@ -963,6 +976,27 @@ test('chat citations load the supplementary PDF, highlight its exact block and r
   assert.equal(h.state.pdfSourceHighlight.style.left, '10%');
   assert.equal(await h.jumpChatSource({ paper_id: C, document_id: 'main', page: 1 }), false);
   assert.equal(h.state.documentId, B);
+});
+
+test('table citation uses original coordinates and requires the paper and attachment IDs', async () => {
+  const h = harness(), file = {id: C, filename: 'Table S2.xlsx'};
+  h.state.current.supplement_files = [file];
+  const source = { kind: 'table', paper_id: A, document_id: C, document_name: file.filename,
+    sheet: 'Differential', row: 17, column: 27, column_name: 'log2FC', value: '-1.25', first_column: 26,
+    rows: [{number: 16, cells: ['Gene','log2FC']}, {number: 17, cells: ['<TP53>', '-1.25']}] };
+  assert.equal(await h.jumpChatSource(source), true);
+  assert.equal(h.$('table-source-title').textContent, file.filename);
+  assert.match(h.$('table-source-location').textContent, /Differential · 第 17 行 · log2FC · AA17/);
+  const grid = h.$('table-source-grid').innerHTML;
+  assert.match(grid, /<th scope="col">Z<\/th><th scope="col">AA<\/th>/);
+  assert.match(grid, /data-source-row="17" class="table-source-hit".*&lt;TP53&gt;.*<td aria-current="true">-1.25/);
+  assert.equal(await h.jumpChatSource({...source, paper_id: B}), false);
+  assert.equal(await h.jumpChatSource({...source, document_id: B}), false);
+  assert.equal(await h.jumpChatSource({...source, row: 18}), false);
+  let saved = '';
+  h.api.patch = async (id, body) => { saved = body.notes; return {id, ...body}; };
+  await h.appendChatNote({paperId: A, message: {...answer(), sources: [{...source, id:'S1'}]}});
+  assert.match(saved, /Table S2\.xlsx · Differential · 第 17 行 · log2FC/);
 });
 
 test('a citation download that finishes after changing papers cannot highlight the new PDF', async () => {

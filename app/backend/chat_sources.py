@@ -14,6 +14,7 @@ from pypdf import PdfReader
 
 from figures import lines_from_words, paragraph_lines, reading_order
 from reading_workflow import atomic_json, source_info
+from supplement_tables import table_source_path, verified_table_source
 
 _locks = {}
 _locks_guard = threading.Lock()
@@ -250,6 +251,10 @@ def prepare_sources(directory, meta, body):
 def validate_source_snapshot(directory, meta, sources):
     checked = set()
     for source in sources:
+        if source.get('kind') == 'table':
+            # Content-addressed table files are immutable through the API.
+            table_source_path(directory, meta, source)
+            continue
         document_id = source['document_id']
         if document_id in checked:
             continue
@@ -260,6 +265,8 @@ def validate_source_snapshot(directory, meta, sources):
 
 
 def verified_source(directory, meta, source):
+    if source.get('kind') == 'table':
+        return verified_table_source(directory, meta, source)
     validate_source_snapshot(directory, meta, [source])
     blocks = load_document_pages(directory, meta, source['document_id'], [source['page']])
     block = next((b for b in blocks if b['id'] == source['block_id']), None)

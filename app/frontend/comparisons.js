@@ -32,6 +32,13 @@
     '研究对象': 'Study population', '关键对照': 'Key comparison or control',
     '资源表中的样本记录': 'Sample information from resource records', '物种': 'Organism', '组织': 'Tissue',
     '分组': 'Groups', '样本量': 'Sample size', '证据强度与适用范围': 'Strength of evidence and limits',
+    '实验组和参照组应不同。':'Use different test and reference groups.', '同列含相反的对比方向':'Opposite contrasts in this column',
+    '同列含不同的指标尺度':'Different scales in this column', '统一查看方向':'View in a common direction',
+    '仅显示原值':'Original values only', '相对于':'relative to', '统一方向值':'Value in selected direction',
+    '分组待核对':'Groups unverified', '尺度待核对':'Scale unverified', '分组与所选方向不匹配':'Groups differ from the selected contrast',
+    '此尺度只显示原值':'Original value only for this scale', '此值无法换算':'Cannot convert this value',
+    '核对分组与尺度':'Review groups and scale', '应用分组与尺度':'Apply groups and scale', '取消核对':'Cancel review',
+    '原表隐藏数值':'Value hidden in source table',
   };
   global.BioI18n?.register(words);
   const t = key => global.BioI18n?.t(key) ?? key;
@@ -170,6 +177,121 @@
     el.innerHTML = translatedOption('', '新建比较') + s.list.map(c => option(c.id, c.question)).join('');
     el.value = s.draft.revision ? s.draft.id : '';
   }
+  const scales = {unknown:'待核对', log2fc:'log2FC', fc:'FC', percentage:'百分比', other:'其他尺度'};
+  function directionLabel(test, reference) {
+    return test + ' ' + t('相对于') + ' ' + reference;
+  }
+  function columnDirections(items) {
+    const pairs = new Map(), eligible = new Map(), scalesSeen = new Set();
+    let reversed = false;
+    for (const m of items) {
+      const {test_group:test, reference_group:ref, scale} = m.contrast_definition || {};
+      if (scale && scale !== 'unknown') scalesSeen.add(scale);
+      if (!test || !ref) continue;
+      const key = JSON.stringify([test,ref]), opposite = JSON.stringify([ref,test]);
+      if (pairs.has(opposite)) reversed = true;
+      pairs.set(key,true);
+      if (scale === 'log2fc') {
+        eligible.set(key,[test,ref]); eligible.set(opposite,[ref,test]);
+      }
+    }
+    return {eligible, reversed, mixed:scalesSeen.size > 1};
+  }
+  // Negating a decimal string preserves tiny exponents and digits beyond JS number precision.
+  function directedValue(m, target) {
+    if (!target) return '';
+    const def = m.contrast_definition || {};
+    let issue;
+    if (!def.scale || def.scale === 'unknown') issue = '尺度待核对';
+    else if (def.scale !== 'log2fc') issue = '此尺度只显示原值';
+    else if (!def.test_group || !def.reference_group) issue = '分组待核对';
+    else if (!(target.includes(def.test_group) && target.includes(def.reference_group))) issue = '分组与所选方向不匹配';
+    const raw = String(m.source.value).trim().replace(/^−/, '-');
+    const number = /^([+-]?)((?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?)$/.exec(raw);
+    if (!issue && !number) issue = '此值无法换算';
+    if (issue) return '<small>' + ui(issue) + '</small>';
+    const magnitude = number[2], zero = !/[1-9]/.test(magnitude.split(/[eE]/)[0]);
+    const negative = (number[1] === '-') !== (target[0] !== def.test_group);
+    const value = (zero ? '' : negative ? '-' : '+') + magnitude;
+    return '<div class="cmp-directed">' + ui('统一方向值') + ' <b data-directed-value>' + escape(value) + '</b></div>';
+  }
+  function contrastEditor(m) {
+    const {test_group,reference_group,scale} = m.contrast_definition || {};
+    return '<div class="cmp-contrast-editor" data-edit-definition="' + escape(m.id) + '"><label>' + ui('实验组（分子）') +
+      '<input data-test-group maxlength="128" value="' + escape(test_group) + '"></label><label>' + ui('参照组（分母）') +
+      '<input data-reference-group maxlength="128" value="' + escape(reference_group) + '"></label><label>' + ui('已核对的指标尺度') +
+      '<select data-scale>' + Object.entries(scales).map(([key,label]) => translatedOption(key,label,key === (scale || 'unknown'))).join('') +
+      '</select></label><button type="button" class="btn" data-apply-definition>' + ui('应用分组与尺度') +
+      '</button><button type="button" class="btn btn-ghost" data-cancel-definition>' + ui('取消核对') + '</button></div>';
+  }
+  function measurements(s) {
+    const rows = s.draft.rows;
+    const all = rows.flatMap(row => row.table_measurements || []);
+    const columns = [...new Set(all.map(m => m.field_label))];
+    if (!columns.length) return '';
+    const directions = new Map(columns.map(label => [label,columnDirections(all.filter(m => m.field_label === label))]));
+    function heading(label) {
+      const {eligible,reversed,mixed} = directions.get(label);
+      const key = s.viewDirections?.get(label) || '';
+      return '<th scope="col">' + escape(label) +
+        (reversed ? '<small class="cmp-warning">' + ui('同列含相反的对比方向') + '</small>' : '') +
+        (mixed ? '<small class="cmp-warning">' + ui('同列含不同的指标尺度') + '</small>' : '') +
+        (eligible.size ? '<label>' + ui('统一查看方向') + '<select data-view-direction="' + escape(label) + '">' +
+          translatedOption('','仅显示原值',!eligible.has(key)) + [...eligible].map(([value,pair]) =>
+            '<option value="' + escape(value) + '"' + (value === key ? ' selected' : '') + '>' + escape(directionLabel(...pair)) + '</option>').join('') +
+          '</select></label>' : '') + '</th>';
+    }
+    const cell = (row, label) => (row.table_measurements || []).filter(m => m.field_label === label).map(m => {
+      const src = m.source;
+      const def = m.contrast_definition || {}, test = def.test_group, ref = def.reference_group;
+      const groups = test && ref ? directionLabel(test,ref) : [m.direction || test || ref,t('分组待核对')].filter(Boolean).join(' · ');
+      const scale = def.scale && def.scale !== 'unknown' ? t(scales[def.scale]) : t('尺度待核对');
+      return '<div><strong data-original-value>' + escape((src.display_value ?? src.value) || t('原表隐藏数值')) + '</strong>' +
+        '<small>' + escape([src.identifier,src.column_name,...(src.conditions || []).map(c => c.name + '=' + c.value),groups,scale].filter(Boolean).join(' · ')) + '</small>' +
+        directedValue(m, directions.get(label).eligible.get(s.viewDirections?.get(label))) +
+        '<button class="btn btn-ghost" type="button" data-measurement-source="' + escape(m.id) + '">' +
+        escape(src.document_name + ' · ' + src.sheet + ' · ') + (global.BioI18n?.t('第 {row} 行',{row:src.row}) ?? String(src.row)) + '</button>' +
+        '<button type="button" class="btn btn-ghost" data-review-definition="' + escape(m.id) + '">' + ui('核对分组与尺度') + '</button>' +
+        '<button type="button" class="btn btn-ghost" data-measurement-remove="' + escape(m.id) + '"' + field('从比较中移除此数值') + '>' + ui('移除') + '</button>' +
+        (s.editingMeasurement === m.id ? contrastEditor(m) : '') + '</div>';
+    }).join('') || '—';
+    return '<section><h4>' + ui('原表数值') + '</h4><div class="cmp-table-wrap"><table class="cmp-measurements"><thead><tr><th scope="col">' +
+      ui('论文') + '</th>' + columns.map(heading).join('') + '</tr></thead><tbody>' +
+      rows.map(row => '<tr data-measurement-paper="' + escape(row.paper_id) + '"><th scope="row">' + escape(findPaper(s,row.paper_id)?.title || row.title) +
+        '</th>' + columns.map(label => '<td>' + cell(row,label) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div></section>';
+  }
+  async function clickMeasurement(s,el) {
+    const row = findRow(s,el.closest('[data-measurement-paper]')?.dataset.measurementPaper);
+    const id = el.dataset.measurementSource || el.dataset.measurementRemove || el.dataset.reviewDefinition || el.closest('[data-edit-definition]')?.dataset.editDefinition;
+    const m = row?.table_measurements?.find(item => item.id === id);
+    if (!m) return;
+    if (el.hasAttribute('data-review-definition') || el.hasAttribute('data-cancel-definition')) {
+      s.editingMeasurement = el.dataset.reviewDefinition; render(s);
+      s.root.querySelector('[data-edit-definition] input')?.focus(); return;
+    }
+    if (el.hasAttribute('data-apply-definition')) {
+      const form = el.closest('[data-edit-definition]');
+      const test_group = form.querySelector('[data-test-group]').value.trim();
+      const reference_group = form.querySelector('[data-reference-group]').value.trim();
+      if (test_group && test_group === reference_group) { status(s,t('实验组和参照组应不同。'),true); return; }
+      m.contrast_definition = {test_group,reference_group,scale:form.querySelector('[data-scale]').value};
+      m.definitionEdited = true; s.editingMeasurement = null; dirty(s); render(s); return;
+    }
+    if (el.hasAttribute('data-measurement-remove')) {
+      row.table_measurements = row.table_measurements.filter(item => item !== m); dirty(s); render(s); return;
+    }
+    const ticket = {}, epoch = s.epoch, view = s.view;
+    s.jumpToken = ticket;
+    const current = () => s.jumpToken === ticket && isActive(s) && epoch === s.epoch && view === s.view &&
+      !s.root.closest?.('[hidden]') && row.table_measurements.includes(m);
+    try {
+      const comparison = s.draft.copyFrom || s.draft.id;
+      const result = await request(base(s) + '/' + comparison + '/table-measurements/' + row.paper_id + '/' + m.id + '/source');
+      if (!current()) return;
+      const p = findPaper(s,row.paper_id);
+      if (!p || !s.openTableSource(p,result.source)) throw new Error(t('来源不可用'));
+    } catch (err) { if (current()) status(s,err.message,true); }
+  }
   function render(s) {
     if (!isActive(s)) return;
     const rows = s.draft.rows, extra = rows.filter(r => !findPaper(s,r.paper_id)).map(r => ({id:r.paper_id, title:r.title}));
@@ -181,7 +303,7 @@
       ((s.selectionOpen ?? rows.length < 2) ? ' open' : '') + '><summary>' + ui('参与比较的论文') + ' (' + rows.length + ')</summary><div class="cmp-papers">' +
       (s.papers.length || extra.length ? [...s.papers,...extra].map(p => '<label><input type="checkbox" data-paper="' + escape(p.id) + '"' +
         (findRow(s,p.id) ? ' checked' : '') + '><span>' + escape(p.title || p.id) + '</span></label>').join('') : ui('本库没有可选的论文。')) + '</div></details>' +
-      drafts.controls(s) + '<p class="cmp-warning" data-overlap hidden></p>' +
+      measurements(s) + drafts.controls(s) + '<p class="cmp-warning" data-overlap hidden></p>' +
       (rows.length ? '<div class="cmp-table-wrap"><table class="cmp-table"><thead><tr><th>' + ui('论文与数据编号') + '</th><th>' + ui('研究对象') + ' / ' + ui('关键对照') + '</th><th>' + ui('原文与图表依据') +
         '</th><th>' + ui('此论文对问题的证据') + '</th></tr></thead><tbody>' + rows.map(r => rowHTML(s,r)).join('') + '</tbody></table></div>' :
         '<p class="hint">' + ui('选择至少两篇论文') + '</p>') +
@@ -200,7 +322,8 @@
     try {
       const next = id ? await request(base(s) + '/' + id) : fresh();
       if (ticket !== s.view) return;
-      drafts.clearPreview(s); s.draft = next; s.selectionOpen = null; s.dirty = false; s.conflict = false; s.busy = false; render(s);
+      drafts.clearPreview(s); s.draft = next; s.selectionOpen = null; s.viewDirections = new Map(); s.editingMeasurement = null;
+      s.dirty = false; s.conflict = false; s.busy = false; render(s);
       await Promise.all(next.rows.map(r => loadMaterial(s,r.paper_id)));
     } catch (err) { if (ticket === s.view) { s.busy = false; render(s); status(s, err.message, true); } }
   }
@@ -218,10 +341,14 @@
     const d = s.draft;
     if (d.rows.some(r => r.cells?.some(cell => !cell.value.trim()))) { status(s,t('采纳的字段值不能为空。'),true); return; }
     // Keep the same ID on network retry so a successful write cannot create a duplicate.
-    if (asNew) { d.id = uid(); d.revision = 0; s.conflict = false; }
-    const body = {revision:d.revision, question:d.question, synthesis:d.synthesis,
+    if (asNew && d.revision > 0) {
+      if (d.rows.some(r => r.table_measurements?.length)) d.copyFrom = d.id;
+      d.id = uid(); d.revision = 0; s.conflict = false;
+    }
+    const body = {revision:d.revision, question:d.question, synthesis:d.synthesis, ...(d.copyFrom ? {copy_measurements_from:d.copyFrom} : {}),
       ...(d.columns || d.rows.some(r => r.cells?.length) ? {columns:drafts.selected(s)} : {}), rows:d.rows.map(r => ({
-      paper_id:r.paper_id, population:r.population || '', contrast:r.contrast || '',
+      paper_id:r.paper_id, ...(r.table_measurements ? {table_measurement_refs:r.table_measurements.map(({id,snapshot,definitionEdited,contrast_definition}) =>
+        ({id,snapshot,...(definitionEdited ? {contrast_definition} : {})}))} : {}), population:r.population || '', contrast:r.contrast || '',
       relation:r.relation, note:r.note, cells:(r.cells || []).map(({cohort,column,value,source_key}) => ({cohort,column,value,source_key})), references:r.sources.map(src => src.key)
     }))};
     s.busy = true; render(s);
@@ -253,6 +380,9 @@
     const el = e.target;
     if (el.hasAttribute('data-comparisons')) return choose(s, el.value);
     if (locked(s)) return;
+    if (el.hasAttribute('data-view-direction')) {
+      (s.viewDirections ||= new Map()).set(el.dataset.viewDirection,el.value); render(s); return;
+    }
     if (el.hasAttribute('data-draft-column')) return drafts.toggle(s,el);
     if (!el.hasAttribute('data-paper')) return;
     s.selectionOpen = !!el.closest('details')?.open;
@@ -261,7 +391,8 @@
       const paper = findPaper(s,id); if (!paper) return;
       s.draft.rows.push(newRow(paper));
     } else if (!el.checked && old) {
-      if ((old.note.trim() || old.population?.trim() || old.contrast?.trim() || old.relation !== 'unassessed' || old.sources.length || old.cells?.length) &&
+      if (old.table_measurements?.length && !global.confirm(t('移除论文及其补充表数值？'))) { el.checked = true; return; }
+      if (!old.table_measurements?.length && (old.note.trim() || old.population?.trim() || old.contrast?.trim() || old.relation !== 'unassessed' || old.sources.length || old.cells?.length) &&
           !global.confirm(t('该论文有未保留到其他位置的判断和依据，确定从本次比较移除吗？'))) { el.checked = true; return; }
       s.draft.rows = s.draft.rows.filter(r => r.paper_id !== id);
     }
@@ -270,6 +401,7 @@
   }
   async function click(s,e) {
     const el = e.target.closest('button'); if (!el || locked(s)) return;
+    if (['data-measurement-source','data-measurement-remove','data-review-definition','data-apply-definition','data-cancel-definition'].some(attr => el.hasAttribute(attr))) return clickMeasurement(s,el);
     if (el.hasAttribute('data-build-draft')) return drafts.build(s);
     if (el.hasAttribute('data-pdf-draft')) return drafts.build(s,true);
     if (el.hasAttribute('data-fold-paper')) return drafts.fold(s,el.dataset.foldPaper);
@@ -313,13 +445,13 @@
       await loadMaterial(s,id); status(s,err.message,true);
     }
   }
-  async function open(root, {libraryId,papers,openSource}) {
+  async function open(root, {libraryId,papers,openSource,openTableSource}) {
     let s = states.get(libraryId);
     if (!s) {
       s = {libraryId, draft:fresh(), list:[], materials:new Map(), errors:new Map(), loads:new Map(), epoch:0, view:0};
       states.set(libraryId,s);
     }
-    active = s; Object.assign(s,{root,papers:papers.filter(p => !p.schema_incompatible),openSource});
+    active = s; Object.assign(s,{root,papers:papers.filter(p => !p.schema_incompatible),openSource,openTableSource});
     if (!s.edits) drafts.clearPreview(s);
     ++s.epoch; s.materials.clear(); s.errors.clear();
     root.dataset.comparisonScope = libraryId;
@@ -346,5 +478,21 @@
     row.sources.push(src);
     s.materials.set(id,material); s.errors.delete(id); dirty(s); render(s);
   }
-  global.BioCompare = {open,evidenceTarget,attachEvidence, canLeave:() => !active || !locked(active), hasUnsaved:(id) => [...states.values()].some(s => (!id || s.libraryId === id) && (s.dirty || s.busy))};
+  function canAttachTable(scope,id) {
+    const s = states.get(scope);
+    return !s || (!locked(s) && (!s.dirty || s.draft.id !== id));
+  }
+  function receivedTable(scope,record) {
+    const s = states.get(scope);
+    if (!s) return;
+    s.list = [record,...s.list.filter(c => c.id !== record.id)];
+    if (s.draft.id === record.id && !s.dirty && !locked(s)) { s.draft = record; render(s); }
+    else if (isActive(s)) versions(s);
+  }
+  function selectedId(scope) {
+    const s = states.get(scope);
+    return s?.draft.revision ? s.draft.id : s?.dirty ? 'unsaved' : null;
+  }
+  const chooseSaved = (scope,id) => states.has(scope) && choose(states.get(scope),id);
+  global.BioCompare = {open,evidenceTarget,attachEvidence,canAttachTable,receivedTable,chooseSaved,selectedId, canLeave:() => !active || !locked(active), hasUnsaved:(id) => [...states.values()].some(s => (!id || s.libraryId === id) && (s.dirty || s.busy))};
 })(window);

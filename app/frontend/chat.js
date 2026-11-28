@@ -45,6 +45,11 @@
   }
   function contextFor(state) { return state.pinned || state.live; }
   function validContext(ctx) { return ctx && (ctx.document_id === 'main' || PAPER_ID.test(ctx.document_id || '')) && Number.isInteger(ctx.page) && ctx.page >= 1; }
+  function hasTables(paper) { return (paper.supplement_files || []).some(file => /\.(xlsx|csv|tsv)$/i.test(file.filename)); }
+  function tableLocation(source, html = false) {
+    const text = html ? esc : String, label = html ? ui : t;
+    return [source.sheet && text(source.sheet), label('第 {row} 行', { row: source.row }), source.column_name && text(source.column_name)].filter(Boolean).join(' · ');
+  }
   function sourceMap(message) { return new Map((Array.isArray(message.sources) ? message.sources : []).filter(s => SOURCE_ID.test(s.id || '')).map(s => [s.id, s])); }
   function sourceButton(message, source, label, labelHTML) {
     if (!MESSAGE_ID.test(message.id || '')) return esc(label);
@@ -66,7 +71,13 @@
     if (previous && previous.content === message.content && previous.sources === message.sources && previous.locale === window.BioI18n?.getLocale()) return previous.html;
     function prose(text, citations) {
       const safe = esc(markdownText(text));
-      return citations ? safe.replace(/\[(S[1-9][0-9]*)\]/g, (label, id) => sources.has(id) ? sourceButton(message, sources.get(id), label) : label) : safe;
+      if (!citations) return safe;
+      return safe.replace(/\[(S[1-9][0-9]*)\]/g, (label, id) => {
+        const source = sources.get(id);
+        if (!source) return label;
+        const location = source.kind === 'table' ? documentLabel(source) + ' · ' + tableLocation(source, true) : undefined;
+        return sourceButton(message, source, label, location);
+      });
     }
     function render(tokens, citations = true, depth = 0) {
       return (tokens || []).map(token => {
@@ -117,13 +128,18 @@
   }
   function answerText(message) {
     const sources = [...sourceMap(message).values()];
-    return String(message.content || '') + (sources.length ? '\n\n原文来源\n' + sources.map(source => '[' + source.id + '] ' + (source.document_name || '原文') + ' · PDF 第 ' + source.page + ' 页\n' + String(source.quote || '')).join('\n\n') : '');
+    return String(message.content || '') + (sources.length ? '\n\n原文来源\n' + sources.map(source => {
+      const position = source.kind === 'table' ? tableLocation(source) : 'PDF 第 ' + source.page + ' 页';
+      return '[' + source.id + '] ' + (source.document_name || '原文') + ' · ' + position + '\n' + String(source.quote || source.value || '');
+    }).join('\n\n') : '');
   }
   function messageActions(message) {
     if (message.role !== 'assistant' || message.status !== 'completed' || !String(message.content || '').trim() || !MESSAGE_ID.test(message.id || '')) return '';
     const busy = active?.stream || active?.loading || active?.loadingEarlier;
     const id = esc(message.id), appended = active?.appended?.has(message.id), appending = active?.appending?.has(message.id);
     return '<div class="chat-message-actions">' +
+      (hooks.compareTable ? [...sourceMap(message).values()].filter(src => src.kind === 'table').map(src =>
+        '<button class="btn" type="button" data-chat-action="compare-table" data-chat-message="' + id + '" data-chat-source="' + esc(src.id) + '"' + (busy ? ' disabled' : '') + '>' + ui('加入比较') + '</button>').join('') : '') +
       (hooks.copyText ? '<button class="btn btn-ghost" type="button" data-chat-action="copy" data-chat-message="' + id + '"' + (busy || active?.copying?.has(message.id) ? ' disabled' : '') + '>' + ui('复制回答与来源') + '</button>' : '') +
       (hooks.appendNote ? '<button class="btn btn-ghost" type="button" data-chat-action="append" data-chat-message="' + id + '"' + (busy || appended || appending ? ' disabled' : '') + '>' + ui(appended ? '已追加到笔记' : appending ? '正在保存…' : '追加到笔记') + '</button>' : '') + '</div>';
   }
@@ -170,26 +186,47 @@
       if (active === state && state.version === version) { updateHistory(); updateStatus(); }
     }
   }
+  function candidateButtons(message) {
+    if (message.status !== 'completed' || !message.table_candidates?.length) return '';
+    return '<div class="chat-table-choices" role="group"' + attr('aria-label', '选择原表行') + '>' +
+      message.table_candidates.map((s, i) => {
+        let column = '', number = s.column;
+        while (Number.isSafeInteger(number) && number > 0) {
+          number--;
+          column = String.fromCharCode(65 + number % 26) + column;
+          number = Math.floor(number / 26);
+        }
+        const context = (s.conditions || []).map(c => c.name + '=' + c.value);
+        const text = [s.document_name, s.sheet + '!' + column + s.row, s.identifier, s.column_name, ...context].join(' · ');
+        return '<button type="button" class="btn" data-chat-action="choose-table" data-chat-message="' + esc(message.id) +
+          '" data-chat-choice="' + (i + 1) + '"' + (active?.choosingCell === message.id ? ' disabled' : '') + '>' + esc(text) + '</button>';
+      }).join('') + '</div>';
+  }
   function messageHTML(message) {
     const user = message.role === 'user', sources = sourceMap(message);
     const content = user ? esc(message.content) : answerHTML(message, sources);
     const status = { pending: active?.stream?.assistantId === message.id ? '正在回答…' : '上一轮回复仍在结束或保存，可刷新对话查看状态。', interrupted: '回复已中断，已收到的内容保留。', error: '本次回复未完成，已收到的内容保留。' }[message.status] || '';
     const questionDocument = message.document_name || (message.document_id === 'main' ? '正文' : active?.paper.supplements?.find(d => d.id === message.document_id)?.filename || '');
     return '<article class="chat-message chat-message-' + (user ? 'user' : 'assistant') + '" data-chat-message-id="' + esc(message.id) + '"><div class="chat-role">' + ui(user ? '你' : '阅读助手') + '</div><div class="chat-content' + (!user && message.status === 'completed' && window.marked?.lexer ? ' chat-markdown' : '') + '">' + content + '</div>' +
-      (user && message.selection ? '<details class="chat-sources chat-selected-question"><summary>' + ui('当时选中的原文') + ' · ' + documentLabel({ ...message, document_name: questionDocument }) + ' · ' + ui('第 {page} 页', { page: message.page }) + '</summary><blockquote>' + esc(message.selection) + '</blockquote></details>' : '') +
+      (user && message.context_kind !== 'table' && message.selection ? '<details class="chat-sources chat-selected-question"><summary>' + ui('当时选中的原文') + ' · ' + documentLabel({ ...message, document_name: questionDocument }) + ' · ' + ui('第 {page} 页', { page: message.page }) + '</summary><blockquote>' + esc(message.selection) + '</blockquote></details>' : '') +
       (!user && status ? '<p class="chat-message-status">' + ui(status) + '</p>' : '') +
-      (!user && sources.size ? '<details class="chat-sources"><summary>' + ui('原文来源 · {count}', { count: sources.size }) + '</summary>' + [...sources.values()].map(s => '<div>' + sourceButton(message, s, '', documentLabel(s, '原文') + ' · ' + ui('第 {page} 页', { page: s.page }) + ' · [' + esc(s.id) + ']') + '<blockquote>' + esc(s.quote) + '</blockquote></div>').join('') + '</details>' : '') + messageActions(message) + '</article>';
+      (!user && sources.size ? '<details class="chat-sources"><summary>' + ui('原文来源 · {count}', { count: sources.size }) + '</summary>' + [...sources.values()].map(s => {
+        const position = s.kind === 'table' ? tableLocation(s, true) : ui('第 {page} 页', { page: s.page });
+        return '<div>' + sourceButton(message, s, '', documentLabel(s, '原文') + ' · ' + position + ' · [' + esc(s.id) + ']') + '<blockquote>' + esc(s.quote || s.value) + '</blockquote></div>';
+      }).join('') + '</details>' : '') + candidateButtons(message) + messageActions(message) + '</article>';
   }
   function updateContext() {
     const target = panel?.querySelector('#chat-context');
     if (!target || !active) return;
     const ctx = contextFor(active), valid = validContext(ctx);
-    target.innerHTML = '<span class="chat-context-chip">' + (valid ? documentLabel(ctx) + ' · ' + ui('PDF 第 {page} 页', { page: ctx.page }) : ui('请选择可阅读的 PDF')) + '</span>' +
+    const tables = hasTables(active.paper);
+    target.innerHTML = (valid || !tables ? '<span class="chat-context-chip">' + (valid ? documentLabel(ctx) + ' · ' + ui('PDF 第 {page} 页', { page: ctx.page }) : ui('请选择可阅读的 PDF')) + '</span>' : '') +
+      (tables ? '<span class="chat-context-chip">' + ui('本篇补充表可查数值') + '</span>' : '') +
       (ctx?.selection ? '<div class="chat-selection"><span title="' + esc(ctx.selection) + '">' + ui('选区：') + esc(ctx.selection.slice(0, 180)) + (ctx.selection.length > 180 ? '…' : '') + '</span><button type="button" class="btn btn-ghost" data-chat-action="clear-selection">' + ui('取消选区') + '</button></div>' : '') +
       (active.contextRequired ? '<div class="chat-context-pinned">' + ui('请重新确认提问位置') + '<button type="button" class="btn" data-chat-action="use-current-context"' + (!valid ? ' disabled' : '') + '>' + ui('使用当前页') + '</button></div>' : '') +
       (active.pinned && !ctx?.selection ? '<div class="chat-context-pinned">' + ui('提问位置已固定') + '<button type="button" class="btn btn-ghost" data-chat-action="clear-selection">' + ui('跟随当前页') + '</button></div>' : '') +
       (ctx?.selection ? '<div class="chat-quick"><button type="button" class="btn" data-chat-action="explain"' + (active.stream || active.loading ? ' disabled' : '') + '>' + ui('解释选区') + '</button><button type="button" class="btn" data-chat-action="translate"' + (active.stream || active.loading ? ' disabled' : '') + '>' + ui('翻译选区') + '</button></div>' : '') +
-      '<div class="chat-quick chat-reading-prompts" ' + attr('aria-label', '快捷提问') + '>' + [['quick-page', ctx?.selection ? '解释选区内容' : '解释本页'], ['quick-methods', ctx?.selection ? '梳理选区方法' : '梳理本页方法'], ['quick-limits', ctx?.selection ? '检查选区局限' : '检查本页局限']].filter(([action]) => !ctx?.selection || action !== 'quick-page').map(([action, label]) => '<button class="btn" type="button" data-chat-action="' + action + '"' + (!valid || active.stream || active.loading ? ' disabled' : '') + '>' + ui(label) + '</button>').join('') + '</div>';
+      (!valid && tables ? '' : '<div class="chat-quick chat-reading-prompts" ' + attr('aria-label', '快捷提问') + '>' + [['quick-page', ctx?.selection ? '解释选区内容' : '解释本页'], ['quick-methods', ctx?.selection ? '梳理选区方法' : '梳理本页方法'], ['quick-limits', ctx?.selection ? '检查选区局限' : '检查本页局限']].filter(([action]) => !ctx?.selection || action !== 'quick-page').map(([action, label]) => '<button class="btn" type="button" data-chat-action="' + action + '"' + (!valid || active.stream || active.loading ? ' disabled' : '') + '>' + ui(label) + '</button>').join('') + '</div>');
   }
   function updateStatus() {
     if (!active || !panel) return;
@@ -197,7 +234,7 @@
     if (box) box.innerHTML = (state.error ? '<p class="chat-error" role="alert">' + esc(statusText(state.error)) + '</p>' : '') + (state.notice ? '<p class="chat-notice" role="status">' + esc(statusText(state.notice)) + '</p>' : '') +
       (state.stream ? '<div class="chat-stream-status" role="status">' + ui('正在回答，收到内容后会即时显示。') + '<button class="btn" type="button" data-chat-action="stop">' + ui('停止') + '</button></div>' : state.error && state.lastAttempt ? '<button type="button" class="btn" data-chat-action="retry">' + ui('重试上一问题') + '</button>' : '');
     const send = panel.querySelector('#chat-send');
-    if (send) send.disabled = !!state.stream || state.loading || state.contextRequired || !validContext(contextFor(state)) || !state.draft.trim();
+    if (send) send.disabled = !!state.stream || state.loading || state.contextRequired || !(validContext(contextFor(state)) || hasTables(state.paper)) || !state.draft.trim();
     updateContext();
   }
   function updateHistory(prepend = false) {
@@ -206,14 +243,14 @@
     const bottom = box.scrollHeight - box.scrollTop - box.clientHeight < 70, before = box.scrollHeight, top = box.scrollTop;
     const state = active;
     box.innerHTML = (state.hasMore ? '<button type="button" class="btn chat-earlier" data-chat-action="earlier"' + (state.loadingEarlier || state.stream ? ' disabled' : '') + '>' + ui(state.loadingEarlier ? '正在读取…' : '加载更早对话') + '</button>' : '') +
-      (state.loading ? '<p class="chat-empty" role="status">' + ui('正在恢复对话…') + '</p>' : state.messages.length ? state.messages.map(messageHTML).join('') : '<p class="chat-empty">' + ui('可直接提问，或在 PDF 中选中文字后解释、翻译。问答单独保存，不会覆盖精读笔记。') + '</p>');
+      (state.loading ? '<p class="chat-empty" role="status">' + ui('正在恢复对话…') + '</p>' : state.messages.length ? state.messages.map(messageHTML).join('') : '<p class="chat-empty">' + ui(hasTables(state.paper) ? '输入行和列的名称，例如“TP53 的 log2FC 是多少？”。点击回答中的来源可核对原表。' : '可直接提问，或在 PDF 中选中文字后解释、翻译。问答单独保存，不会覆盖精读笔记。') + '</p>');
     if (prepend) box.scrollTop = top + box.scrollHeight - before;
     else if (bottom || state.followBottom) { box.scrollTop = box.scrollHeight; state.followBottom = false; }
   }
   function render() {
     if (!panel) return;
     if (!active) { panel.innerHTML = '<p class="chat-empty">' + ui('打开一篇论文后开始问答。') + '</p>'; return; }
-    panel.innerHTML = '<div class="chat-heading"><strong>' + ui('论文问答') + '</strong><button class="btn btn-ghost" type="button" data-chat-action="reload"' + (active.loading || active.stream ? ' disabled' : '') + '>' + ui('刷新对话') + '</button></div><div id="chat-context" class="chat-context"></div><div id="chat-history" class="chat-history" tabindex="0" ' + attr('aria-label', '论文问答历史') + '></div><div id="chat-feedback" class="chat-feedback"></div><form id="chat-form" class="chat-composer"><label for="chat-input">' + ui('关于当前论文的问题') + '</label><textarea id="chat-input" maxlength="6000" rows="3" ' + attr('placeholder', '例如：这项实验用了什么样品？') + (active.loading ? ' disabled' : '') + '>' + esc(active.draft) + '</textarea><div><span class="hint">' + ui('⌘ / Ctrl + Enter 发送') + '</span><button class="btn btn-primary" id="chat-send" type="submit">' + ui('发送') + '</button></div></form>';
+    panel.innerHTML = '<div class="chat-heading"><strong>' + ui('论文问答') + '</strong><button class="btn btn-ghost" type="button" data-chat-action="reload"' + (active.loading || active.stream ? ' disabled' : '') + '>' + ui('刷新对话') + '</button></div><div id="chat-context" class="chat-context"></div><div id="chat-history" class="chat-history" tabindex="0" ' + attr('aria-label', '论文问答历史') + '></div><div id="chat-feedback" class="chat-feedback"></div><form id="chat-form" class="chat-composer"><label for="chat-input">' + ui('关于当前论文的问题') + '</label><textarea id="chat-input" maxlength="6000" rows="3" ' + attr('placeholder', hasTables(active.paper) ? '例如：TP53 的 log2FC 是多少？' : '例如：这项实验用了什么样品？') + (active.loading ? ' disabled' : '') + '>' + esc(active.draft) + '</textarea><div><span class="hint">' + ui('⌘ / Ctrl + Enter 发送') + '</span><button class="btn btn-primary" id="chat-send" type="submit">' + ui('发送') + '</button></div></form>';
     updateHistory(); updateStatus();
   }
   function upsert(state, message) {
@@ -250,7 +287,7 @@
     const assistant = state.messages.find(m => m.id === running.assistantId);
     if (assistant?.status === 'pending') assistant.status = 'interrupted';
     if (!running.assistantId && running.sentDraft && !state.draft) {
-      state.draft = running.body.message; state.pinned = { ...running.context }; saveDraft(state);
+      state.draft = running.body.message; state.pinned = running.context; saveDraft(state);
       if (active === state) { const input = panel.querySelector('#chat-input'); if (input) input.value = state.draft; }
     }
     state.notice = message;
@@ -294,11 +331,11 @@
     if (!state || state.stream || state.loading || state.error?.startsWith('对话读取失败')) return;
     const ctx = contextFor(state);
     if (state.contextRequired && !retryBody) { state.notice = '请先重新确认提问位置，再发送保留的问题。'; updateStatus(); return; }
-    if (!validContext(ctx) && !retryBody) { hooks.toast?.(t('请先打开有效的 PDF 页。'), 'error'); return; }
+    if (!validContext(ctx) && !retryBody && !(action === 'ask' && hasTables(state.paper))) { hooks.toast?.(t('请先打开有效的 PDF 页。'), 'error'); return; }
     const message = action === 'explain' ? '请解释这段选中的原文。' : action === 'translate' ? '请将这段选中的原文翻译成中文，并保留专业术语。' : state.draft.trim();
-    const body = retryBody || { message, document_id: ctx.document_id, page: ctx.page, selection: ctx.selection || '', action };
+    const body = retryBody || { message, ...(validContext(ctx) ? { document_id: ctx.document_id, page: ctx.page } : {}), selection: ctx?.selection || '', action };
     if (!body.message.trim()) return;
-    const running = { context: { ...ctx }, controller: new AbortController(), assistantId: null, terminal: false, body, sentDraft: !retryBody && action === 'ask' };
+    const running = { context: validContext(ctx) ? { ...ctx } : null, controller: new AbortController(), assistantId: null, terminal: false, body, sentDraft: !retryBody && action === 'ask' };
     state.stream = running; state.error = ''; state.notice = ''; state.lastAttempt = body; state.followBottom = true;
     if (action === 'ask' && (!retryBody || state.draft.trim() === body.message)) { state.draft = ''; saveDraft(state); const input = panel.querySelector('#chat-input'); if (input) input.value = ''; }
     if (state.pinned && !state.pinned.selection) state.pinned = null;
@@ -331,7 +368,7 @@
         state.error = err.message || String(err);
         const assistant = state.messages.find(m => m.id === running.assistantId);
         if (assistant?.status === 'pending') assistant.status = 'interrupted';
-        if (!running.assistantId && !state.draft && action === 'ask') { state.draft = body.message; state.pinned = { ...ctx }; saveDraft(state); const input = panel.querySelector('#chat-input'); if (input) input.value = state.draft; }
+        if (!running.assistantId && !state.draft && action === 'ask') { state.draft = body.message; state.pinned = running.context; saveDraft(state); const input = panel.querySelector('#chat-input'); if (input) input.value = state.draft; }
       }
     } finally {
       if (state.stream === running) { state.stream = null; if (active === state) { updateHistory(); updateStatus(); } }
@@ -343,6 +380,32 @@
     const state = active, action = button.dataset.chatAction;
     if (['quick-page', 'quick-methods', 'quick-limits'].includes(action)) { prepareQuestion(action); return; }
     if (action === 'copy' || action === 'append') { await useAnswer(action, button.dataset.chatMessage); return; }
+    if (action === 'choose-table') {
+      const id = button.dataset.chatMessage, choice = Number(button.dataset.chatChoice), version = state.version;
+      const message = state.messages.find(m => m.id === id);
+      if (state.choosingCell || !Number.isSafeInteger(choice) || !message?.table_candidates?.[choice - 1]) return;
+      state.choosingCell = id; state.error = ''; updateHistory();
+      try {
+        const result = await hooks.request('POST', path(state.paper.id) + '/' + encodeURIComponent(id) + '/table-candidates/' + choice);
+        if (active === state && state.version === version) {
+          upsert(state, result.message);
+          updateHistory();
+          await hooks.jump(result.source);
+        }
+      } catch (err) {
+        if (active === state && state.version === version) state.error = String(err.message || err);
+      } finally {
+        state.choosingCell = null;
+        if (active === state && state.version === version) { updateHistory(); updateStatus(); }
+      }
+      return;
+    }
+    if (action === 'compare-table') {
+      const message = state.messages.find(m => m.id === button.dataset.chatMessage && m.status === 'completed');
+      const source = message && sourceMap(message).get(button.dataset.chatSource);
+      if (source?.kind === 'table') await hooks.compareTable?.(state.paper, message.id, source);
+      return;
+    }
     if (action === 'stop') { stop(); return; }
     if (action === 'reload') { await load(state); return; }
     if (action === 'earlier') { await load(state, true); return; }
@@ -359,7 +422,7 @@
       try {
         const result = await hooks.request('GET', path(state.paper.id) + '/sources/' + encodeURIComponent(message.id) + '/' + source.id);
         if (!result.source) throw new Error('来源信息不完整，请刷新对话后重试。');
-        if (active === state && state.version === version && state.sourceVersion === sourceVersion && await hooks.jump(result.source) === false) throw new Error('来源文件或页码已不可用，请重新打开论文。');
+        if (active === state && state.version === version && state.sourceVersion === sourceVersion && await hooks.jump(result.source) === false) throw new Error(result.source.kind === 'table' ? '补充表来源已失效，请重新查询。' : '来源文件或页码已不可用，请重新打开论文。');
       } catch (err) { if (active === state && state.version === version && state.sourceVersion === sourceVersion) { state.error = '无法定位原文：' + err.message; updateStatus(); } }
       finally { button.disabled = false; }
     }

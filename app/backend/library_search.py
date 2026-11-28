@@ -33,7 +33,7 @@ def _snippet(text, query):
     return ('…' if start else '') + text[start:end] + ('…' if end < len(text) else '')
 
 
-def search_library(entries, query, scope='all', offset=0, limit=20):
+def search_library(entries, query, scope='all', offset=0, limit=20, papers_only=False):
     """Search immutable metadata snapshots; each PDF is checked against its bytes.
 
     entries contains (paper_directory, metadata). PDF text caches are reused or
@@ -52,6 +52,8 @@ def search_library(entries, query, scope='all', offset=0, limit=20):
         raise HTTPException(422, '无效的搜索页码')
     items, warnings, matched, warning_count = [], [], 0, 0
 
+    paper_ids = []
+
     def warn(meta, document_id, message):
         nonlocal warning_count
         warning_count += 1
@@ -67,6 +69,8 @@ def search_library(entries, query, scope='all', offset=0, limit=20):
         return len(items) > limit
 
     def response():
+        if papers_only:
+            return {'paper_ids': paper_ids, 'warning_count': warning_count, 'warnings': warnings}
         more = len(items) > limit
         return {'items': items[:limit], 'has_more': more, 'offset': offset,
                 'next_offset': offset + len(items[:limit]), 'warnings': warnings,
@@ -77,6 +81,9 @@ def search_library(entries, query, scope='all', offset=0, limit=20):
         if scope in ('all', 'notes'):
             notes = meta.get('notes') or ''
             if isinstance(notes, str) and needle in _normalized(notes):
+                if papers_only:
+                    paper_ids.append(meta['id'])
+                    continue
                 if add({**common, 'kind': 'notes', 'document_id': None, 'source_name': '已保存笔记',
                         'page': None, 'snippet': _snippet(notes, needle), 'source_revision': None,
                         'block_id': None, 'source': None,
@@ -86,6 +93,8 @@ def search_library(entries, query, scope='all', offset=0, limit=20):
             continue
         documents = (['main'] if meta.get('has_file') else []) + [s['id'] for s in meta.get('supplements', [])]
         for document_id in documents:
+            if papers_only and paper_ids and paper_ids[-1] == meta['id']:
+                break
             try:
                 path, count, name = document_source(directory, meta, document_id)
                 if not 1 <= count <= 600:
@@ -120,6 +129,9 @@ def search_library(entries, query, scope='all', offset=0, limit=20):
                             if position < consumed:
                                 hits.append((block, joined))
                                 break
+                if hits and papers_only:
+                    paper_ids.append(meta['id'])
+                    break
                 for block, snippet_text in hits:
                     source = {'document_id': document_id, 'document_name': name, 'page': block['page'],
                               'source_revision': block['source_revision'], 'block_id': block['id'],

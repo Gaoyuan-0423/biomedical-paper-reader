@@ -1,9 +1,9 @@
 # The Python runtime and parsing libraries ship beside the MyGo executable.
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
 pdf_data, pdf_binaries, pdf_imports = collect_all('pypdfium2')
 a = Analysis(['service.py'], pathex=['backend'], binaries=pdf_binaries,
-             datas=[('frontend', 'frontend')] + pdf_data,
+             datas=[('frontend', 'frontend')] + pdf_data + copy_metadata('xlfmt'),
              hiddenimports=collect_submodules('uvicorn') + pdf_imports,
              # python-pptx resolves presenter-note XML through oxml/../templates.
              # Keep the actual package directory available to the filesystem lookup.

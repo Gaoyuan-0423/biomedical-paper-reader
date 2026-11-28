@@ -8,6 +8,7 @@
     '没有找到支持的公开附件。': 'No supported public supplementary files were found.',
     '正在查找 PMC 附件…': 'Finding supplementary files in PMC…', '需要 DOI、PMID 或 PMCID 才能在线查找。': 'Online search requires a DOI, PMID or PMCID.',
     '打开补充 PDF': 'Open supplementary PDF', '导出附件': 'Save file as', '获取中…': 'Downloading…',
+    '在论文问答中查表': 'Look up values in Paper chat',
     '附件已保存': 'File saved', '请先完成当前材料操作。': 'Finish the current document operation first.',
     '下载遇到问题': 'Download problem', '来源': 'Source', 'PMC 附件已变化，请重新查找': 'The PMC file changed. Search again.',
     '补充材料清单已过期，请重新查找': 'This file list has expired. Search again.',
@@ -62,6 +63,13 @@
         } catch (err) { hooks.toast(tr(err.message), 'error'); }
       });
       open.disabled = pending; row.append(open); root.append(row);
+    }
+    if ((paper.supplement_files || []).some(file => /\.(xlsx|csv|tsv)$/i.test(file.filename))) {
+      const ask = button('在论文问答中查表', () => {
+        const id = paper.id;
+        if (close()) hooks.chat(id);
+      });
+      ask.disabled = pending; root.append(ask);
     }
     const search = button('查找公开补充材料', discover);
     search.disabled = pending || ![paper.doi, paper.pmid, paper.pmcid].some(Boolean); root.append(search);

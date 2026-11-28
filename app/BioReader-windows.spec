@@ -1,6 +1,6 @@
 # Build on Windows x64. The one-directory bundle keeps all runtime DLLs together.
 import sys
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
 if sys.platform != 'win32':
     raise SystemExit('Build BioReader-windows.spec on Windows.')
@@ -8,7 +8,7 @@ if sys.platform != 'win32':
 pdf_data, pdf_binaries, pdf_imports = collect_all('pypdfium2')
 a = Analysis(
     ['desktop.py'], pathex=['backend'],
-    binaries=pdf_binaries, datas=[('frontend', 'frontend')] + pdf_data,
+    binaries=pdf_binaries, datas=[('frontend', 'frontend')] + pdf_data + copy_metadata('xlfmt'),
     hiddenimports=collect_submodules('uvicorn') + pdf_imports + [
         'webview.platforms.winforms', 'webview.platforms.edgechromium', 'clr',
     ],

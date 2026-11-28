@@ -306,8 +306,15 @@
         // Keep Markdown headings/lists/tables, but do not transfer model HTML,
         // images or executable links into the note preview/export pipeline.
         const safe = value => String(value || '').replace(/\\/g, '\\\\').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-        const sources = (message.sources || []).filter(s => /^S[1-9][0-9]*$/.test(s.id || '') && Number.isInteger(s.page) && s.page > 0);
-        const appendix = sources.map(s => '- ' + safe(s.id + ' · ' + (s.document_name || (s.document_id === 'main' ? '正文' : '补充材料')) + ' · PDF 第 ' + s.page + ' 页').replace(/\n/g, ' ') + '\n\n' + String(s.quote || '').split('\n').map(line => '> ' + safe(line)).join('\n')).join('\n\n');
+        const sources = (message.sources || []).filter(s => {
+          const position = s.kind === 'table' ? s.row : s.page;
+          return /^S[1-9][0-9]*$/.test(s.id || '') && Number.isInteger(position) && position > 0;
+        });
+        const appendix = sources.map(s => {
+          const location = s.kind === 'table' ? [s.sheet, '第 ' + s.row + ' 行', s.column_name].filter(Boolean).join(' · ') : 'PDF 第 ' + s.page + ' 页';
+          const label = [s.id, s.document_name || (s.document_id === 'main' ? '正文' : '补充材料'), location].join(' · ');
+          return '- ' + safe(label).replace(/\n/g, ' ') + '\n\n' + String(s.quote || s.value || '').split('\n').map(line => '> ' + safe(line)).join('\n');
+        }).join('\n\n');
         $('editor').value += ($('editor').value.endsWith('\n\n') || !$('editor').value ? '' : '\n\n') + marker + '\n### 阅读问答摘录\n\n' + safe(message.content) + (appendix ? '\n\n**本次回答的原文来源**\n\n' + appendix : '') + '\n';
         scheduleSave();
         if (state.tab === 'preview') renderPreview();
@@ -902,6 +909,19 @@
     renderList();
   }
 
+  async function refreshBatchTags() {
+    const papers = new Map((await api.papers()).map(p => [p.id, p]));
+    for (const paper of [state.current, ...state.papers]) {
+      const latest = paper && papers.get(paper.id);
+      if (latest && latest.tags_revision >= (paper.tags_revision || 0)) {
+        paper.tags = latest.tags.slice();
+        paper.tags_revision = latest.tags_revision;
+      }
+    }
+    if (state.current) renderHeadTags(true);
+    renderList();
+  }
+
   function changeTag(tag, remove) {
     const paper = state.current;
     tag = (tag || '').trim();
@@ -917,7 +937,7 @@
       if (remove ? !tags.includes(tag) : tags.includes(tag)) return true;
       const next = remove ? tags.filter(t => t !== tag) : [...tags, tag];
       try {
-        const updated = await api.patch(id, { tags: next });
+        const updated = await api.patch(id, { tags: next, tags_revision:(current || summary || paper).tags_revision });
         mergeTags(paper, updated);
         if (remove && state.activeTag === tag) state.activeTag = '';
         renderList();
@@ -996,6 +1016,7 @@
   }
 
   function clearWorkspace() {
+    if ($('table-source-modal')?.hidden === false) closeModal('table-source-modal');
     window.BioFigureReader?.close(false);
     window.BioNoteSources?.clear();
     window.BioReadingNav?.setPaper(null);
@@ -1040,6 +1061,7 @@
       if (!await flushSave() || token !== state.openToken || !canContinue()) return;
       rememberReadingPosition();
       preserveNewerTags(full);
+      if ($('table-source-modal')?.hidden === false) closeModal('table-source-modal');
       state.current = full;
       window.BioNoteSources?.clear();
       window.BioReadingNav?.setPaper(full);
@@ -1111,28 +1133,33 @@
     state.openToken++;
     $('editor').readOnly = true;
     renderDocuments();
+    let pdfChanged = false;
     try {
       if (remove) {
         const meta = await api.removeSupplement(paper.id, state.documentId);
         preserveNewerTags(meta);
         state.current = meta;
         state.documentId = 'main';
+        pdfChanged = true;
       } else {
         for (const file of files) {
           toast(() => tr('正在解析补充材料 {name} …', { name: file.name }));
           const meta = await api.supplement(paper.id, file);
           preserveNewerTags(meta);
           state.current = meta;
-          state.documentId = state.current.supplements.at(-1).id;
+          if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+            state.documentId = state.current.supplements.at(-1).id;
+            pdfChanged = true;
+          }
         }
       }
-      toast(() => tr('材料已更新；重新生成笔记即可结合最新材料分析'), 'ok');
+      toast(() => tr(!remove && !pdfChanged ? '补充表已添加，可在「论文问答」中查询数值。' : '材料已更新；重新生成笔记即可结合最新材料分析'), 'ok');
     } catch (e) { toast(() => tr('补充材料处理失败：{error}', { error: tr(e.message) }), 'error'); }
     finally {
       state.materialBusy = false;
       $('editor').readOnly = false;
       renderDocuments(); renderHead(); updateListItem(state.current);
-      await fetchFigures(); renderFigures(); loadPdf();
+      if (pdfChanged) { await fetchFigures(); renderFigures(); loadPdf(); }
       if (window.BioEvidence) window.BioEvidence.clear();
       if (window.BioResources) window.BioResources.clear();
       if (window.BioChat) window.BioChat.clear();
@@ -1233,7 +1260,7 @@
     return jumped;
   }
 
-  async function jumpNoteReference(reference) {
+  async function jumpNoteReference(reference, canContinue = () => true) {
     if (!/^[0-9a-f]{32}$/.test(reference?.snapshotId || '') || !/^N[1-9][0-9]{0,4}$/.test(reference?.sourceId || '')) throw new Error(tr('引用格式无效。'));
     const paper = state.current;
     if (!paper || paper.id !== reference.paperId || state.generating || state.materialBusy || !canLeaveResearch()) return false;
@@ -1242,7 +1269,7 @@
     if (state.current !== paper || state.generating || state.materialBusy || material !== paper.material_revision) return false;
     const notes = $('editor').value, revision = paper.notes_revision;
     if (!Number.isInteger(revision)) throw new Error(tr('笔记版本尚未就绪，请重新打开文献后重试。'));
-    const isCurrent = () => state.current === paper && !state.generating && !state.materialBusy && material === paper.material_revision && revision === paper.notes_revision && $('editor').value === notes;
+    const isCurrent = () => canContinue() && state.current === paper && !state.generating && !state.materialBusy && material === paper.material_revision && revision === paper.notes_revision && $('editor').value === notes;
     const result = await api.json(paperPath(paper.id, '/note-sources/' + reference.snapshotId + '/' + reference.sourceId + '?notes_revision=' + revision));
     if (!isCurrent()) return false;
     return jumpChatSource({ ...result.source, paper_id: paper.id }, 'preview', isCurrent);
@@ -1746,9 +1773,52 @@
     updateChatContext();
   }
 
+  function spreadsheetColumn(number) {
+    let label = '';
+    while (number > 0) {
+      number--;
+      label = String.fromCharCode(65 + number % 26) + label;
+      number = Math.floor(number / 26);
+    }
+    return label;
+  }
+
+  function openTableSource(paper, source) {
+    const file = (paper.supplement_files || []).find(item => item.id === source.document_id);
+    const rows = source.rows, first = source.first_column;
+    if (source.paper_id !== paper.id || !file || !Number.isSafeInteger(first) || first < 1 ||
+        !Number.isSafeInteger(source.column) || source.column < first || !Number.isSafeInteger(source.row) || source.row < 1 ||
+        !Array.isArray(rows) || !rows.every(row => Number.isSafeInteger(row.number) && row.number > 0 && Array.isArray(row.cells))) return false;
+    const target = rows.find(row => row.number === source.row);
+    const width = Math.max(...rows.map(row => row.cells.length));
+    const columns = source.column_numbers || Array.from({length: width}, (_, i) => first + i);
+    if (!Array.isArray(columns) || columns.length < width || !columns.every((n, i) => Number.isSafeInteger(n) && n >= 1 && (!i || n > columns[i - 1]))) return false;
+    const targetIndex = columns.indexOf(source.column);
+    if (!target || targetIndex < 0 || targetIndex >= target.cells.length) return false;
+
+    const headings = columns.slice(0, width).map(n => '<th scope="col">' + spreadsheetColumn(n) + '</th>');
+    const body = rows.map(row => {
+      const hit = row.number === source.row;
+      const cells = row.cells.map((value, i) => '<td' + (hit && columns[i] === source.column ? ' aria-current="true"' : '') + '>' + escapeHtml(value ?? '') + '</td>');
+      return '<tr data-source-row="' + row.number + '"' + (hit ? ' class="table-source-hit"' : '') + '><th scope="row">' + row.number + '</th>' + cells.join('') + '</tr>';
+    });
+    const grid = $('table-source-grid');
+    grid.innerHTML = '<thead><tr><th scope="col" data-i18n="行号">' + escapeHtml(tr('行号')) + '</th>' + headings.join('') + '</tr></thead><tbody>' + body.join('') + '</tbody>';
+    $('table-source-title').textContent = file.filename;
+    bindText($('table-source-location'), () => [paper.title, source.sheet, tr('第 {row} 行', { row: source.row }), source.identifier, ...(source.conditions || []).map(c => c.name + '=' + c.value), source.column_name, spreadsheetColumn(source.column) + source.row,
+      source.display_value !== undefined && source.display_value !== source.value ? tr('底层值 {value}', {value: source.value}) : ''].filter(Boolean).join(' · '));
+    openModal('table-source-modal', 'table-source-close');
+    grid.querySelector('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    return true;
+  }
+
   async function jumpChatSource(source, targetTab = 'chat', canContinue = () => true) {
     const paper = state.current;
     if (!paper || !canContinue() || state.materialBusy || (source.paper_id && source.paper_id !== paper.id)) return false;
+    if (source.kind === 'table') {
+      ++state.chatJumpToken;
+      return openTableSource(paper, source);
+    }
     const materialRevision = paper.material_revision;
     const documentId = source.document_id;
     if (documentId !== 'main' && !(paper.supplements || []).some(d => d.id === documentId)) return false;
@@ -1786,11 +1856,12 @@
     if (window.BioResources) window.BioResources.open(state.current);
   }
 
-  async function openProjectSource(paperId, documentId, page, figureId, revision, bbox) {
+  async function openProjectSource(paperId, documentId, page, figureId, revision, bbox, isCurrent = () => true) {
     const paper = state.papers.find(p => p.id === paperId);
-    if (!paper || state.generating || state.materialBusy || !canLeaveResearch()) return false;
+    if (!paper || !isCurrent() || state.generating || state.materialBusy || !canLeaveResearch()) return false;
     state.pendingPaper = paper;
-    await openPaper();
+    await openPaper(isCurrent);
+    if (!isCurrent()) return false;
     if (state.current?.id !== paperId || (revision && (state.current.document_revisions?.[documentId] || 'legacy') !== revision)) {
       toast(tr('来源已变化，请重新打开比较。'), 'error'); return false;
     }
@@ -1800,10 +1871,11 @@
     }
     if (figureId) {
       await fetchFigures();
+      if (!isCurrent()) return false;
       const figure = state.figures.find(f => f.id === figureId && (f.document_id || 'main') === documentId && f.page === page);
       if (state.current?.id !== paperId || !figure) { toast(tr('来源已变化，请重新打开比较。'), 'error'); return false; }
     }
-    return jumpChatSource({paper_id: paperId, document_id: documentId, page, bbox}, 'preview');
+    return jumpChatSource({paper_id: paperId, document_id: documentId, page, bbox}, 'preview', isCurrent);
   }
 
   async function openLibrarySearchResult(result, navigation = {}) {
@@ -2407,6 +2479,7 @@
   }
 
   function clearPdf() {
+    window.BioPdfFind?.setDocument(null);
     clearPdfSelection();
     state.pdfSourceHighlight?.remove(); state.pdfSourceHighlight = null;
     rememberReadingPosition();
@@ -2468,6 +2541,7 @@
       $('pdf-page').max = doc.numPages;
       $('pdf-crop').disabled = false;
       await renderPages(token, targetPage || position?.page || 1);
+      if (state.pdf === doc) window.BioPdfFind?.setDocument(doc);
     } catch (e) {
       if (token === state.renderToken) {
         clearPdf();
@@ -2611,6 +2685,7 @@
       entry.textTask = task; state.pdfRenderTasks.add(task);
       await task.promise;
       if (entry.cancelled || view !== state.pdfView || view.token !== state.renderToken) layer.remove();
+      else window.BioPdfFind?.paint(view.doc, number, layer);
     } catch (_) {
       // A text-layer failure must not blank an otherwise readable PDF image.
       entry.textLayer?.remove();
@@ -2938,7 +3013,7 @@
     });
     document.addEventListener('keydown', (e) => {
       if (window.BioFigureReader?.isOpen()) return;
-      const modal = document.querySelector('.modal-backdrop:not([hidden])');
+      const modal = $('table-source-modal')?.hidden === false ? $('table-source-modal') : document.querySelector('.modal-backdrop:not([hidden])');
       if (!modal && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         document.body.classList.remove('library-collapsed');
@@ -2951,11 +3026,13 @@
         if (modal) {
           e.preventDefault();
           if (modal.id === 'input-modal') finishInput(null);
+          else if (modal.id === 'bulk-tag-modal') window.BioBulkTags.close();
           else if (modal.id === 'remote-supplement-modal') window.BioSupplementDownloads?.close();
           else if (modal.id === 'settings-modal') closeSettings();
           else if (modal.id === 'zlocal-modal') window.BioLocalZotero?.close();
           else if (modal.id === 'zotero-modal' && window.BioZotero) window.BioZotero.close();
           else if (modal.id === 'doi-modal' && window.BioIdentifierImport) window.BioIdentifierImport.close();
+          else if (modal.id === 'table-comparison-modal') window.BioTableComparison.close();
           else if (modal.id === 'project-modal' && window.BioProjects) window.BioProjects.close();
           else if (modal.id === 'library-search-modal' && window.BioLibrarySearch) window.BioLibrarySearch.close();
           else closeModal(modal.id);
@@ -3026,6 +3103,8 @@
     $('btn-delete').addEventListener('click', deleteCurrent);
     $('btn-enrich').addEventListener('click', enrichCurrent);
     $('btn-find-supplements').addEventListener('click', () => window.BioSupplementDownloads?.open(state.current));
+    $('table-source-close').addEventListener('click', () => closeModal('table-source-modal'));
+    $('table-source-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal('table-source-modal'); });
     $('btn-supplement').addEventListener('click', () => $('supplement-input').click());
     $('supplement-input').addEventListener('change', (e) => { const files = [...e.target.files]; e.target.value = ''; if (files.length) changeSupplements(files, false); });
     $('btn-remove-supplement').addEventListener('click', () => changeSupplements([], true));
@@ -3172,6 +3251,10 @@
   }
 
   async function init() {
+    window.BioPdfFind?.init({
+      showPage: number => goToPage(number, false),
+      layer: number => state.pdfView?.canvases.get(number)?.textLayer,
+    });
     window.BioFulltext?.init({
       fetch: (id, scope) => api.json(paperPath(id, '/fetch-fulltext?library_id=' + encodeURIComponent(scope)), {method:'POST'}),
       ready: () => !state.generating && !state.materialBusy && canLeaveResearch(),
@@ -3198,6 +3281,7 @@
     });
     window.BioSupplementDownloads?.init({
       show: openModal, hide: closeModal, toast,
+      chat: id => { if (state.current?.id === id && canLeaveResearch()) switchTab('chat'); },
       find: id => api.json(paperPath(id, '/supplement-candidates')),
       save: async (id, key) => {
         if (state.current?.id !== id || state.materialBusy || state.generating || !canLeaveResearch() || !await flushSave() || state.current?.id !== id)
@@ -3213,8 +3297,8 @@
               window.BioEvidence?.clear(); window.BioResources?.clear(); window.BioChat?.clear();
               if (state.tab === 'evidence') openEvidence();
               if (state.tab === 'resources') openResources();
-              if (state.tab === 'chat') openChat();
             }
+            if (state.tab === 'chat') openChat();
           }
           return fresh;
         } finally { state.materialBusy = false; $('editor').readOnly = false; renderDocuments(); renderWorkflow(); }
@@ -3270,6 +3354,12 @@
     if (window.BioNoteSources) window.BioNoteSources.init({
       request: id => api.json(paperPath(id, '/note-sources')), jump: jumpNoteReference, toast,
     });
+    if (window.BioBulkTags) {
+      window.BioBulkTags.init({show:openModal, hide:closeModal, refresh:refreshBatchTags,
+        request:(method, path, body) => body === undefined ? api.json(path, {method}) : api.jsonBody(method, path, body)});
+      $('library-bulk-tags').onclick = () => window.BioBulkTags.open(
+        visiblePapers().filter(p => !p.schema_incompatible).map(p => p.id), window.BioProjects?.activeId() || 'all');
+    }
     if (window.BioLibrarySearch) window.BioLibrarySearch.init({
       panel: $('library-search-body'), footer: $('library-search-footer'), modal: $('library-search-modal'),
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
@@ -3332,9 +3422,14 @@
         return !!state.current && state.current.id === paper.id;
       },
     });
+    if (window.BioTableComparison) window.BioTableComparison.init({
+      show: openModal, hide: closeModal, papers: () => state.papers,
+      request: (method, url, body) => body === undefined ? api.json(url, { method }) : api.jsonBody(method, url, body),
+    });
     if (window.BioChat) window.BioChat.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
       jump: jumpChatSource, toast, copyText: copyChatText, appendNote: appendChatNote,
+      compareTable: (paper, message, source) => window.BioTableComparison?.open(paper, message, source),
     });
     if (window.BioResources) window.BioResources.init({
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
@@ -3382,7 +3477,24 @@
     await Promise.all([loadSettings(), loadPapers(), window.BioProjects?.init({
       papers: () => state.papers, scopeChanged: () => { clearLibraryFilters(); void window.BioResources?.scopeChanged?.(); }, updateList: renderList,
       request: (method, path, body) => body === undefined ? api.json(path, { method }) : api.jsonBody(method, path, body),
-      openSource: openProjectSource, toast, showModal: openModal, hideModal: closeModal,
+      openDigestPaper: (id, isCurrent) => openLibrarySearchResult({kind:'notes', paper_id:id}, {isCurrent}),
+      openDigestCitation: async (paper, isCurrent) => {
+        const citation = paper.conclusion_citation;
+        const opened = await openLibrarySearchResult({kind:'notes',paper_id:paper.id}, {isCurrent});
+        if (!opened || !isCurrent()) return false;
+        if (state.current.notes_revision !== citation.notes_revision) throw new Error(tr('笔记已变化，请重新打开库总览。'));
+        return jumpNoteReference({paperId:paper.id,snapshotId:citation.snapshot_id,sourceId:citation.source_id},isCurrent);
+      },
+      exportDigest: async (scope, name, isCurrent) => {
+        const response = await fetch('/api/library/' + encodeURIComponent(scope) + '/digest/export');
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(typeof error.detail === 'string' ? error.detail : tr('导出失败'));
+        }
+        const blob = await response.blob();
+        if (isCurrent()) downloadRaw(safeFilename(name) + '.html', blob);
+      },
+      openSource: openProjectSource, openTableSource, toast, showModal: openModal, hideModal: closeModal,
     })]);
     void window.BioPubMed?.startup?.((method, path) => api.json(path, {method}));
     // Deep link: ?paper=<id> only scrolls to and flashes the matching sidebar

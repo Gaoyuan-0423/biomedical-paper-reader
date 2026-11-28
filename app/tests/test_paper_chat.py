@@ -50,6 +50,37 @@ class ChatTests(unittest.TestCase):
         with patch.object(main, 'stream_chat', model):
             return self.client.post(self.url + '/chat', json=body or self.body)
 
+    def test_choose_persisted_table_candidate_rechecks_original_paper(self):
+        data = b'gene,timepoint,log2FC\nFLC,6h,1.42\nFLC,24h,-0.73\n'
+        attached = self.client.post(self.url + '/supplements', files={'file': ('Table S2.csv', data)})
+        self.assertEqual(attached.status_code, 200)
+        message = events(self.ask({'message': 'Table S2 中 FLC 的 log2FC 是多少'}))[-1]['message']
+        self.assertEqual(message['sources'], [])
+        self.assertEqual([c['row'] for c in message['table_candidates']], [2, 3])
+        saved = self.client.get(self.url + '/chat').json()['messages'][-1]
+        self.assertEqual(saved['table_candidates'], message['table_candidates'])
+        url = self.url + '/chat/' + message['id'] + '/table-candidates/'
+        self.assertEqual(self.client.post(url + '3').status_code, 404)
+        other = self.client.post('/api/papers', files={'file': ('B.pdf', fixture_pdf())}).json()['id']
+        self.assertEqual(self.client.post(url.replace(self.pid, other) + '2').status_code, 404)
+        source = message['table_candidates'][1]
+        file = self.directory / 'supplement-files' / source['revision']
+        file.write_bytes(data + b'changed')
+        self.assertEqual(self.client.post(url + '2').status_code, 409)
+        file.write_bytes(data)
+        response = self.client.post(url + '2')
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()['message']
+        self.assertNotIn('table_candidates', result)
+        self.assertEqual((result['id'], result['sources'], result['cited_source_ids']), (message['id'], [source], ['S1']))
+        self.assertIn('24h', result['content'])
+        self.assertIn('-0.73', result['content'])
+        self.assertEqual(self.client.post(url + '2').json()['message'], result)
+        self.assertEqual(self.client.post(url + '1').status_code, 409)
+        self.assertEqual(self.client.get(self.url + '/chat').json()['messages'][-1], result)
+        original = self.client.get(self.url + '/chat/sources/' + result['id'] + '/S1').json()['source']
+        self.assertEqual((original['row'], original['column'], original['value']), (3, 3, '-0.73'))
+
     def test_success_persisted_sources_real_geometry_and_notes_untouched(self):
         self.client.patch(self.url, json={'notes': 'Manual notes are independent', 'tags': ['manual']})
         before = (self.directory / 'meta.json').read_bytes()
@@ -149,6 +180,36 @@ class ChatTests(unittest.TestCase):
         self.client.post(self.url + '/file', files={'file': ('scan.pdf', output.getvalue())})
         self.assertEqual(self.ask().status_code, 422)
         self.assertFalse((self.directory / 'chat.json').exists())
+
+    def test_table_answer_is_local_and_its_historical_citation_checks_the_original(self):
+        main.save_settings(main.DEFAULT_SETTINGS)
+        uploaded = self.client.post(self.url + '/supplements', files={
+            'file': ('Table S2.csv', b'gene,log2FC\nFLC,1.42\nFLC2,-0.73\n', 'text/csv')})
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        body = {'message': 'Table S2 里 FLC 的 log2FC 是多少？'}
+        with patch.object(main, 'stream_chat', side_effect=AssertionError('a table lookup must stay local')):
+            response = self.client.post(self.url + '/chat', json=body)
+        self.assertEqual(response.status_code, 200, response.text)
+        stream = events(response)
+        self.assertEqual([item['type'] for item in stream], ['start', 'chunk', 'done'])
+        self.assertEqual(stream[0]['message']['context_kind'], 'table')
+        saved = stream[-1]['message']
+        self.assertIn('1.42', saved['content'])
+        self.assertEqual(saved['cited_source_ids'], ['S1'])
+        source = saved['sources'][0]
+        self.assertEqual((source['kind'], source['sheet'], source['row'], source['column']), ('table', 'CSV', 2, 2))
+
+        source_path = '/chat/sources/' + saved['id'] + '/S1'
+        opened = self.client.get(self.url + source_path).json()['source']
+        self.assertEqual(opened['paper_id'], self.pid)
+        target = next(item for item in opened['rows'] if item['number'] == opened['row'])
+        self.assertEqual(target['cells'][opened['column'] - opened['first_column']], '1.42')
+
+        other = self.client.post('/api/papers', files={'file': ('other.pdf', fixture_pdf(marker='SECOND'), 'application/pdf')}).json()
+        self.assertEqual(self.client.get('/api/papers/' + other['id'] + source_path).status_code, 404)
+        (self.directory / 'supplement-files' / source['revision']).write_bytes(b'gene,log2FC\nFLC,9.99\n')
+        self.assertEqual(self.client.get(self.url + source_path).status_code, 409)
+        self.assertEqual(self.client.get(self.url + '/chat').json()['messages'][-1], saved)
 
     def test_empty_transport_error_and_timeout_preserve_visible_state(self):
         async def empty(*args, **kwargs):
