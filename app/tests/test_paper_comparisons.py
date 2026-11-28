@@ -1,5 +1,7 @@
 """End-to-end project comparisons, paper-scoped source snapshots and revision conflicts."""
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 import tempfile
 import unittest
 from pathlib import Path
@@ -32,6 +34,173 @@ class ComparisonTests(unittest.TestCase):
         result = self.client.get(self.base+'/material/'+pid)
         self.assertEqual(result.status_code, 200, result.text)
         return result.json()
+
+    def numeric_answer(self, paper_id, value, extra_rows=0):
+        from test_supplement_tables import workbook
+        url = '/api/papers/' + paper_id
+        data = workbook({'Effects': [['Gene', 'log2FC'], *([[]] * extra_rows), ['FLC', value]]})
+        upload = self.client.post(url + '/supplements', files={'file': ('Table S2.xlsx', data)})
+        self.assertEqual(upload.status_code, 200, upload.text)
+        answer = self.client.post(url + '/chat', json={'message': 'Table S2.xlsx 中 FLC 的 log2FC 是多少?'})
+        self.assertEqual(answer.status_code, 200, answer.text)
+        assistant = self.client.get(url + '/chat').json()['messages'][-1]
+        self.assertEqual(assistant['cited_source_ids'], ['S1'])
+        return {'paper_id': paper_id, 'message_id': assistant['id'], 'source_id': 'S1'}
+
+    def test_table_measurements_persist_by_paper_and_reopen_without_chat(self):
+        self.assertEqual(self.client.put(self.url, json=self.body).status_code, 200)
+        a = self.numeric_answer(self.a, 1.5)
+        b = self.numeric_answer(self.b, -3.25, extra_rows=2)
+        route = self.url + '/table-measurements'
+        self.assertEqual(self.client.post(route, json={**a, 'paper_id': self.b, 'revision': 1}).status_code, 404)
+        self.assertEqual(self.client.post(route, json={**a, 'paper_id': self.out, 'revision': 1}).status_code, 404)
+        params = {**a, 'revision': 1, 'field_label': '表达变化', 'direction': '病例 / 对照'}
+        first = self.client.post(route, json=params)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(self.client.post(route, json=params).json(), first.json())
+        self.assertEqual(self.client.post(route, json={**a, 'revision': 1}).json(), first.json())
+        self.assertEqual(self.client.post(route, json={**b, 'revision': 1}).status_code, 409)
+        saved = self.client.post(route, json={**b, 'revision': 2})
+        self.assertEqual(saved.status_code, 200, saved.text)
+        cells = [r['table_measurements'][0] for r in saved.json()['rows']]
+        self.assertEqual([c['source']['value'] for c in cells], ['1.5', '-3.25'])
+        self.assertEqual([c['source']['row'] for c in cells], [2, 4])
+        self.assertEqual([c['field_label'] for c in cells], ['表达变化', 'log2FC'])
+        self.assertEqual(cells[0]['direction'], '病例 / 对照')
+
+        unrelated = self.client.put(self.url, json={**self.body, 'revision': 3, 'synthesis': 'Updated notes'})
+        self.assertEqual(unrelated.status_code, 200, unrelated.text)
+        self.assertEqual([r['table_measurements'][0] for r in unrelated.json()['rows']], cells)
+        self.assertEqual(self.client.get(self.base, params={'paper_id': self.out}).status_code, 404)
+        self.assertEqual(len(self.client.get(self.base, params={'paper_id': self.a}).json()), 1)
+        for pid, cell in zip((self.a, self.b), cells):
+            (main.paper_dir(pid) / 'chat.json').unlink()
+            preview = self.client.get(f"{route}/{pid}/{cell['id']}/source")
+            self.assertEqual(preview.status_code, 200, preview.text)
+            src = preview.json()['source']
+            self.assertEqual((src['paper_id'], src['sheet'], src['value']), (pid, 'Effects', cell['source']['value']))
+            raw = next(r for r in src['rows'] if r['number'] == src['row'])
+            self.assertEqual(raw['cells'][src['column'] - src['first_column']], src['value'])
+        self.assertEqual(self.client.get(f"{route}/{self.a}/{cells[1]['id']}/source").status_code, 404)
+        (main.paper_dir(self.a) / 'supplement-files' / cells[0]['source']['revision']).write_bytes(b'changed')
+        self.assertEqual(self.client.get(f"{route}/{self.a}/{cells[0]['id']}/source").status_code, 409)
+        self.assertEqual(self.client.get(self.url).json()['rows'][0]['table_measurements'][0], cells[0])
+
+    def test_copy_or_remove_only_explicitly_selected_measurement_snapshots(self):
+        self.client.put(self.url, json=self.body)
+        a = self.numeric_answer(self.a, 0.2)
+        route = self.url + '/table-measurements'
+        cell = self.client.post(route, json={**a, 'revision': 1}).json()['rows'][0]['table_measurements'][0]
+        ref = {k: cell[k] for k in ('id', 'snapshot')}
+        destination = self.base + '/' + 'd' * 32
+        origin = 'c' * 32
+        copy = {**self.body, 'copy_measurements_from': origin,
+                'rows': [{**self.body['rows'][0], 'table_measurement_refs': [ref]}, self.body['rows'][1]]}
+        self.assertEqual(self.client.put(destination, json={**copy, 'rows': self.body['rows']}).status_code, 409)
+        wrong_owner = [dict(copy['rows'][0], table_measurement_refs=[]),
+                       dict(copy['rows'][1], table_measurement_refs=[ref])]
+        self.assertEqual(self.client.put(destination, json=dict(copy, rows=wrong_owner)).status_code, 409)
+        new_lib = self.client.post('/api/project-libraries', json={'name': 'Other', 'paper_ids': [self.a,self.b]}).json()['id']
+        self.assertEqual(self.client.put(destination.replace(self.library, new_lib), json=copy).status_code, 404)
+        relabel = self.client.post(route, json={**a, 'revision': 2, 'direction': 'treatment over control'})
+        new_cell = relabel.json()['rows'][0]['table_measurements'][0]
+        self.assertNotEqual(new_cell['snapshot'], ref['snapshot'])
+        self.assertEqual(self.client.put(destination, json=copy).status_code, 409)
+        self.assertEqual(self.client.get(destination).status_code, 404)
+        ref['snapshot'] = new_cell['snapshot']
+        duplicate = self.client.put(destination, json=copy)
+        self.assertEqual(duplicate.status_code, 200, duplicate.text)
+        self.assertEqual(duplicate.json()['rows'][0]['table_measurements'], [new_cell])
+        self.assertEqual(self.client.put(destination, json=copy).json(), duplicate.json())
+        remove = {**self.body, 'revision': 1, 'rows': [dict(copy['rows'][0], table_measurement_refs=[]), self.body['rows'][1]]}
+        self.assertEqual(self.client.put(destination, json=remove).status_code, 200)
+        self.assertFalse(self.client.get(destination).json()['rows'][0].get('table_measurements'))
+        self.assertEqual(self.client.get(self.url).json()['rows'][0]['table_measurements'], [new_cell])
+
+    def test_review_legacy_direction_with_stable_provenance_and_revision(self):
+        self.client.put(self.url, json=self.body)
+        address = self.numeric_answer(self.a, -0.73)
+        route = self.url + '/table-measurements'
+        old = self.client.post(route, json={**address, 'revision':1, 'direction':'control vs treated'}).json()
+        original = old['rows'][0]['table_measurements'][0]
+        self.assertNotIn('contrast_definition', original)
+        ref = {k: original[k] for k in ('id','snapshot')}
+        body = dict(self.body, revision=2, rows=[dict(self.body['rows'][0], table_measurement_refs=[ref]), self.body['rows'][1]])
+        invalid = dict(ref, contrast_definition={'test_group':'treated', 'reference_group':' treated ', 'scale':'log2fc'})
+        body['rows'][0]['table_measurement_refs'] = [invalid]
+        self.assertEqual(self.client.put(self.url, json=body).status_code, 422)
+        definition = {'test_group':'control', 'reference_group':'treated', 'scale':'log2fc'}
+        body['rows'][0]['table_measurement_refs'] = [dict(ref, contrast_definition=definition)]
+        saved = self.client.put(self.url, json=body)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        reviewed = saved.json()['rows'][0]['table_measurements'][0]
+        self.assertEqual(reviewed['contrast_definition'], definition)
+        self.assertNotEqual(reviewed['snapshot'], original['snapshot'])
+        self.assertEqual(reviewed['source'], original['source'])
+        self.assertEqual(reviewed['direction'], original['direction'])
+        self.assertEqual(self.client.put(self.url, json=body).json(), saved.json())
+        self.assertEqual(self.client.put(self.url, json=dict(body,revision=3)).status_code, 409)
+        self.assertEqual(self.client.get(self.url).json()['rows'][0]['table_measurements'][0], reviewed)
+        second = self.client.post(route, json={**address,'revision':3})
+        self.assertEqual(second.json(), saved.json())
+
+    def test_add_new_paper_and_original_measurement_as_one_transaction(self):
+        self.client.put(self.url, json=self.body)
+        answer = self.numeric_answer(self.out, 3)
+        route = self.url + '/table-measurements'
+        params = {**answer, 'add_paper': True, 'revision': 1}
+        self.assertEqual(self.client.post(route, json=params).status_code, 404)
+        self.client.put('/api/project-libraries/' + self.library,
+                        json={'revision': 1, 'name': 'Cohorts', 'add': [self.out]})
+        self.assertEqual(self.client.get(self.base).json()[0]['paper_ids'], [self.a, self.b])
+        self.assertEqual(self.client.get(self.base, params={'paper_id': self.out}).json(), [])
+        self.assertEqual(self.client.post(route, json={**params, 'add_paper': False}).status_code, 404)
+        self.assertEqual(self.client.post(route, json={**params, 'revision': 2}).status_code, 409)
+        self.assertEqual(self.client.get(self.url).json()['revision'], 1)
+        self.assertEqual(self.client.get(self.base).json()[0]['paper_ids'], [self.a, self.b])
+        response = self.client.post(route, json=params)
+        self.assertEqual(response.status_code, 200, response.text)
+        new = response.json()
+        self.assertEqual(new['revision'], 2)
+        self.assertEqual([r['paper_id'] for r in new['rows']], [self.a, self.b, self.out])
+        self.assertEqual(new['rows'][2]['table_measurements'][0]['source']['value'], '3')
+        self.assertEqual(self.client.post(route, json=params).json(), new)
+        self.assertEqual(self.client.get(self.base, params={'paper_id': self.out}).json()[0]['paper_ids'],
+                         [self.a, self.b, self.out])
+
+    def test_attachment_replaced_between_parse_and_commit_is_rejected(self):
+        self.client.put(self.url, json=self.body)
+        answer = self.numeric_answer(self.a, 2.1)
+        verify = main.supplement_tables.verified_table_source
+        def replace_after_read(directory, meta, source):
+            preview = verify(directory, meta, source)
+            (directory / 'supplement-files' / source['revision']).write_bytes(b'changed while reading')
+            return preview
+        with patch.object(main.supplement_tables, 'verified_table_source', side_effect=replace_after_read):
+            result = self.client.post(self.url + '/table-measurements', json={**answer, 'revision': 1})
+        self.assertEqual(result.status_code, 409)
+        old = self.client.get(self.url).json()
+        self.assertEqual(old['revision'], 1)
+        self.assertNotIn('table_measurements', old['rows'][0])
+
+    def test_simultaneous_adoptions_use_the_comparison_revision(self):
+        self.client.put(self.url, json=self.body)
+        a, b = self.numeric_answer(self.a, 2), self.numeric_answer(self.b, -1)
+        barrier = Barrier(2)
+        verify = main.supplement_tables.verified_table_source
+        def verify_together(*args):
+            source = verify(*args)
+            barrier.wait(timeout=5)
+            return source
+        def adopt(body):
+            return self.client.post(self.url + '/table-measurements', json={**body, 'revision': 1}).status_code
+        with patch.object(main.supplement_tables, 'verified_table_source', side_effect=verify_together):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                codes = list(pool.map(adopt, (a, b)))
+        self.assertEqual(sorted(codes), [200, 409])
+        result = self.client.get(self.url).json()
+        self.assertEqual(result['revision'], 2)
+        self.assertEqual(sum(len(r.get('table_measurements', [])) for r in result['rows']), 1)
 
     def test_scope_matrix_and_idempotent_concurrent_edits(self):
         self.assertEqual(self.client.get(self.base+'/material/'+self.out).status_code, 404)

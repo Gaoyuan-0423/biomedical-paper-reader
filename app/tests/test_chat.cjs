@@ -70,6 +70,33 @@ test('source verification failure, missing jump target and late source responses
  const old=deferred();h.hooks.request=()=>old.promise;const jump=h.click('source',{chatMessage:M,chatSource:'S1'});h.ui.clear();h.hooks.request=async()=>({messages:[]});await h.ui.open(paper(B));old.resolve({source});await jump;assert.equal(h.jumps.length,0);
 });
 
+test('table-only papers can ask in chat and reopen a sheet and row from history', async () => {
+  const h = harness();
+  const file = { id: S, filename: 'Table S2.xlsx' };
+  const tableSource = { id: 'S1', kind: 'table', paper_id: A, document_id: S, document_name: file.filename,
+    sheet: 'Tumor & control', row: 17, column: 3, column_name: 'log2FC', value: '-1.25' };
+  await h.ui.open({ ...paper(A), has_file: false, supplement_files: [file] });
+  h.ui.setContext({ paper_id: A, document_id: 'main', page: null, selection: '' });
+  h.input('TP53 的 log2FC 是多少？');
+  assert.equal(h.el('chat-send').disabled, false);
+  await h.submit();
+  assert.deepEqual(h.posts[0].body, { message: 'TP53 的 log2FC 是多少？', action: 'ask', selection: '' });
+
+  h.hooks.request = async (_, url) => {
+    assert.ok(url.includes('/' + A + '/chat'));
+    return url.endsWith('/S1') ? { source: tableSource } : { messages: [answer({ sources: [tableSource] })] };
+  };
+  await h.click('reload');
+  assert.match(h.html(), /Table S2\.xlsx.*Tumor &amp; control.*第 17 行.*log2FC/);
+  await h.click('source', { chatMessage: M, chatSource: 'S1' });
+  assert.equal(h.jumps[0].row, 17);
+  const copies = [];
+  h.hooks.copyText = async text => copies.push(text);
+  await h.click('copy', { chatMessage: M });
+  assert.match(copies[0], /Table S2\.xlsx · Tumor & control · 第 17 行 · log2FC/);
+  assert.doesNotMatch(copies[0], /PDF|undefined/);
+});
+
 test('HTTP failures retain submitted draft and explicit retry reuses original source context',async()=>{
  const h=harness();await h.ui.open(paper(A));h.input('Keep this question');h.hooks.fetch=async()=>({ok:false,statusText:'Bad',json:async()=>({detail:'模型不可用'})});await h.submit();assert.equal(h.el('chat-input').value,'Keep this question');assert.match(h.html(),/模型不可用/);
  const bodies=[];h.hooks.fetch=async(_,o)=>{bodies.push(JSON.parse(o.body));return response([{type:'start',message:user,assistant:answer({status:'pending'})},{type:'done',message:answer()}]);};h.ui.setContext({document_id:S,page:4,selection:''});await h.click('retry');assert.equal(bodies[0].document_id,'main');assert.equal(bodies[0].page,1);

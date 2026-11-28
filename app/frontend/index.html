@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="chat.css?v=20261106-v0130">
   <link rel="stylesheet" href="zotero.css?v=20261106-v0130">
   <link rel="stylesheet" href="project-libraries.css">
+  <link rel="stylesheet" href="digest.css">
   <link rel="stylesheet" href="identifier-import.css">
   <link rel="stylesheet" href="library-search.css?v=20261106-v0130">
   <link rel="stylesheet" href="reading-nav.css?v=20261106-v0130">
@@ -57,6 +58,7 @@
         <div class="section-heading"><h1><span data-i18n="我的文献库">我的文献库</span></h1><span class="library-total" id="library-total">0</span></div>
         <div class="project-scope-row">
           <select id="project-scope" aria-label="当前课题库" data-i18n-aria-label="当前课题库"><option value="all" data-i18n="全部文献">全部文献</option></select>
+          <button class="btn" id="open-digest" type="button" data-i18n="库总览">库总览</button>
           <button class="btn" id="open-projects" type="button"><span data-i18n="课题库">课题库</span></button>
         </div>
         <div class="import-row">
@@ -65,7 +67,7 @@
         </div>
         <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
         <input type="file" id="attach-input" accept="application/pdf,.pdf" hidden>
-        <input type="file" id="supplement-input" accept="application/pdf,.pdf" multiple hidden>
+        <input type="file" id="supplement-input" accept="application/pdf,.pdf,.xlsx,.csv,.tsv" multiple hidden>
         <div class="search-row"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><input id="search" type="search" aria-label="搜索文献" placeholder="搜索标题、作者、标签…" data-i18n-aria-label="搜索文献" data-i18n-placeholder="搜索标题、作者、标签…"><kbd title="快捷键" data-i18n-title="快捷键">⌘ K</kbd></div>
         <button class="btn btn-ghost library-content-search" id="btn-library-search"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><span data-i18n="搜索正文与笔记">搜索正文与笔记</span></button>
         <div class="library-filters" aria-label="文献筛选" data-i18n-aria-label="文献筛选">
@@ -75,7 +77,7 @@
         <div id="tag-chips" class="tag-chips" hidden></div>
         <button class="btn btn-ghost clear-library-filters" id="clear-library-filters" hidden><span data-i18n="清除筛选">清除筛选</span></button>
       </div>
-      <div class="list-caption"><span data-i18n="文献列表">文献列表</span><span><span data-i18n="最近添加">最近添加</span></span></div>
+      <div class="list-caption"><span data-i18n="文献列表">文献列表</span><button type="button" id="library-bulk-tags" class="btn btn-ghost" data-i18n="批量标签">批量标签</button><span><span data-i18n="最近添加">最近添加</span></span></div>
       <ul id="paper-list" class="paper-list"></ul>
       <div class="drop-hint" id="drop-hint"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg><span><span data-i18n="也可以把 PDF 拖到这里">也可以把 PDF 拖到这里</span></span></div>
       <div class="sidebar-tools" aria-label="文献库工具" data-i18n-aria-label="文献库工具">
@@ -103,10 +105,18 @@
             <button id="pdf-fit" class="btn btn-icon btn-ghost" title="适应宽度" aria-label="适应宽度" data-i18n-title="适应宽度" data-i18n-aria-label="适应宽度"><svg class="icon" aria-hidden="true"><use href="#i-expand"></use></svg></button>
           </div>
           <button id="pdf-crop" class="btn btn-ghost" title="框选页面中的图表并保存到图库" disabled data-i18n-title="框选页面中的图表并保存到图库"><svg class="icon" aria-hidden="true"><use href="#i-crop"></use></svg><span data-i18n="取图">取图</span></button>
+          <button id="pdf-find-toggle" class="btn btn-ghost" type="button" aria-controls="pdf-find-bar" aria-expanded="false" disabled><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><span data-i18n="查找原文">查找原文</span></button>
+        </div>
+        <div id="pdf-find-bar" class="pdf-find-bar" role="search" aria-label="在当前 PDF 中查找" data-i18n-aria-label="在当前 PDF 中查找" hidden>
+          <input id="pdf-find-query" type="search" autocomplete="off" maxlength="256" aria-label="在当前 PDF 中查找" data-i18n-aria-label="在当前 PDF 中查找" placeholder="在当前 PDF 中查找" data-i18n-placeholder="在当前 PDF 中查找">
+          <span id="pdf-find-count" role="status" aria-live="polite"></span>
+          <button id="pdf-find-prev" class="btn btn-icon btn-ghost" type="button" aria-label="上一个匹配项" data-i18n-aria-label="上一个匹配项" title="上一个匹配项" data-i18n-title="上一个匹配项" disabled><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg></button>
+          <button id="pdf-find-next" class="btn btn-icon btn-ghost" type="button" aria-label="下一个匹配项" data-i18n-aria-label="下一个匹配项" title="下一个匹配项" data-i18n-title="下一个匹配项" disabled><svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg></button>
+          <button id="pdf-find-close" class="btn btn-ghost" type="button" data-i18n="关闭">关闭</button>
         </div>
         <div class="document-toolbar" id="document-toolbar" hidden>
           <select id="document-select" aria-label="阅读文件" data-i18n-aria-label="阅读文件"></select>
-          <button id="btn-supplement" class="btn btn-ghost"><span data-i18n="添加补充 PDF">添加补充 PDF</span></button>
+          <button id="btn-supplement" class="btn btn-ghost"><span data-i18n="添加补充 PDF 或表格">添加补充 PDF 或表格</span></button>
           <button id="btn-find-supplements" class="btn btn-ghost" type="button"><span data-i18n="补充附件">补充附件</span></button>
           <button id="btn-remove-supplement" class="btn btn-ghost" hidden><span data-i18n="移除补充">移除补充</span></button>
         </div>
@@ -263,6 +273,48 @@
     </div>
   </div>
 
+  <div id="table-comparison-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="table-comparison-title" hidden>
+    <div class="modal">
+      <div class="modal-head"><h3 id="table-comparison-title" data-i18n="加入比较">加入比较</h3><button id="table-comparison-close" class="btn" type="button" data-i18n="关闭">关闭</button></div>
+      <form id="table-comparison-form" class="modal-body">
+        <p id="table-comparison-source"></p>
+        <fieldset id="table-comparison-fields" class="cmp-fields">
+          <label><span data-i18n="目标课题库">目标课题库</span><select id="table-comparison-scope" required></select></label>
+          <label><span data-i18n="选择比较记录">选择比较记录</span><select id="table-comparison-target"></select></label>
+          <div id="table-comparison-new" class="cmp-fields">
+            <label><span data-i18n="研究问题">研究问题</span><input id="table-comparison-question" maxlength="2000"></label>
+            <label><span data-i18n="另一篇参与比较的论文">另一篇参与比较的论文</span><select id="table-comparison-peer"></select></label>
+          </div>
+          <label><span data-i18n="比较列名">比较列名</span><input id="table-comparison-label" maxlength="128" required></label>
+          <div class="cmp-contrast-fields">
+            <label><span data-i18n="实验组（分子）">实验组（分子）</span><input id="table-comparison-test-group" maxlength="128"></label>
+            <label><span data-i18n="参照组（分母）">参照组（分母）</span><input id="table-comparison-reference-group" maxlength="128"></label>
+            <label><span data-i18n="已核对的指标尺度">已核对的指标尺度</span><select id="table-comparison-scale">
+              <option value="unknown" data-i18n="待核对">待核对</option><option value="log2fc">log2FC</option><option value="fc">FC</option>
+              <option value="percentage" data-i18n="百分比">百分比</option><option value="other" data-i18n="其他尺度">其他尺度</option>
+            </select></label>
+          </div>
+        </fieldset>
+        <p id="table-comparison-status" role="status"></p>
+        <div class="cmp-footer">
+          <button type="submit" class="btn btn-primary" id="table-comparison-save" data-i18n="加入比较">加入比较</button>
+          <button type="button" class="btn" id="table-comparison-reload" data-i18n="刷新比较列表" hidden>刷新比较列表</button>
+          <button type="button" class="btn" id="table-comparison-view" data-i18n="打开比较" hidden>打开比较</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="table-source-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="table-source-title" aria-describedby="table-source-location" hidden>
+    <div class="modal">
+      <div class="modal-head"><h3 id="table-source-title"></h3><button id="table-source-close" class="btn" type="button" data-i18n="关闭">关闭</button></div>
+      <div class="modal-body">
+        <p id="table-source-location"></p>
+        <div class="table-source-scroll" tabindex="0"><table id="table-source-grid" aria-labelledby="table-source-location"></table></div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-title" hidden>
     <div class="modal project-modal">
       <div class="modal-head">
@@ -274,6 +326,7 @@
         <button class="btn" id="project-new" type="button" data-i18n="新建课题库">新建课题库</button>
       </div>
       <nav class="project-sections" aria-label="课题库工具" data-i18n-aria-label="课题库工具">
+        <button class="btn" type="button" data-project-tab="digest" data-i18n="库总览">库总览</button>
         <button class="btn" type="button" data-project-tab="papers" data-i18n="文献归集">文献归集</button>
         <button class="btn" type="button" data-project-tab="compare" data-i18n="跨篇比较">跨篇比较</button>
         <button class="btn" type="button" data-project-tab="pubmed" data-i18n="PubMed 检索">PubMed 检索</button>
@@ -282,7 +335,7 @@
       </nav>
       <p id="project-status" class="project-status" role="status" hidden></p>
       <div class="modal-body project-body">
-        <div id="project-papers"></div><div id="project-compare" hidden></div><div id="project-pubmed" hidden></div><div id="project-downloads" hidden></div><div id="project-figures" hidden></div>
+        <div id="project-digest" hidden></div><div id="project-papers"></div><div id="project-compare" hidden></div><div id="project-pubmed" hidden></div><div id="project-downloads" hidden></div><div id="project-figures" hidden></div>
       </div>
     </div>
   </div>
@@ -359,6 +412,14 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="bulk-tag-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-tag-title" hidden>
+    <div class="modal"><div class="modal-head"><h3 id="bulk-tag-title" data-i18n="批量标签">批量标签</h3><button id="bulk-tag-close" class="btn btn-icon btn-ghost" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
+      <form id="bulk-tag-form"><div class="modal-body"><p id="bulk-tag-count"></p><p id="bulk-tag-warning" class="hint"></p><label class="field" for="bulk-tag-value"><span data-i18n="要添加的标签">要添加的标签</span><input type="text" id="bulk-tag-value" maxlength="40" autocomplete="off"></label><p role="status" id="bulk-tag-status"></p></div>
+        <div class="modal-foot"><button type="button" id="bulk-tag-undo" class="btn" hidden>撤销上次添加</button><div class="spacer"></div><button type="submit" id="bulk-tag-apply" class="btn btn-primary" data-i18n="为当前结果加标签">为当前结果加标签</button></div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="input-modal" role="dialog" aria-modal="true" aria-labelledby="input-title" aria-describedby="input-description" hidden>
     <div class="modal"><div class="modal-head"><h3 id="input-title"><span data-i18n="图表观察">图表观察</span></h3><button id="input-close" class="btn btn-icon btn-ghost" aria-label="关闭" data-i18n-aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button></div>
       <div class="modal-body"><p class="hint" id="input-description"></p><textarea id="input-value" rows="6" aria-labelledby="input-title" aria-describedby="input-description"></textarea></div>
@@ -381,6 +442,7 @@
   <script src="evidence.js?v=20261105-v0110"></script>
   <script src="comparison-draft.js"></script>
   <script src="comparisons.js"></script>
+  <script src="table-comparison.js"></script>
   <script src="remote-supplements.js"></script>
   <script src="resources.js?v=20261105-v0110"></script>
   <script src="figure-deck.js"></script>
@@ -391,9 +453,12 @@
   <script src="saved-pubmed.js"></script>
   <script src="fulltext-downloads.js"></script>
   <script src="identifier-import.js"></script>
+  <script src="digest.js"></script>
   <script src="project-libraries.js"></script>
+  <script src="bulk-tags.js?v=20261128"></script>
   <script src="library-search.js?v=20261105-v0110"></script>
   <script src="reading-nav.js?v=20261105-v0110"></script>
+  <script src="pdf-find.js"></script>
   <script src="note-sources.js?v=20261105-v0110"></script>
   <dialog id="report-review-dialog"><header><h2></h2><button class="btn" type="button" data-close-review data-i18n="关闭复核">关闭复核</button></header><p role="status" aria-live="polite"></p><div class="review-body"></div></dialog>
   <script src="report-review.js"></script>

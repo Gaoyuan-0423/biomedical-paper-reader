@@ -17,7 +17,30 @@
       '<p class="hint library-search-dirty"' + (dirty() && state.searched ? '' : ' hidden') + ">" + ui("搜索条件已修改，请点击搜索更新结果。") + "</p>" +
       (state.warnings.length ? "<details class=\"library-search-warnings\"><summary>" + ui('部分材料未能检索 · {count} 项', { count: state.warningCount }) + "</summary>" + state.warnings.map(w => '<p><strong>' + esc(w.paper_title) + '</strong>：' + ui(w.message) + '</p>').join('') + (state.warningCount > state.warnings.length ? "<p>" + ui('其余 {count} 项未展开；可检查材料后重新搜索。', { count: state.warningCount - state.warnings.length }) + "</p>" : '') + '</details>' : '') +
       "<section class=\"library-search-results\" aria-label=\"正文与笔记搜索结果\" data-i18n-aria-label=\"正文与笔记搜索结果\">" + (state.items.length ? state.items.map((item, index) => '<article class="library-search-result"><div class="library-search-result-meta">' + (item.kind === 'notes' ? ui('已保存笔记') : (item.document_id === 'main' ? ui('正文') : esc(item.source_name || 'PDF')) + ui(' · 第 {page} 页', { page: item.page })) + '</div><button type="button" class="library-search-title" data-library-search-action="open" data-library-search-index="' + index + '"' + (state.loading || state.opening || dirty() ? ' disabled' : '') + '>' + esc(item.paper_title) + '</button><p class="library-search-snippet">' + esc(item.snippet) + '</p></article>').join('') : !state.loading ? '<p class="library-search-empty">' + (state.searched ? ui("没有找到匹配内容。请换一个短语，或检查搜索范围。") : ui("输入至少两个字符后搜索。结果只来自已保存的内容。")) + '</p>' : '') + '</section>';
-    footer.innerHTML = '<span class="library-search-summary" role="status">' + (state.opening ? ui("正在打开来源…") : state.items.length ? ui('已显示 {count} 条结果', { count: state.items.length }) : '') + '</span>' + (state.more ? '<button class="btn" type="button" data-library-search-action="more"' + (state.loading || state.opening || dirty() ? ' disabled' : '') + ">" + ui("加载更多") + "</button>" : '') + "<button class=\"btn\" type=\"button\" data-library-search-action=\"close\">" + ui("关闭") + "</button>";
+    const bulk = state.items.length && window.BioBulkTags ? '<button type="button" class="btn" data-library-search-action="bulk-tags"' + (dirty() || state.loading || state.opening ? ' disabled' : '') + '>' + ui('为当前结果加标签') + '</button>' : '';
+    footer.innerHTML = bulk + '<span class="library-search-summary" role="status">' + (state.opening ? ui("正在打开来源…") : state.items.length ? ui('已显示 {count} 条结果', { count: state.items.length }) : '') + '</span>' + (state.more ? '<button class="btn" type="button" data-library-search-action="more"' + (state.loading || state.opening || dirty() ? ' disabled' : '') + ">" + ui("加载更多") + "</button>" : '') + "<button class=\"btn\" type=\"button\" data-library-search-action=\"close\">" + ui("关闭") + "</button>";
+  }
+  async function tagResults() {
+    if (!state.items.length || dirty() || state.loading || state.opening) return;
+    const version = state.version;
+    state.opening = true; state.error = ''; render();
+    try {
+      const params = new URLSearchParams({q:state.searched, scope:state.searchedScope, library_id:state.libraryId, papers_only:'true'});
+      const result = await hooks.request('GET', '/api/library/search?' + params);
+      if (!state.visible || version !== state.version) return;
+      const scope = state.libraryId;
+      close();
+      window.BioBulkTags.open(result.paper_ids, scope, result.warning_count, () => {
+        state.visible = true;
+        hooks.showModal('library-search-modal');
+        render();
+        footer.querySelector('[data-library-search-action="bulk-tags"]')?.focus();
+      });
+    } catch (error) {
+      if (state.visible && version === state.version) state.error = message('搜索失败：{detail}', {detail:error.message});
+    } finally {
+      if (state.visible && version === state.version) { state.opening = false; render(); }
+    }
   }
   async function search(more = false) {
     if (state.opening || more && (state.loading || !state.more || dirty())) return;
@@ -64,6 +87,7 @@
       state.query = event.target.value; state.version++; state.loading = false; state.error = '';
       // Keep the input node and caret while editing; actions check dirty state.
       panel.querySelectorAll?.('[data-library-search-action="open"]').forEach(button => { button.disabled = dirty(); });
+      const tags = footer.querySelector('[data-library-search-action="bulk-tags"]'); if (tags) tags.disabled = dirty();
       const more = footer.querySelector('[data-library-search-action="more"]'); if (more) more.disabled = dirty();
       panel.querySelector('.library-search-status')?.remove?.();
       panel.querySelector('.library-search-error')?.remove?.();
@@ -72,7 +96,7 @@
     });
     panel.addEventListener('change', event => { if (event.target.id === 'library-search-scope' && !state.opening && ['all', 'pdf', 'notes'].includes(event.target.value)) { state.scope = event.target.value; state.version++; state.loading = false; state.error = ''; render(); } });
     panel.addEventListener('submit', event => { if (event.target.id === 'library-search-form') { event.preventDefault(); return search(); } });
-    modal.addEventListener('click', event => { const button = event.target.closest('[data-library-search-action]'); if (!button || button.disabled) return; const action = button.dataset.librarySearchAction; if (action === 'close') close(); else if (action === 'more') return search(true); else if (action === 'open') return openResult(Number(button.dataset.librarySearchIndex)); });
+    modal.addEventListener('click', event => { const button = event.target.closest('[data-library-search-action]'); if (!button || button.disabled) return; const action = button.dataset.librarySearchAction; if (action === 'close') close(); else if (action === 'bulk-tags') return tagResults(); else if (action === 'more') return search(true); else if (action === 'open') return openResult(Number(button.dataset.librarySearchIndex)); });
   }
   window.BioLibrarySearch = { init, open, close, isOpen: () => state.visible };
 })();

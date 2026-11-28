@@ -55,3 +55,18 @@
   .cmp-review-table { border-bottom:1px solid var(--border); }
   .cmp-mobile-col { display:block; margin-bottom:4px; }
 }
+
+#table-comparison-form label {display:grid;gap:5px}
+#table-comparison-form select,#table-comparison-form input {width:100%;min-width:0}
+#table-source-modal {z-index:55}
+.cmp-measurements {width:100%;border-collapse:collapse;text-align:start}
+.cmp-measurements th,.cmp-measurements td {padding:8px;border:1px solid var(--border);vertical-align:top}
+.cmp-measurements thead {background:var(--surface-subtle)}
+.cmp-measurements td small {display:block;color:var(--muted)}
+.cmp-measurements button {white-space:normal;text-align:start}
+.cmp-measurements thead small,.cmp-measurements thead label {display:block;font-size:.85em;font-weight:normal;margin-top:4px}
+.cmp-measurements select {max-width:100%}
+.cmp-directed {margin-top:4px;color:var(--primary-ink)}
+.cmp-contrast-fields {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(155px,100%),1fr));gap:9px}
+.cmp-contrast-editor {display:grid;gap:6px;max-width:280px;padding:8px;background:var(--surface-subtle)}
+.cmp-contrast-editor input,.cmp-contrast-editor select {width:100%;min-width:0}

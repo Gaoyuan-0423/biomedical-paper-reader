@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/backend"
 PORT="${PORT:-8765}"
-if ! python3 -c "import fastapi, uvicorn, pypdf, httpx, multipart" 2>/dev/null; then
+if ! python3 -c "import fastapi, uvicorn, pypdf, httpx, multipart, openpyxl, xlfmt, defusedxml" 2>/dev/null; then
   echo "Installing backend dependencies..."
   python3 -m pip install -r requirements.txt
 fi

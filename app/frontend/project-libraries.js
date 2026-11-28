@@ -122,15 +122,23 @@
   }
   function close() {
     if (!visible || !canNavigate()) return false;
-    draft = null; visible = false; hooks.hideModal('project-modal'); window.BioEvidence?.refreshComparison?.(); return true;
+    draft = null; visible = false; window.BioDigest?.close(); hooks.hideModal('project-modal'); window.BioEvidence?.refreshComparison?.(); return true;
   }
   function activePapers() { return scoped(hooks.papers()).filter(p => !p.schema_incompatible); }
   function renderSection() {
     status();
+    window.BioDigest?.close();
+    $('project-modal').classList.toggle('show-digest', section === 'digest');
     for (const el of document.querySelectorAll('[data-project-tab]')) {
       const on = el.dataset.projectTab === section;
       el.setAttribute('aria-pressed', String(on));
       $('project-' + el.dataset.projectTab).hidden = !on;
+    }
+    if (section === 'digest') {
+      return window.BioDigest.open($('project-digest'), active, {
+        request:hooks.request, openPaper:hooks.openDigestPaper, openSource:hooks.openSource, openCitation:hooks.openDigestCitation,
+        exportHtml:hooks.exportDigest, leave:close,
+      });
     }
     if (section === 'papers') { renderPapers(); return; }
     const papers = activePapers();
@@ -141,7 +149,7 @@
     }
     if (section === 'downloads') { window.BioFulltext.project($('project-downloads'), active, papers); return; }
     if (section === 'compare') {
-      window.BioCompare.open($('project-compare'), { libraryId: active, papers, openSource: async (...source) => {
+      return window.BioCompare.open($('project-compare'), { libraryId: active, papers, openTableSource:hooks.openTableSource, openSource: async (...source) => {
         if (await hooks.openSource(...source)) close();
       } });
     } else {
@@ -269,9 +277,30 @@
       return '';
     } catch (err) { return t('论文已导入全部文献，但未加入课题库') + ' · ' + t(err.message); }
   }
+  function measurementScopes(paperId) {
+    return [{id:'all',name:t('全部文献')}, ...libraries.filter(lib => !lib.archived && lib.paper_ids.includes(paperId))];
+  }
+  async function openComparison(scope,id) {
+    if (!canNavigate()) return;
+    if (scope !== active) switchScope(scope);
+    if (scope !== active) return;
+    await open();
+    section = 'compare';
+    await renderSection();
+    if (visible && active === scope && section === 'compare') await window.BioCompare.chooseSaved(scope,id);
+  }
   function init(options) {
     hooks = options;
-    $('open-projects').onclick = open; $('project-close').onclick = close;
+    $('open-digest').onclick = () => {
+      if (!canNavigate()) return;
+      draft = null; section = 'digest';
+      if (visible) renderSection(); else void open();
+    };
+    $('open-projects').onclick = () => {
+      if (!visible && section === 'digest') section = 'papers';
+      return open();
+    };
+    $('project-close').onclick = close;
     $('project-modal').onclick = e => { if (e.target === e.currentTarget) close(); };
     for (const el of [$('project-scope'), $('project-switch')]) el.onchange = () => switchScope(el.value);
     $('project-new').onclick = () => {
@@ -284,5 +313,5 @@
     };
     return refresh(true).catch(err => hooks.toast(t(err.message), 'error'));
   }
-  window.BioProjects = { init, open, close, activeId: () => active, scoped, attachImported, canExit, hasUnsaved, refresh };
+  window.BioProjects = { init, open, close, openComparison, measurementScopes, activeId: () => active, scoped, attachImported, canExit, hasUnsaved, refresh };
 })();

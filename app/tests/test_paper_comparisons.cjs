@@ -52,7 +52,7 @@ function harness({preview,additionalMaterials = [],locale='zh-CN'} = {}) {
   const open = id => ui.open(root,{libraryId:id,papers,openSource:(...args)=>jumps.push(args)});
   function el(attr,{value='',id=A,checked=false,index='0',review='',col='paired',cohort='',sourceKey=src.key}={}) {
     const tr = {dataset:{row:id,draftPaper:id,draftCol:col,draftCohort:cohort},querySelector:selector=>selector==='[data-candidate]'?{value:sourceKey}:child(selector)};
-    return {value,checked,dataset:{paper:id,drop:index,jump:index,draftColumn:col,draftValue:index,review,index},hasAttribute:name=>name===attr,
+    return {value,checked,dataset:{paper:id,drop:index,jump:index,draftColumn:col,draftValue:index,viewDirection:col,review,index},hasAttribute:name=>name===attr,
       closest(selector){if(selector==='button') return this;if(selector==='details') return {open:true};return tr;}};
   }
   const input = (attr,params) => root.oninput({target:el(attr,params)});
@@ -60,6 +60,35 @@ function harness({preview,additionalMaterials = [],locale='zh-CN'} = {}) {
   const click = (attr,params) => root.onclick({target:el(attr,params)});
   return {ui,root,child,calls,jumps,saved,open,input,change,click,markStale:()=>{invalidSource=true;}};
 }
+
+test('direction view uses unrounded original values, keeps legacy or incompatible data unconverted',async()=>{
+  const h = harness({locale:'en'}), label = 'Fold change';
+  const definition = {test_group:'treated',reference_group:'control',scale:'log2fc'};
+  function cell(id, value, definition, display_value) {
+    return {id,field_label:label,contrast_definition:definition,
+      source:{identifier:'FLC',column_name:'log2FC',value,display_value,document_name:'Table S2.xlsx',sheet:'DEGs',row:8}};
+  }
+  const entries = [
+    cell('hidden','-1.002000000000000001E-307',definition,''),
+    cell('threshold','<0.03',definition),
+    cell('zero','-0.00',definition),
+    cell('different','2.5',{...definition,test_group:'control A'}),
+    {...cell('legacy','-5',undefined),direction:'treated vs control'},
+    cell('partial','-3',{...definition,reference_group:''}),
+    cell('scaled','0.25',{...definition,scale:'percentage'},'25%')
+  ];
+  const rows = [A,B].map((paper_id,i) => ({paper_id, sources:[], cells:[], note:'', relation:'unassessed', table_measurements:i ? [] : entries}));
+  h.saved.set('/api/comparisons/all/'+L,{id:L, revision:1, question:'Scale', rows});
+  await h.open('all'); await h.change('data-comparisons',{value:L});
+  assert.doesNotMatch(h.root.innerHTML,/data-directed-value/);
+  assert.match(h.root.innerHTML,/Value hidden in source table/);
+  assert.match(h.root.innerHTML,/25%/);
+  await h.change('data-view-direction',{col:label,value:JSON.stringify(['control','treated'])});
+  const html = h.root.innerHTML;
+  assert.deepEqual([...html.matchAll(/data-directed-value>([^<]+)/g)].map(m=>m[1]),['+1.002000000000000001E-307','0.00']);
+  for (const text of ['Cannot convert this value','Groups differ from the selected contrast','Scale unverified',
+    'treated vs control','Groups unverified','Original value only for this scale','Different scales in this column']) assert.ok(html.includes(text),text);
+});
 
 test('comparison keeps unsaved scoped drafts and checks the exact source before any jump',async()=>{
   const h = harness();
@@ -205,4 +234,23 @@ test('explicit PDF fallback displays the examined range, scanned pages and disti
   assert.match(h.root.innerHTML,/PDF 补查原句/);
   await h.click('data-review',{id:A,col:'enrolled',review:'source'});
   assert.equal(h.jumps.length,1);
+});
+
+test('table picker defaults to the selected saved comparison and protects local edits',async()=>{
+  const h = harness();
+  await h.open('all');
+  assert.equal(h.ui.selectedId('all'),null);
+  h.input('data-question',{value:'A comparison with local edits'});
+  assert.equal(h.ui.selectedId('all'),'unsaved');
+  for(const id of [A,B]) await h.change('data-paper',{id,checked:true});
+  await h.click('data-save');
+  const record = [...h.saved.values()][0];
+  assert.equal(h.ui.selectedId('all'),record.id);
+  assert.equal(h.ui.canAttachTable('all',record.id),true);
+  h.input('data-synthesis',{value:'Do not overwrite my edits'});
+  assert.equal(h.ui.canAttachTable('all',record.id),false);
+  assert.equal(h.ui.canAttachTable('all','d'.repeat(32)),true);
+  h.ui.receivedTable('all',{...record,question:'Changed in another view'});
+  assert.ok(!h.root.innerHTML.includes('Changed in another view'));
+  assert.equal(h.ui.hasUnsaved('all'),true);
 });

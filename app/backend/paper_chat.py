@@ -30,10 +30,29 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
 
 
-def _valid_source(source):
-    return (isinstance(source, dict) and
-            isinstance(source.get('id'), str) and re.fullmatch(r'S[1-8]', source['id']) and
-            isinstance(source.get('document_id'), str) and
+def valid_conditions(items):
+    return (isinstance(items, list) and len(items) <= 16 and
+            all(isinstance(c, dict) and type(c.get('column')) is int and 1 <= c['column'] <= 512 and
+                isinstance(c.get('name'), str) and 0 < len(c['name']) <= 128 and
+                isinstance(c.get('value'), str) and 0 < len(c['value']) <= 256 for c in items) and
+            len({c['column'] for c in items}) == len(items))
+
+
+def valid_source(source):
+    if not isinstance(source, dict) or not re.fullmatch(r'S[1-8]', str(source.get('id', ''))):
+        return False
+    if source.get('kind') == 'table':
+        return (isinstance(source.get('document_id'), str) and
+                re.fullmatch(r'[0-9a-f]{32}(?:[0-9a-f]{32})?', source['document_id']) and
+                isinstance(source.get('revision'), str) and re.fullmatch(r'[0-9a-f]{64}', source['revision']) and
+                all(type(source.get(key)) is int and source[key] >= 1
+                    for key in ('header_row', 'row', 'column', 'identifier_column')) and
+                source['header_row'] < source['row'] and valid_conditions(source.get('conditions', [])) and
+                ('display_value' not in source or
+                 isinstance(source['display_value'], str) and len(source['display_value']) <= 1024) and
+                all(isinstance(source.get(key), str) and source[key]
+                    for key in ('document_name', 'sheet', 'column_name', 'identifier', 'value', 'quote')))
+    return (isinstance(source.get('document_id'), str) and
             (source['document_id'] == 'main' or re.fullmatch(r'[0-9a-f]{32}', source['document_id'])) and
             type(source.get('page')) is int and 1 <= source['page'] <= 600 and
             isinstance(source.get('quote'), str) and 0 < len(source['quote']) <= 2400 and
@@ -62,8 +81,18 @@ def load_history(directory):
                     not isinstance(message.get('content'), str) or len(message['content']) > MAX_OUTPUT or
                     not isinstance(message.get('created_at'), str) or not isinstance(message.get('updated_at'), str) or
                     not isinstance(message.get('sources'), list) or len(message['sources']) > 8 or
-                    not all(_valid_source(source) for source in message['sources']) or
+                    not all(valid_source(source) for source in message['sources']) or
                     len({source['id'] for source in message['sources']}) != len(message['sources'])):
+                raise ValueError()
+            if 'table_candidates' in message:
+                choices = message['table_candidates']
+                if (message['role'] != 'assistant' or message['sources'] or not isinstance(choices, list)
+                        or not 1 <= len(choices) <= 8 or not all(valid_source(c) and c.get('kind') == 'table' for c in choices)):
+                    raise ValueError()
+            if 'selected_table_candidate' in message and (
+                    type(message['selected_table_candidate']) is not int or not 1 <= message['selected_table_candidate'] <= 8 or
+                    message['role'] != 'assistant' or message['status'] != 'completed' or len(message['sources']) != 1 or
+                    message['sources'][0].get('kind') != 'table'):
                 raise ValueError()
             seen.add(message['id'])
         return data['messages']
@@ -104,16 +133,34 @@ def history_page(messages, limit, before):
     return {'messages': messages[start:end], 'total': len(messages), 'has_more': start > 0}
 
 
-def new_messages(body, sources):
+def new_messages(body, sources, *, table_lookup=False):
     timestamp = now()
     user = {'id': uuid.uuid4().hex, 'role': 'user', 'content': body.message.strip(), 'status': 'completed',
             'sources': [], 'created_at': timestamp, 'updated_at': timestamp,
-            'action': body.action, 'document_id': body.document_id, 'page': body.page, 'selection': body.selection}
-    user['document_name'] = next((source['document_name'] for source in sources if source['document_id'] == body.document_id),
-                                 '正文' if body.document_id == 'main' else '补充材料')
+            'action': body.action}
+    if table_lookup:
+        user['context_kind'] = 'table'
+    else:
+        user.update(document_id=body.document_id, page=body.page, selection=body.selection)
+        user['document_name'] = next((source['document_name'] for source in sources if source['document_id'] == body.document_id),
+                                     '正文' if body.document_id == 'main' else '补充材料')
     assistant = {'id': uuid.uuid4().hex, 'role': 'assistant', 'content': '', 'status': 'pending',
                  'sources': sources, 'created_at': timestamp, 'updated_at': timestamp}
     return user, assistant
+
+
+def table_choice(messages, message_id, choice):
+    message = next((m for m in messages if m['id'] == message_id and m['role'] == 'assistant'), None)
+    if not message or message['status'] != 'completed' or not 1 <= choice <= 8:
+        raise HTTPException(404, '这条回答的候选项不存在')
+    if 'selected_table_candidate' in message:
+        if message['selected_table_candidate'] != choice:
+            raise HTTPException(409, '这条历史回答已选择了其他行，请重新提问')
+        return message, message['sources'][0]
+    candidates = message.get('table_candidates', [])
+    if choice > len(candidates):
+        raise HTTPException(404, '这条回答的候选项不存在')
+    return message, candidates[choice - 1]
 
 
 def update_message(directory, message_id, content, status, error=''):

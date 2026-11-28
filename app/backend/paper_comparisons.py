@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, StringConstraints, ValidationError, model_validator
 
 from chat_sources import file_revision, valid_bbox
 from comparison_drafts import Column, ReviewedCell
+from paper_chat import valid_source
 from sample_provenance import FIELD_LABELS
 from figures import FigureStorageError, crop_source_changed, load_figures
 from paper_resources import load_resources, resource_accessions
@@ -18,6 +19,26 @@ from reading_workflow import SidecarError, atomic_json, load_evidence, public_ev
 
 Id = Annotated[str, Field(pattern=r'^[0-9a-f]{32}$')]
 Reference = Annotated[str, Field(max_length=160, min_length=1)]
+Digest = Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')]
+GroupName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)]
+
+
+class MeasurementContrast(BaseModel):
+    test_group: GroupName = ''
+    reference_group: GroupName = ''
+    scale: Literal['unknown', 'log2fc', 'fc', 'percentage', 'other'] = 'unknown'
+
+    @model_validator(mode='after')
+    def distinct_groups(self):
+        if self.test_group and self.test_group == self.reference_group:
+            raise ValueError('实验组和参照组应不同。')
+        return self
+
+
+class MeasurementRef(BaseModel):
+    id: Digest
+    snapshot: Digest
+    contrast_definition: MeasurementContrast | None = None
 
 
 class ComparisonRow(BaseModel):
@@ -28,18 +49,115 @@ class ComparisonRow(BaseModel):
     note: str = Field(default='', max_length=16000)
     references: list[Reference] = Field(default_factory=list, max_length=100)
     cells: list[ReviewedCell] = Field(default_factory=list, max_length=200)
+    table_measurement_refs: list[MeasurementRef] | None = Field(default=None, max_length=200)
 
 
 class ComparisonIn(BaseModel):
     revision: int = Field(ge=0, strict=True)
     question: str = Field(min_length=1, max_length=2000)
     synthesis: str = Field(default='', max_length=32000)
+    copy_measurements_from: Id | None = None
     columns: list[Column] = Field(default_factory=list, max_length=4)
     rows: list[ComparisonRow] = Field(min_length=2, max_length=100)
 
 
+class MeasurementIn(BaseModel):
+    revision: int = Field(ge=1, strict=True)
+    paper_id: Id
+    message_id: Id
+    source_id: str = Field(pattern=r'^S[1-8]$')
+    add_paper: bool = Field(default=False, strict=True)
+    direction: str = Field(default='', max_length=256)
+    field_label: str = Field(default='', max_length=128)
+    contrast_definition: MeasurementContrast | None = None
+
+
 def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def measurement_id(paper_id, source):
+    return _digest([paper_id, source['document_id'], source['revision'], source['sheet'],
+                    source['row'], source['column']])
+
+
+def measurement_snapshot(item):
+    return _digest({key: value for key, value in item.items() if key != 'snapshot'})
+
+
+def valid_measurements(row):
+    items = row.get('table_measurements', [])
+    if not isinstance(items, list) or len(items) > 200:
+        return False
+    seen = set()
+    for item in items:
+        source = item['source']
+        if 'contrast_definition' in item:
+            MeasurementContrast.model_validate(item['contrast_definition'])
+        if (not valid_source(source) or source.get('kind') != 'table'
+                or item['paper_id'] != row['paper_id'] or item['source_id'] != source['id']
+                or not re.fullmatch(r'[0-9a-f]{32}', item['message_id'])
+                or item['id'] != measurement_id(row['paper_id'], source) or item['id'] in seen
+                or not isinstance(item['direction'], str) or len(item['direction']) > 256
+                or not isinstance(item['field_label'], str) or not item['field_label'].strip()
+                or (len(item['field_label']) > 128 and item['field_label'] != source['column_name'])
+                or item.get('snapshot') != measurement_snapshot(item)):
+            return False
+        seen.add(item['id'])
+    return True
+
+
+def comparison_row(record, paper_id, required=True):
+    row = next((r for r in record['rows'] if r['paper_id'] == paper_id), None)
+    if required and row is None:
+        raise HTTPException(404, '当前比较中没有这篇论文。')
+    return row
+
+
+def adopt_measurement(path, record, body, source, paper_title):
+    """Called with storage_lock and freshly loaded state after rechecking the original cell."""
+    row = comparison_row(record, body.paper_id, required=not body.add_paper)
+    if row is None:
+        if len(record['rows']) >= 100:
+            raise HTTPException(422, '每张比较表最多包含 100 篇论文。')
+        row = ComparisonRow(paper_id=body.paper_id).model_dump(exclude={'table_measurement_refs'})
+        row.update(title=paper_title, sources=[])
+        record['rows'].append(row)
+    items = row.setdefault('table_measurements', [])
+    key = measurement_id(body.paper_id, source)
+    prior = next((item for item in items if item['id'] == key), None)
+    label = body.field_label.strip() or source['column_name']
+    direction = body.direction.strip()
+    definition = body.contrast_definition.model_dump() if body.contrast_definition else None
+    if prior:
+        if 'field_label' not in body.model_fields_set:
+            label = prior['field_label']
+        if 'direction' not in body.model_fields_set:
+            direction = prior['direction']
+        if definition is None:
+            definition = prior.get('contrast_definition')
+    if prior and prior['field_label'] == label and prior['direction'] == direction and prior.get('contrast_definition') == definition:
+        return record
+    if record['revision'] != body.revision:
+        raise HTTPException(409, '比较记录已在其他窗口更新，请重新打开后合并修改。')
+    if prior:
+        prior.update(field_label=label, direction=direction)
+        if definition is not None:
+            prior['contrast_definition'] = definition
+        prior['snapshot'] = measurement_snapshot(prior)
+    else:
+        if len(items) >= 200:
+            raise HTTPException(422, '每篇论文最多采纳 200 个补充表数值。')
+        item = dict(id=key, paper_id=body.paper_id, message_id=body.message_id,
+                    source_id=body.source_id, direction=direction, field_label=label, source=source)
+        if definition is not None:
+            item['contrast_definition'] = definition
+        item['snapshot'] = measurement_snapshot(item)
+        items.append(item)
+    record.update(version=3, revision=record['revision'] + 1, updated_at=datetime.now(timezone.utc).isoformat())
+    record.pop('request_digest', None)
+    atomic_json(path, record)
+    return record
 
 
 def make_source(kind, identity, document, page, label, text='', figure_id='', status='', available=True, bbox=None, figure_label=''):
@@ -143,13 +261,15 @@ def load(path):
         raise HTTPException(404, '比较记录不存在')
     try:
         record = json.loads(path.read_text('utf-8'))
-        if record['version'] not in (1, 2) or record['id'] != path.stem:
+        if record['version'] not in (1, 2, 3) or record['id'] != path.stem:
             raise ValueError()
         parsed = ComparisonIn.model_validate(record)
         if parsed.revision < 1 or not record['updated_at'] or len({r.paper_id for r in parsed.rows}) != len(parsed.rows):
             raise ValueError()
         for row in record['rows']:
             if not isinstance(row['title'], str) or {s['key'] for s in row['sources']} != set(row['references']):
+                raise ValueError()
+            if not valid_measurements(row) or (row.get('table_measurements') and record['version'] != 3):
                 raise ValueError()
             cells = row.get('cells', [])
             if (len({(c['cohort'], c['column']) for c in cells}) != len(cells)
@@ -160,11 +280,14 @@ def load(path):
         raise HTTPException(409, '比较记录无法读取，原文件已保留。') from exc
 
 
-def summaries(root, library_id):
+def summaries(root, library_id, paper_id=None):
     result = []
     for path in scope_dir(root, library_id).glob('*.json'):
         record = load(path)
-        result.append({key: record[key] for key in ('id', 'question', 'updated_at', 'revision')})
+        if paper_id is None or any(row['paper_id'] == paper_id for row in record['rows']):
+            summary = {key: record[key] for key in ('id', 'question', 'updated_at', 'revision')}
+            summary['paper_ids'] = [row['paper_id'] for row in record['rows']]
+            result.append(summary)
     return sorted(result, key=lambda item: (item['updated_at'], item['id']), reverse=True)
 
 
@@ -173,9 +296,17 @@ def request_digest(body):
     data = body.model_dump()
     if 'columns' not in body.model_fields_set:
         data.pop('columns')
+    if 'copy_measurements_from' not in body.model_fields_set:
+        data.pop('copy_measurements_from')
     for row, saved in zip(body.rows, data['rows']):
         if 'cells' not in row.model_fields_set:
             saved.pop('cells')
+        if 'table_measurement_refs' not in row.model_fields_set:
+            saved.pop('table_measurement_refs')
+        elif row.table_measurement_refs:
+            for ref, dumped in zip(row.table_measurement_refs, saved['table_measurement_refs']):
+                if 'contrast_definition' not in ref.model_fields_set:
+                    dumped.pop('contrast_definition')
     return _digest(data)
 
 
@@ -223,6 +354,25 @@ def reviewed_cells(row, old, current, verified):
     return result
 
 
+def selected_measurements(row, stored_row, copying):
+    items = stored_row.get('table_measurements', [])
+    if row.table_measurement_refs is None:
+        if copying and items:
+            raise HTTPException(409, '另存时请确认要复制的补充表数值。')
+        return items
+    by_id = {item['id']: item for item in items}
+    selected = []
+    for ref in row.table_measurement_refs:
+        item = by_id.pop(ref.id, None)
+        if not item or item['snapshot'] != ref.snapshot:
+            raise HTTPException(409, '所选补充表数值已变化，请重新打开比较后核对。')
+        if ref.contrast_definition is not None:
+            item = dict(item, contrast_definition=ref.contrast_definition.model_dump())
+            item['snapshot'] = measurement_snapshot(item)
+        selected.append(item)
+    return selected
+
+
 def save(root, library_id, comparison_id, body, allowed_ids, get_material, verified_cells=None):
     path = record_path(root, library_id, comparison_id)
     previous = load(path) if path.exists() else {}
@@ -234,6 +384,12 @@ def save(root, library_id, comparison_id, body, allowed_ids, get_material, verif
     if not body.question.strip() or len({r.paper_id for r in body.rows}) != len(body.rows):
         raise HTTPException(422, '请填写研究问题，并选择至少两篇不同的论文。')
     old_rows = {r['paper_id']: r for r in previous.get('rows', [])}
+    stored_rows = old_rows
+    if body.copy_measurements_from:
+        if previous or body.revision != 0 or comparison_id == body.copy_measurements_from:
+            raise HTTPException(422, '只能将已有比较的表值另存到新比较。')
+        origin = load(record_path(root, library_id, body.copy_measurements_from))
+        stored_rows = {row['paper_id']: row for row in origin['rows']}
     columns = body.columns if 'columns' in body.model_fields_set else previous.get('columns', [])
     if len(set(columns)) != len(columns):
         raise HTTPException(422, '比较列不可重复选择。')
@@ -256,9 +412,16 @@ def save(root, library_id, comparison_id, body, allowed_ids, get_material, verif
                 raise HTTPException(409, '所选证据或原文已变更，请刷新材料后重新选择。')
             sources.append(source)
         cells = reviewed_cells(row, old, current, verified)
-        rows.append(dict(row.model_dump(), title=current.get('title') or old['title'], sources=sources, cells=cells))
-    # Older binaries reject version 2 instead of silently dropping accepted cells.
+        saved_row = dict(row.model_dump(exclude={'table_measurement_refs'}),
+                         title=current.get('title') or old['title'], sources=sources, cells=cells)
+        items = selected_measurements(row, stored_rows.get(row.paper_id, {}), bool(body.copy_measurements_from))
+        if items:
+            saved_row['table_measurements'] = items
+        rows.append(saved_row)
+    # Old binaries reject records with data they cannot preserve when editing.
     version = 2 if columns or any(row['cells'] for row in rows) else 1
+    if any(row.get('table_measurements') for row in rows):
+        version = 3
     record = dict(version=version, id=comparison_id, revision=body.revision + 1, question=body.question.strip(),
                   synthesis=body.synthesis, rows=rows, request_digest=fingerprint,
                   updated_at=datetime.now(timezone.utc).isoformat())
